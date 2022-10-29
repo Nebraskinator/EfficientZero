@@ -15,18 +15,18 @@ class AtariConfig(BaseConfig):
             test_interval=10000,
             log_interval=1000,
             vis_interval=1000,
-            test_episodes=32,
+            test_episodes=8,
             checkpoint_interval=100,
             target_model_interval=200,
             save_ckpt_interval=10000,
-            max_moves=12000,
-            test_max_moves=12000,
+            max_moves=400,
+            test_max_moves=1200,
             history_length=400,
             discount=0.997,
             dirichlet_alpha=0.3,
             value_delta_max=0.01,
             num_simulations=50,
-            batch_size=256,
+            batch_size=64,
             td_steps=5,
             num_actors=1,
             # network initialization/ & normalization
@@ -44,7 +44,7 @@ class AtariConfig(BaseConfig):
             auto_td_steps_ratio=0.3,
             # replay window
             start_transitions=8,
-            total_transitions=100 * 1000,
+            total_transitions=10 * 1000,
             transition_num=1,
             # frame skip & stack observation
             frame_skip=4,
@@ -55,13 +55,13 @@ class AtariConfig(BaseConfig):
             policy_loss_coeff=1,
             consistency_coeff=2,
             # reward sum
-            lstm_hidden_size=512,
+            lstm_hidden_size=64, #512,
             lstm_horizon_len=5,
             # siamese
-            proj_hid=1024,
-            proj_out=1024,
-            pred_hid=512,
-            pred_out=1024,)
+            proj_hid=128, #1024,
+            proj_out=128, #1024,
+            pred_hid=128, #512,
+            pred_out=128,) #1024,)
         self.discount **= self.frame_skip
         self.max_moves //= self.frame_skip
         self.test_max_moves //= self.frame_skip
@@ -77,9 +77,9 @@ class AtariConfig(BaseConfig):
         self.reduced_channels_reward = 16  # x36 Number of channels in reward head
         self.reduced_channels_value = 16  # x36 Number of channels in value head
         self.reduced_channels_policy = 16  # x36 Number of channels in policy head
-        self.resnet_fc_reward_layers = [32]  # Define the hidden layers in the reward head of the dynamic network
-        self.resnet_fc_value_layers = [32]  # Define the hidden layers in the value head of the prediction network
-        self.resnet_fc_policy_layers = [32]  # Define the hidden layers in the policy head of the prediction network
+        self.resnet_fc_reward_layers = [8]  # Define the hidden layers in the reward head of the dynamic network
+        self.resnet_fc_value_layers = [8]  # Define the hidden layers in the value head of the prediction network
+        self.resnet_fc_policy_layers = [8]  # Define the hidden layers in the policy head of the prediction network
         self.downsample = True  # Downsample observations before representation network (See paper appendix Network Architecture)
 
     def visit_softmax_temperature_fn(self, num_moves, trained_steps):
