@@ -1,0 +1,3 @@
+python main.py --enc SpaceInvadersNoFrameskip-v4 --case atari --opr train --amp_type torch_amp --num_gpus 1 --num_cpus 16 --cpu_actor 10 --gpu_actor 2 --force
+
+python main.py --env SpaceInvadersNoFrameskip-v4 --case atari --opr train --amp_type torch_amp --load_model --model_path D:\EfficientZero-main\results\atari\none\SpaceInvadersNoFrameskip-v4\seed=0\WedApr191424492023\model\model_10000.p
