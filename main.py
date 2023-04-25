@@ -30,12 +30,14 @@ if __name__ == '__main__':
     parser.add_argument('--save_video', action='store_true', default=True, help='save video in test.')
     parser.add_argument('--force', action='store_true', default=False,
                         help='Overrides past results (default: %(default)s)')
-    parser.add_argument('--cpu_actor', type=int, default=25, help='batch cpu actor')
-    parser.add_argument('--gpu_actor', type=int, default=2, help='batch bpu actor')
+    parser.add_argument('--cpu_actor', type=int, default=8, help='batch cpu actor')
+    # test works uses 0.125 GPU
+    parser.add_argument('--gpu_actor', type=int, default=6, help='batch gpu actor (0.125)')
+    parser.add_argument('--selfplay_actor', type=int, default=1, help='selfplay gpu actor (0.125)')
     parser.add_argument('--p_mcts_num', type=int, default=4, help='number of parallel mcts')
     parser.add_argument('--seed', type=int, default=0, help='seed (default: %(default)s)')
     parser.add_argument('--num_gpus', type=int, default=1, help='gpus available')
-    parser.add_argument('--num_cpus', type=int, default=25, help='cpus available')
+    parser.add_argument('--num_cpus', type=int, default=28, help='cpus available')
     parser.add_argument('--revisit_policy_search_rate', type=float, default=0.99,
                         help='Rate at which target policy is re-estimated (default: %(default)s)')
     parser.add_argument('--use_root_value', action='store_true', default=False,
@@ -45,14 +47,14 @@ if __name__ == '__main__':
                              'Also, priority for new data is calculated based on loss (default: False)')
     parser.add_argument('--use_max_priority', action='store_true', default=True, help='max priority')
     parser.add_argument('--test_episodes', type=int, default=10, help='Evaluation episode count (default: %(default)s)')
-    parser.add_argument('--use_augmentation', action='store_true', default=False, help='use augmentation')
+    parser.add_argument('--use_augmentation', action='store_true', default=True, help='use augmentation')
     parser.add_argument('--augmentation', type=str, default=['shift', 'intensity'], nargs='+',
                         choices=['none', 'rrc', 'affine', 'crop', 'blur', 'shift', 'intensity'],
                         help='Style of augmentation')
     parser.add_argument('--info', type=str, default='none', help='debug string')
     parser.add_argument('--load_model', action='store_true', default=False, help='choose to load model')
     parser.add_argument('--model_path', type=str, default='./results/test_model.p', help='load model path')
-    parser.add_argument('--object_store_memory', type=int, default=10 * 1024 * 1024 * 1024, help='object store memory')
+    parser.add_argument('--object_store_memory', type=int, default=40 * 1024 * 1024 * 1024, help='object store memory')
 
     # Process arguments
     args = parser.parse_args()

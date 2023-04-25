@@ -14,7 +14,7 @@ class QueueStorage(object):
             the size of the queue
         """
         self.threshold = threshold
-        self.queue = Queue(maxsize=size, actor_options={"num_cpus": 6})
+        self.queue = Queue(maxsize=size, actor_options={"num_cpus": 10})
 
     def push(self, batch):
         if self.queue.qsize() <= self.threshold:

@@ -207,6 +207,7 @@ class BaseConfig(object):
         self.random_start = random_start
         self.cvt_string = cvt_string
         self.image_based = image_based
+        self.resume_training = False
 
         self.max_moves = max_moves
         self.test_max_moves = test_max_moves
@@ -383,8 +384,10 @@ class BaseConfig(object):
         self.device = args.device
         self.cpu_actor = args.cpu_actor
         self.gpu_actor = args.gpu_actor
+        self.selfplay_actor = args.selfplay_actor
         self.p_mcts_num = args.p_mcts_num
         self.use_root_value = args.use_root_value
+        self.resume_training = args.load_model
 
         if not self.do_consistency:
             self.consistency_coeff = 0

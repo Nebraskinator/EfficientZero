@@ -105,6 +105,10 @@ class DataWorker(object):
         # number of parallel mcts
         env_nums = self.config.p_mcts_num
         model = self.config.get_uniform_network()
+        if self.config.resume_training:
+            print("Self-Play with Stored Weights")
+            weights = ray.get(self.storage.get_weights.remote())
+            model.set_weights(weights)
         model.to(self.device)
         model.eval()
 
@@ -172,10 +176,13 @@ class DataWorker(object):
                         # training is finished
                         time.sleep(30)
                         return
+                    '''
                     if start_training and (total_transitions / max_transitions) > (trained_steps / self.config.training_steps):
                         # self-play is faster than training speed or finished
+                        print("waiting")
                         time.sleep(1)
                         continue
+                    '''
 
                     # set temperature for distributions
                     _temperature = np.array(
@@ -288,7 +295,7 @@ class DataWorker(object):
                     roots_values = roots.get_values()
                     for i in range(env_nums):
                         deterministic = False
-                        if start_training:
+                        if start_training or self.config.resume_training:
                             distributions, value, temperature, env = roots_distributions[i], roots_values[i], _temperature[i], envs[i]
                         else:
                             # before starting training, use random policy
