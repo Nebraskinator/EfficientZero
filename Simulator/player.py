@@ -199,6 +199,7 @@ class Player:
             self.sell_champion(a_champion, field=False)
             if not from_carousel:
                 self.reward += self.mistake_reward
+                self.print("attempted to buy champion while bench is full")
                 if DEBUG:
                     print("Trying to buy a unit with bench full")
                 return False
@@ -298,8 +299,10 @@ class Player:
                 elif self.selection['origin'] == 'board':
                     if [x, y] != self.selection['coord']:
                         self.move_board_to_board(self.selection['coord'][0], self.selection['coord'][1], x, y)
+                        self.print("champions in play: "+str(self.num_units_in_play))
                 elif self.selection['origin'] == 'bench':
                     self.move_bench_to_board(self.selection['coord'], x, y)
+                    self.print("champions in play: "+str(self.num_units_in_play))
                 else:
                     self.reward += self.mistake_reward
                     self.actionless_click('board')
@@ -316,6 +319,7 @@ class Player:
                     self.move_item_to_bench(self.selection['coord'], x)
                 elif self.selection['origin'] == 'board':
                     self.move_board_to_bench(self.selection['coord'][0], self.selection['coord'][1], x)
+                    self.print("champions in play: "+str(self.num_units_in_play))
                 elif self.selection['origin'] == 'bench':
                     self.reward += self.mistake_reward
                     self.actionless_click('bench')
@@ -339,8 +343,10 @@ class Player:
             if self.selection:
                 if self.selection['origin'] == 'board':
                     self.sell_champion(self.selection['selected'], field=True)
+                    self.print("champions in play: "+str(self.num_units_in_play))
                 elif self.selection['origin'] == 'bench':
                     self.sell_from_bench(self.selection['coord'])
+                    self.print("champions in play: "+str(self.num_units_in_play))
                 elif self.selection['origin'] == 'item_bench':
                     self.reward += self.mistake_reward
                     self.actionless_click('shop')
@@ -355,9 +361,11 @@ class Player:
                     c_shop = self.shop[x].split('_')
                     a_champion = champion.champion(c_shop[0], chosen=c_shop[1], itemlist=[])
                     success = self.buy_champion(a_champion)
+                    self.print("champions in play: "+str(self.num_units_in_play))
                 elif self.shop[x]:
                     a_champion = champion.champion(self.shop[x])
                     success = self.buy_champion(a_champion)
+                    self.print("champions in play: "+str(self.num_units_in_play))
                 if success:
                     self.shop[x] = None
         elif action == 52:
@@ -365,6 +373,7 @@ class Player:
         elif action == 53:
             if self.refresh():
                 self.shop = self.pool_obj.sample(self, 5)
+                self.printShop(self.shop)
         elif action == 54:
             self.pass_turn()
         self.actions_taken_this_round += 1
@@ -1031,10 +1040,9 @@ class Player:
             if self.num_units_in_play < self.max_units or self.board[board_x][board_y] is not None:
                 # TO DO - IMPLEMENT AZIR TURRET SPAWNS
                 m_champion = self.bench[bench_x]
-                m_champion.x = board_x
-                m_champion.y = board_y
-                self.bench[bench_x] = None
+                added_log = ""
                 if self.board[board_x][board_y]:
+                    if not self.board[board_x][board_y].target_dummy:
                         self.bench[bench_x] = self.board[board_x][board_y]
                         self.bench[bench_x].x = bench_x
                         self.bench[bench_x].y = -1
@@ -1046,7 +1054,17 @@ class Player:
                             self.bench[bench_x].overlord = False
                             for coord in coords:
                                 self.board[coord[0]][coord[1]] = None
+                        added_log = ", and moved {} from board [{}, {}] to bench {}".format(self.bench[bench_x].name, 
+                                                                                            board_x, board_y, bench_x)
+                    else:
+                        added_log = ", but was unable to complete move because the board position was occupied by a non-champion"
+                        m_champion = self.board[board_x][board_y]
+                else:
+                    self.bench[bench_x] = None
+                    self.num_units_in_play += 1
                 self.board[board_x][board_y] = m_champion
+                self.board[board_x][board_y].x = board_x
+                self.board[board_x][board_y].y = board_y
                 # tracking thiefs gloves location
                 if len(m_champion.items) > 0:
                     if m_champion.items[0] == 'thieves_gloves':
@@ -1055,12 +1073,11 @@ class Player:
                     # There should never be a situation where the board is to fill to fit the sand guards.
                     sand_coords = self.find_azir_sandguards(board_x, board_y)
                     self.board[board_x][board_y].overlord = True
-                    self.board[board_x][board_y].sandguard_overlord_coordinates = sand_coords
-                self.num_units_in_play += 1
+                    self.board[board_x][board_y].sandguard_overlord_coordinates = sand_coords                
                 #self.generate_bench_vector()
                 #self.generate_board_vector()
                 self.print("moved {} from bench {} to board [{}, {}]".format(self.board[board_x][board_y].name,
-                                                                             bench_x, board_x, board_y))
+                                                                             bench_x, board_x, board_y) + added_log)
                 self.update_team_tiers()
             else:
                 self.reward += self.mistake_reward
@@ -1089,9 +1106,20 @@ class Player:
                         for coord in coords:
                             self.board[coord[0]][coord[1]] = None
                     self.board[x][y] = s_champion
+                    self.board[x][y].x = x
+                    self.board[x][y].y = y
+                    self.bench[x_bench].x = x_bench
+                    self.bench[x_bench].y = -1
+                    if self.bench[x_bench].items and self.bench[x_bench].items[0] == 'thieves_gloves':
+                        self.thieves_gloves_loc_update(x_bench, -1, x, y)
+                    if self.board[x][y].items and self.board[x][y].items[0] == 'thieves_gloves':
+                        self.thieves_gloves_loc_update(x, y, x_bench, -1)
                     self.update_team_tiers()
+                    self.print("moved {} from board [{}, {}] to bench {}".format(self.board[x][y].name, x, y, x_bench) + \
+                               ", and moved {} from bench {} to board [{}, {}]".format(self.bench[x_bench].name, x_bench, x, y))
                     return True
-                self.reward += self.mistake_reward
+                else:                    
+                    self.reward += self.mistake_reward
                 if DEBUG:
                     print("Unit not on board slot")
                 return False
@@ -1407,6 +1435,7 @@ class Player:
                                self.board[x][y].items, self.board[x][y].chosen))
         self.print("Player level {} with gold {}, max_units = {}, ".format(self.level, self.gold, self.max_units) +
                    "num_units_in_play = {}, health = {}".format(self.num_units_in_play, self.health))
+
 
     """
     Description -
@@ -1734,6 +1763,7 @@ class Player:
         self.printComp()
         self.printBench()
         self.printItemBench()
+        self.printShop(self.shop)
 
     """
     Description - Returns true if there are no possible actions in the state
