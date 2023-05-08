@@ -59,18 +59,19 @@ def update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_r
     inputs_batch, targets_batch = batch
     obs_batch_ori, action_batch, mask_batch, indices, weights_lst, make_time = inputs_batch
     target_value_prefix, target_value, target_policy = targets_batch
-
+    if config.use_augmentation and config.augmentation[0] == 'tft':
+        obs_batch_ori = config.tft_augmentation(obs_batch_ori)
     # [:, 0: config.stacked_observations * 3,:,:]
     # obs_batch_ori is the original observations in a batch
     # obs_batch is the observation for hat s_t (predicted hidden states from dynamics function)
     # obs_target_batch is the observations for s_t (hidden states from representation function)
     # to save GPU memory usage, obs_batch_ori contains (stack + unroll steps) frames
-    obs_batch_ori = torch.from_numpy(obs_batch_ori).to(config.device).float() / 255.0
+    obs_batch_ori = torch.from_numpy(obs_batch_ori).to(config.device).float()
     obs_batch = obs_batch_ori[:, 0: config.stacked_observations * config.image_channel, :, :]
     obs_target_batch = obs_batch_ori[:, config.image_channel:, :, :]
 
     # do augmentations
-    if config.use_augmentation:
+    if config.use_augmentation and config.augmentation[0] != 'tft':
         obs_batch = config.transform(obs_batch)
         obs_target_batch = config.transform(obs_target_batch)
 
@@ -354,7 +355,7 @@ def _train(model, target_model, replay_buffer, shared_storage, batch_storage, co
     target_model.eval()
     # ----------------------------------------------------------------------------------
     # set augmentation tools
-    if config.use_augmentation:
+    if config.use_augmentation and config.augmentation[0] != 'tft':
         config.set_transforms()
 
     # wait until collecting enough data to start
@@ -412,7 +413,7 @@ def _train(model, target_model, replay_buffer, shared_storage, batch_storage, co
             print('Warning: Batch Queue is empty (Require more batch actors Or batch actor fails).')
 
         step_count += 1
-
+        #print("training ongoing, step : " + step_count)
         # save models
         if step_count % config.save_ckpt_interval == 0:
             model_path = os.path.join(config.model_dir, 'model_{}.p'.format(step_count))
@@ -462,7 +463,7 @@ def train(config, summary_writer, model_path=None):
     data_workers = [DataWorker.remote(rank, replay_buffer, storage, config) for rank in range(0, config.num_actors)]
     workers += [worker.run.remote() for worker in data_workers]
     # test workers
-    workers += [_test.remote(config, storage)]
+    #workers += [_test.remote(config, storage)]
 
     # training loop
     final_weights = _train(model, target_model, replay_buffer, storage, batch_storage, config, summary_writer)

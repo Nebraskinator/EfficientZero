@@ -80,10 +80,8 @@ class BaseNet(nn.Module):
 
     def initial_inference(self, obs) -> NetworkOutput:
         num = obs.size(0)
-
         state = self.representation(obs)
         actor_logit, value = self.prediction(state)
-
         if not self.training:
             # if not in training, obtain the scalars of the value/reward
             value = self.inverse_value_transform(value).detach().cpu().numpy()

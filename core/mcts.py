@@ -10,7 +10,7 @@ class MCTS(object):
     def __init__(self, config):
         self.config = config
 
-    def search(self, roots, model, hidden_state_roots, reward_hidden_roots):
+    def search(self, roots, model, hidden_state_roots, reward_hidden_roots, device=None):
         """Do MCTS for the roots (a batch of root nodes in parallel). Parallel in model inference
         Parameters
         ----------
@@ -26,7 +26,8 @@ class MCTS(object):
 
             # preparation
             num = roots.num
-            device = self.config.device
+            if device==None:
+                device = self.config.device
             pb_c_base, pb_c_init, discount = self.config.pb_c_base, self.config.pb_c_init, self.config.discount
             # the data storage of hidden states: storing the states of all the tree nodes
             hidden_state_pool = [hidden_state_roots]

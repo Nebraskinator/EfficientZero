@@ -1,40 +1,40 @@
 import torch
+import numpy as np
 
 from core.config import BaseConfig
-from core.utils import make_atari, WarpFrame, EpisodicLifeEnv
 from core.dataset import Transforms
-from .env_wrapper import AtariWrapper
 from .model import EfficientZeroNet
+from Simulator.tft_simulator import TFT_Simulator
 
 
-class AtariConfig(BaseConfig):
+class TFTConfig(BaseConfig):
     def __init__(self):
-        super(AtariConfig, self).__init__(
+        super(TFTConfig, self).__init__(
             training_steps=1000000,
             last_steps=20000,
             test_interval=5000,
             log_interval=1000,
             vis_interval=1000,
-            test_episodes=32,
+            test_episodes=4,
             checkpoint_interval=100,
             target_model_interval=200,
             save_ckpt_interval=5000,
-            max_moves=12000,
-            test_max_moves=12000,
-            history_length=400,
+            max_moves=1000,
+            test_max_moves=1000,
+            history_length=800,
             discount=0.997,
             dirichlet_alpha=0.3,
             value_delta_max=0.01,
-            num_simulations=15,
+            num_simulations=250,
             batch_size=256,
-            td_steps=5,
+            td_steps=10,
             num_actors=1,
             # network initialization/ & normalization
             episode_life=True,
             init_zero=True,
-            clip_reward=True,
+            clip_reward=False,
             # storage efficient
-            cvt_string=True,
+            cvt_string=False,
             image_based=True,
             # lr scheduler
             lr_warm_up=0.01,
@@ -43,13 +43,13 @@ class AtariConfig(BaseConfig):
             lr_decay_steps=100000,
             auto_td_steps_ratio=0.3,
             # replay window
-            start_transitions=8,
+            start_transitions=2,
             total_transitions=100 * 1000,
-            transition_num=90000,
+            transition_num=50000,
             # frame skip & stack observation
-            gray_scale=True,
-            frame_skip=4,
-            stacked_observations=4,
+            gray_scale=False,
+            frame_skip=1,
+            stacked_observations=1,
             # coefficient
             reward_loss_coeff=1,
             value_loss_coeff=0.25,
@@ -71,7 +71,7 @@ class AtariConfig(BaseConfig):
         self.start_transitions = max(1, self.start_transitions)
 
         self.bn_mt = 0.1
-        self.blocks = 1  # Number of blocks in the ResNet
+        self.blocks = 12  # Number of blocks in the ResNet
         self.channels = 64  # Number of channels in the ResNet
         if self.gray_scale:
             self.channels = 32
@@ -81,7 +81,7 @@ class AtariConfig(BaseConfig):
         self.resnet_fc_reward_layers = [32]  # Define the hidden layers in the reward head of the dynamic network
         self.resnet_fc_value_layers = [32]  # Define the hidden layers in the value head of the prediction network
         self.resnet_fc_policy_layers = [32]  # Define the hidden layers in the policy head of the prediction network
-        self.downsample = True  # Downsample observations before representation network (See paper appendix Network Architecture)
+        self.downsample = False  # Downsample observations before representation network (See paper appendix Network Architecture)
 
     def visit_softmax_temperature_fn(self, num_moves, trained_steps):
         if self.change_temperature:
@@ -96,14 +96,11 @@ class AtariConfig(BaseConfig):
 
     def set_game(self, env_name, save_video=False, save_path=None, video_callable=None):
         self.env_name = env_name
-        # gray scale
-        if self.gray_scale:
-            self.image_channel = 1
-        obs_shape = (self.image_channel, 96, 96)
+        obs_shape = (self.image_channel, 48, 10)
         self.obs_shape = (obs_shape[0] * self.stacked_observations, obs_shape[1], obs_shape[2])
 
         game = self.new_game()
-        self.action_space_size = game.action_space_size
+        self.action_space_size = game.action_space_size()
 
     def get_uniform_network(self):
         return EfficientZeroNet(
@@ -137,21 +134,11 @@ class AtariConfig(BaseConfig):
                 max_moves = 108000 // self.frame_skip
             else:
                 max_moves = self.test_max_moves
-            env = make_atari(self.env_name, skip=self.frame_skip, max_episode_steps=max_moves)
+            env = TFT_Simulator(env_config=None)
         else:
-            env = make_atari(self.env_name, skip=self.frame_skip, max_episode_steps=self.max_moves)
+            env = TFT_Simulator(env_config=None)
 
-        if self.episode_life and not test:
-            env = EpisodicLifeEnv(env)
-        env = WarpFrame(env, width=self.obs_shape[1], height=self.obs_shape[2], grayscale=self.gray_scale)
-
-        if seed is not None:
-            env.seed(seed)
-
-        if save_video:
-            from gym.wrappers import Monitor
-            env = Monitor(env, directory=save_path, force=True, video_callable=video_callable, uid=uid)
-        return AtariWrapper(env, discount=self.discount, cvt_string=self.cvt_string)
+        return env
 
     def scalar_reward_loss(self, prediction, target):
         return -(torch.log_softmax(prediction, dim=1) * target).sum(1)
@@ -163,8 +150,26 @@ class AtariConfig(BaseConfig):
         if self.use_augmentation:
             self.transforms = Transforms(self.augmentation, image_shape=(self.obs_shape[1], self.obs_shape[2]))
 
+    def tft_augmentation(self, obs_batch):
+        '''
+        this augmentation swaps positions of opponent boards
+        in the observation space.
+        
+        obs_batch shape is (batch_size, channel * (unroll_steps + 1), obs height, obs width)
+        '''    
+        ret = obs_batch.copy()
+        batch_size = ret.shape[0]
+        player_step = ret.shape[2] // 8        
+        for b in range(batch_size):
+            for to_swap in np.random.choice(np.arange(1, 8), size=(np.random.randint(0, 4),2), replace=False):
+                temp = ret[b, :, player_step * to_swap[0] : player_step * to_swap[0] + player_step, :]
+                ret[b, :, player_step * to_swap[0] : player_step * to_swap[0] + player_step, :] = \
+                    ret[b, :, player_step * to_swap[1] : player_step * to_swap[1] + player_step, :]
+                ret[b, :, player_step * to_swap[1] : player_step * to_swap[1] + player_step, :] = temp            
+        return ret
+
     def transform(self, images):
         return self.transforms.transform(images)
 
 
-game_config = AtariConfig()
+game_config = TFTConfig()
