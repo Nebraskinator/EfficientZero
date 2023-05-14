@@ -25,8 +25,8 @@ class TFTConfig(BaseConfig):
             discount=0.997,
             dirichlet_alpha=0.3,
             value_delta_max=0.01,
-            num_simulations=250,
-            batch_size=256,
+            num_simulations=200,
+            batch_size=64,
             td_steps=10,
             num_actors=1,
             # network initialization/ & normalization
@@ -37,15 +37,15 @@ class TFTConfig(BaseConfig):
             cvt_string=False,
             image_based=True,
             # lr scheduler
-            lr_warm_up=0.01,
-            lr_init=0.2,
+            lr_warm_up=0.005,
+            lr_init=0.001,
             lr_decay_rate=0.1,
             lr_decay_steps=100000,
             auto_td_steps_ratio=0.3,
             # replay window
-            start_transitions=2,
+            start_transitions=8000,
             total_transitions=100 * 1000,
-            transition_num=50000,
+            transition_num=200000,
             # frame skip & stack observation
             gray_scale=False,
             frame_skip=1,
@@ -67,20 +67,20 @@ class TFTConfig(BaseConfig):
         self.max_moves //= self.frame_skip
         self.test_max_moves //= self.frame_skip
 
-        self.start_transitions = self.start_transitions * 1000 // self.frame_skip
+        self.start_transitions = self.start_transitions // self.frame_skip
         self.start_transitions = max(1, self.start_transitions)
 
         self.bn_mt = 0.1
-        self.blocks = 12  # Number of blocks in the ResNet
-        self.channels = 64  # Number of channels in the ResNet
+        self.blocks = 6  # Number of blocks in the ResNet
+        self.channels = 256  # Number of channels in the ResNet
         if self.gray_scale:
             self.channels = 32
-        self.reduced_channels_reward = 16  # x36 Number of channels in reward head
-        self.reduced_channels_value = 16  # x36 Number of channels in value head
-        self.reduced_channels_policy = 16  # x36 Number of channels in policy head
-        self.resnet_fc_reward_layers = [32]  # Define the hidden layers in the reward head of the dynamic network
-        self.resnet_fc_value_layers = [32]  # Define the hidden layers in the value head of the prediction network
-        self.resnet_fc_policy_layers = [32]  # Define the hidden layers in the policy head of the prediction network
+        self.reduced_channels_reward = 64  # x36 Number of channels in reward head
+        self.reduced_channels_value = 64  # x36 Number of channels in value head
+        self.reduced_channels_policy = 64  # x36 Number of channels in policy head
+        self.resnet_fc_reward_layers = [128]  # Define the hidden layers in the reward head of the dynamic network
+        self.resnet_fc_value_layers = [128]  # Define the hidden layers in the value head of the prediction network
+        self.resnet_fc_policy_layers = [128]  # Define the hidden layers in the policy head of the prediction network
         self.downsample = False  # Downsample observations before representation network (See paper appendix Network Architecture)
 
     def visit_softmax_temperature_fn(self, num_moves, trained_steps):
@@ -96,10 +96,11 @@ class TFTConfig(BaseConfig):
 
     def set_game(self, env_name, save_video=False, save_path=None, video_callable=None):
         self.env_name = env_name
-        obs_shape = (self.image_channel, 48, 10)
-        self.obs_shape = (obs_shape[0] * self.stacked_observations, obs_shape[1], obs_shape[2])
-
         game = self.new_game()
+        self.num_players = game.num_players
+        self.image_channel = game.image_channel
+        obs_shape = (self.num_players, self.image_channel, game.obs_shape[1],game.obs_shape[2])
+        self.obs_shape = (self.num_players, self.image_channel * self.stacked_observations, obs_shape[-2], obs_shape[-1])        
         self.action_space_size = game.action_space_size()
 
     def get_uniform_network(self):
@@ -134,9 +135,9 @@ class TFTConfig(BaseConfig):
                 max_moves = 108000 // self.frame_skip
             else:
                 max_moves = self.test_max_moves
-            env = TFT_Simulator(env_config=None)
+            env = TFT_Simulator(env_config=self)
         else:
-            env = TFT_Simulator(env_config=None)
+            env = TFT_Simulator(env_config=self)
 
         return env
 
@@ -157,15 +158,13 @@ class TFTConfig(BaseConfig):
         
         obs_batch shape is (batch_size, channel * (unroll_steps + 1), obs height, obs width)
         '''    
-        ret = obs_batch.copy()
-        batch_size = ret.shape[0]
-        player_step = ret.shape[2] // 8        
-        for b in range(batch_size):
-            for to_swap in np.random.choice(np.arange(1, 8), size=(np.random.randint(0, 4),2), replace=False):
-                temp = ret[b, :, player_step * to_swap[0] : player_step * to_swap[0] + player_step, :]
-                ret[b, :, player_step * to_swap[0] : player_step * to_swap[0] + player_step, :] = \
-                    ret[b, :, player_step * to_swap[1] : player_step * to_swap[1] + player_step, :]
-                ret[b, :, player_step * to_swap[1] : player_step * to_swap[1] + player_step, :] = temp            
+        ret = obs_batch.copy()  
+        for b in range(ret.shape[0]):
+            for to_swap in np.random.choice(np.arange(1, 8), size=(3,2), replace=False):
+                temp = ret[b, :, to_swap[0], :, :, :]
+                ret[b, :, to_swap[0], :, :, :] = \
+                    ret[b, :, to_swap[1], :, :, :]                        
+                ret[b, :, to_swap[1], :, :, :] = temp            
         return ret
 
     def transform(self, images):

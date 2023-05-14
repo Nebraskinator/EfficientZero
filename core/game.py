@@ -34,7 +34,7 @@ class GameHistory:
     A block of game history from a full trajectories.
     The horizons of Atari games are quite large. Split the whole trajectory into several history blocks.
     """
-    def __init__(self, action_space, max_length=200, config=None):
+    def __init__(self, action_space, zero_obs_shape, max_length=200, config=None):
         """
         Parameters
         ----------
@@ -50,7 +50,7 @@ class GameHistory:
         self.stacked_observations = config.stacked_observations
         self.discount = config.discount
         self.action_space_size = config.action_space_size
-        self.zero_obs_shape = (config.obs_shape[-2], config.obs_shape[-1], config.image_channel)
+        self.zero_obs_shape = zero_obs_shape
 
         self.child_visits = []
         self.root_values = []

@@ -59,6 +59,7 @@ def update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_r
     inputs_batch, targets_batch = batch
     obs_batch_ori, action_batch, mask_batch, indices, weights_lst, make_time = inputs_batch
     target_value_prefix, target_value, target_policy = targets_batch
+
     if config.use_augmentation and config.augmentation[0] == 'tft':
         obs_batch_ori = config.tft_augmentation(obs_batch_ori)
     # [:, 0: config.stacked_observations * 3,:,:]
@@ -67,8 +68,11 @@ def update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_r
     # obs_target_batch is the observations for s_t (hidden states from representation function)
     # to save GPU memory usage, obs_batch_ori contains (stack + unroll steps) frames
     obs_batch_ori = torch.from_numpy(obs_batch_ori).to(config.device).float()
-    obs_batch = obs_batch_ori[:, 0: config.stacked_observations * config.image_channel, :, :]
-    obs_target_batch = obs_batch_ori[:, config.image_channel:, :, :]
+    #obs_batch = obs_batch_ori[:, 0: config.stacked_observations * config.image_channel, :, :]
+    #obs_target_batch = obs_batch_ori[:, config.image_channel:, :, :]
+    
+    obs_batch = obs_batch_ori[:, 0, :, :, :]
+    obs_target_batch = obs_batch_ori[:, 1:, :, :, :]
 
     # do augmentations
     if config.use_augmentation and config.augmentation[0] != 'tft':
@@ -146,13 +150,13 @@ def update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_r
                 # unroll with the dynamics function
                 value, value_prefix, policy_logits, hidden_state, reward_hidden = model.recurrent_inference(hidden_state, reward_hidden, action_batch[:, step_i])
 
-                beg_index = config.image_channel * step_i
-                end_index = config.image_channel * (step_i + config.stacked_observations)
+                #beg_index = config.image_channel * step_i
+                #end_index = config.image_channel * (step_i + config.stacked_observations)
 
                 # consistency loss
                 if config.consistency_coeff > 0:
                     # obtain the oracle hidden states from representation function
-                    _, _, _, presentation_state, _ = model.initial_inference(obs_target_batch[:, beg_index:end_index, :, :])
+                    _, _, _, presentation_state, _ = model.initial_inference(obs_target_batch[:, i, :, :, :])
                     # no grad for the presentation_state branch
                     dynamic_proj = model.project(hidden_state, with_grad=True)
                     observation_proj = model.project(presentation_state, with_grad=False)
@@ -201,13 +205,13 @@ def update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_r
             # unroll with the dynamics function
             value, value_prefix, policy_logits, hidden_state, reward_hidden = model.recurrent_inference(hidden_state, reward_hidden, action_batch[:, step_i])
 
-            beg_index = config.image_channel * step_i
-            end_index = config.image_channel * (step_i + config.stacked_observations)
+            #beg_index = config.image_channel * step_i
+            #end_index = config.image_channel * (step_i + config.stacked_observations)
 
             # consistency loss
             if config.consistency_coeff > 0:
                 # obtain the oracle hidden states from representation function
-                _, _, _, presentation_state, _ = model.initial_inference(obs_target_batch[:, beg_index:end_index, :, :])
+                _, _, _, presentation_state, _ = model.initial_inference(obs_target_batch[:, i, :, :, :])
                 # no grad for the presentation_state branch
                 dynamic_proj = model.project(hidden_state, with_grad=True)
                 observation_proj = model.project(presentation_state, with_grad=False)
@@ -345,10 +349,12 @@ def _train(model, target_model, replay_buffer, shared_storage, batch_storage, co
     # ----------------------------------------------------------------------------------
     model = model.to(config.device)
     target_model = target_model.to(config.device)
-
-    optimizer = optim.SGD(model.parameters(), lr=config.lr_init, momentum=config.momentum,
+    lr=config.lr_init
+    #optimizer = optim.SGD(model.parameters(), lr=config.lr_init, momentum=config.momentum,
+    #                      weight_decay=config.weight_decay)
+    optimizer = optim.Adam(model.parameters(), lr=config.lr_init,
                           weight_decay=config.weight_decay)
-
+    
     scaler = GradScaler()
 
     model.train()
@@ -382,8 +388,9 @@ def _train(model, target_model, replay_buffer, shared_storage, batch_storage, co
         if batch is None:
             time.sleep(0.3)
             continue
+
         shared_storage.incr_counter.remote()
-        lr = adjust_lr(config, optimizer, step_count)
+        #lr = adjust_lr(config, optimizer, step_count)
 
         # update model for self-play
         if step_count % config.checkpoint_interval == 0:
@@ -446,8 +453,8 @@ def train(config, summary_writer, model_path=None):
     storage = SharedStorage.remote(model, target_model)
 
     # prepare the batch and mctc context storage
-    batch_storage = QueueStorage(15, 20)
-    mcts_storage = QueueStorage(18, 25)
+    batch_storage = QueueStorage(int(config.batch_queue_size - 1), config.batch_queue_size)
+    mcts_storage = QueueStorage(int(config.mcts_queue_size - 1), config.mcts_queue_size)
     replay_buffer = ReplayBuffer.remote(config=config)
 
     # other workers

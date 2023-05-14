@@ -12,7 +12,7 @@ def mlp(
     layer_sizes,
     output_size,
     output_activation=nn.Identity,
-    activation=nn.ReLU,
+    activation=nn.LeakyReLU,
     momentum=0.1,
     init_zero=False,
 ):
@@ -73,7 +73,7 @@ class ResidualBlock(nn.Module):
 
         out = self.conv1(x)
         out = self.bn1(out)
-        out = nn.functional.relu(out)
+        out = nn.functional.leaky_relu(out)
 
         out = self.conv2(out)
         out = self.bn2(out)
@@ -82,7 +82,7 @@ class ResidualBlock(nn.Module):
             identity = self.downsample(x)
 
         out += identity
-        out = nn.functional.relu(out)
+        out = nn.functional.leaky_relu(out)
         return out
 
 
@@ -123,7 +123,7 @@ class DownSample(nn.Module):
     def forward(self, x):
         x = self.conv1(x)
         x = self.bn1(x)
-        x = nn.functional.relu(x)
+        x = nn.functional.leaky_relu(x)
         for block in self.resblocks1:
             x = block(x)
         x = self.downsample_block(x)
@@ -143,7 +143,6 @@ class RepresentationNetwork(nn.Module):
         observation_shape,
         num_blocks,
         num_channels,
-        downsample,
         momentum=0.1,
     ):
         """Representation network
@@ -159,29 +158,46 @@ class RepresentationNetwork(nn.Module):
             True -> do downsampling for observations. (For board games, do not need)
         """
         super().__init__()
-        self.downsample = downsample
-        if self.downsample:
-            self.downsample_net = DownSample(
-                observation_shape[0],
-                num_channels,
-            )
+
+        num_channels_per_board = num_channels // 4
+
+        self.conv_board = conv1x1(
+            observation_shape[1],
+            num_channels_per_board,
+        )
+        
+        
+        self.bn_board = nn.BatchNorm2d(num_channels_per_board, momentum=momentum)
+        
         self.conv = conv1x1(
-            observation_shape[0],
+            int(num_channels_per_board * observation_shape[0]),
             num_channels,
         )
         self.bn = nn.BatchNorm2d(num_channels, momentum=momentum)
+        
+        self.resblocks_board = nn.ModuleList(
+            [ResidualBlock(num_channels_per_board, num_channels_per_board, momentum=momentum) for _ in range(num_blocks)]
+        )
         self.resblocks = nn.ModuleList(
             [ResidualBlock(num_channels, num_channels, momentum=momentum) for _ in range(num_blocks)]
         )
 
     def forward(self, x):
-        if self.downsample:
-            x = self.downsample_net(x)
-        else:
-            x = self.conv(x)
-            x = self.bn(x)
-            x = nn.functional.relu(x)
+        
+        conc = []
+        for i in range(8):
+            y = self.conv_board(x[:, i, :, :])
+            y = self.bn_board(y)
+            y = nn.functional.leaky_relu(y)
 
+            for block in self.resblocks_board:
+                y = block(y)
+            conc.append(y)
+        
+        x = torch.concat(conc, dim=1)
+        x = self.conv(x)
+        x = self.bn(x)
+        x = nn.functional.leaky_relu(x)
         for block in self.resblocks:
             x = block(x)
         return x
@@ -255,7 +271,7 @@ class DynamicsNetwork(nn.Module):
         x = self.bn(x)
 
         x += state
-        x = nn.functional.relu(x)
+        x = nn.functional.leaky_relu(x)
 
         for block in self.resblocks:
             x = block(x)
@@ -263,13 +279,13 @@ class DynamicsNetwork(nn.Module):
 
         x = self.conv1x1_reward(x)
         x = self.bn_reward(x)
-        x = nn.functional.relu(x)
+        x = nn.functional.leaky_relu(x)
 
         x = x.view(-1, self.block_output_size_reward).unsqueeze(0)
         value_prefix, reward_hidden = self.lstm(x, reward_hidden)
         value_prefix = value_prefix.squeeze(0)
         value_prefix = self.bn_value_prefix(value_prefix)
-        value_prefix = nn.functional.relu(value_prefix)
+        value_prefix = nn.functional.leaky_relu(value_prefix)
         value_prefix = self.fc(value_prefix)
 
         return state, reward_hidden, value_prefix
@@ -355,10 +371,10 @@ class PredictionNetwork(nn.Module):
             x = block(x)
         value = self.conv1x1_value(x)
         value = self.bn_value(value)
-        value = nn.functional.relu(value)
+        value = nn.functional.leaky_relu(value)
         policy = self.conv1x1_policy(x)
         policy = self.bn_policy(policy)
-        policy = nn.functional.relu(policy)
+        policy = nn.functional.leaky_relu(policy)
         value = value.reshape(value.shape[0], self.block_output_size_value)
         #value = value.view(-1, self.block_output_size_value)
         policy = policy.reshape(policy.shape[0], self.block_output_size_policy)
@@ -457,43 +473,42 @@ class EfficientZeroNet(BaseNet):
         block_output_size_reward = (
             (
                 reduced_channels_reward
-                * math.ceil(observation_shape[1] / 16)
-                * math.ceil(observation_shape[2] / 16)
+                * math.ceil(observation_shape[-2] / 16)
+                * math.ceil(observation_shape[-1] / 16)
             )
             if downsample
-            else (reduced_channels_reward * observation_shape[1] * observation_shape[2])
+            else (reduced_channels_reward * observation_shape[-2] * observation_shape[-1])
         )
 
         block_output_size_value = (
             (
                 reduced_channels_value
-                * math.ceil(observation_shape[1] / 16)
-                * math.ceil(observation_shape[2] / 16)
+                * math.ceil(observation_shape[-2] / 16)
+                * math.ceil(observation_shape[-1] / 16)
             )
             if downsample
-            else (reduced_channels_value * observation_shape[1] * observation_shape[2])
+            else (reduced_channels_value * observation_shape[-2] * observation_shape[-1])
         )
 
         block_output_size_policy = (
             (
                 reduced_channels_policy
-                * math.ceil(observation_shape[1] / 16)
-                * math.ceil(observation_shape[2] / 16)
+                * math.ceil(observation_shape[-2] / 16)
+                * math.ceil(observation_shape[-1] / 16)
             )
             if downsample
-            else (reduced_channels_policy * observation_shape[1] * observation_shape[2])
+            else (reduced_channels_policy * observation_shape[-2] * observation_shape[-1])
         )
 
         self.representation_network = RepresentationNetwork(
             observation_shape,
             num_blocks,
             num_channels,
-            downsample,
             momentum=bn_mt,
         )
 
         self.dynamics_network = DynamicsNetwork(
-            max(num_blocks // 4, 1),
+            max(num_blocks // 3, 1),
             num_channels,
             self.action_space_size,
             reduced_channels_reward,
@@ -507,7 +522,7 @@ class EfficientZeroNet(BaseNet):
 
         self.prediction_network = PredictionNetwork(
             action_space_size,
-            max(num_blocks // 4, 1),
+            max(num_blocks // 3, 1),
             num_channels,
             reduced_channels_value,
             reduced_channels_policy,
@@ -522,24 +537,24 @@ class EfficientZeroNet(BaseNet):
 
         # projection
         if downsample:
-            in_dim = num_channels * math.ceil(observation_shape[1] / 16) * math.ceil(observation_shape[2] / 16)
+            in_dim = num_channels * math.ceil(observation_shape[-2] / 16) * math.ceil(observation_shape[-1] / 16)
         else:
-            in_dim = num_channels * math.ceil(observation_shape[1]) * math.ceil(observation_shape[2])
+            in_dim = num_channels * math.ceil(observation_shape[-2]) * math.ceil(observation_shape[-1])
         self.porjection_in_dim = in_dim
         self.projection = nn.Sequential(
             nn.Linear(self.porjection_in_dim, self.proj_hid),
             nn.BatchNorm1d(self.proj_hid),
-            nn.ReLU(),
+            nn.LeakyReLU(),
             nn.Linear(self.proj_hid, self.proj_hid),
             nn.BatchNorm1d(self.proj_hid),
-            nn.ReLU(),
+            nn.LeakyReLU(),
             nn.Linear(self.proj_hid, self.proj_out),
             nn.BatchNorm1d(self.proj_out)
         )
         self.projection_head = nn.Sequential(
             nn.Linear(self.proj_out, self.pred_hid),
             nn.BatchNorm1d(self.pred_hid),
-            nn.ReLU(),
+            nn.LeakyReLU(),
             nn.Linear(self.pred_hid, self.pred_out),
         )
 

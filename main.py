@@ -32,7 +32,7 @@ if __name__ == '__main__':
     parser.add_argument('--save_video', action='store_true', default=True, help='save video in test.')
     parser.add_argument('--force', action='store_true', default=False,
                         help='Overrides past results (default: %(default)s)')
-    parser.add_argument('--cpu_actor', type=int, default=2, help='batch cpu actor')
+    parser.add_argument('--cpu_actor', type=int, default=8, help='batch cpu actor')
     # test works uses 0.125 GPU
     parser.add_argument('--gpu_actor', type=int, default=2, help='batch gpu actor (0.125)')
     parser.add_argument('--selfplay_actor', type=int, default=1, help='selfplay gpu actor (0.125)')
@@ -56,7 +56,7 @@ if __name__ == '__main__':
     parser.add_argument('--info', type=str, default='none', help='debug string')
     parser.add_argument('--load_model', action='store_true', default=False, help='choose to load model')
     parser.add_argument('--model_path', type=str, default='./results/test_model.p', help='load model path')
-    parser.add_argument('--object_store_memory', type=int, default=60 * 1024 * 1024 * 1024, help='object store memory')
+    parser.add_argument('--object_store_memory', type=int, default=100 * 1024 * 1024 * 1024, help='object store memory')
 
     # Process arguments
     args = parser.parse_args()

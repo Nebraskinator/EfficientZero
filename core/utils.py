@@ -309,13 +309,17 @@ def prepare_observation_lst(observation_lst):
     [B, S, W, H, C] -> [B, S x C, W, H]
     batch, stack num, width, height, channel
     """
-    # B, S, W, H, C
+    
     observation_lst = np.array(observation_lst)
-    observation_lst = np.moveaxis(observation_lst, -1, 2)
-
-    shape = observation_lst.shape
-    observation_lst = observation_lst.reshape((shape[0], -1, shape[-2], shape[-1]))
-
+    # B, S, W, H, C
+    if len(observation_lst.shape) == 5:
+        observation_lst = np.moveaxis(observation_lst, -1, 2)
+        shape = observation_lst.shape
+        observation_lst = observation_lst.reshape((shape[0], -1, shape[-2], shape[-1]))
+        # B, S, A, W, H, C
+    elif len(observation_lst.shape) == 6:
+        observation_lst = np.moveaxis(observation_lst, -1, -3)
+        observation_lst = observation_lst.astype(float) / 255
     return observation_lst
 
 

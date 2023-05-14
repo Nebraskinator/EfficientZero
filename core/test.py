@@ -91,7 +91,7 @@ def test(config, model, counter, test_episodes, device, render, save_video=False
         for i in range(test_episodes):
             print("test match "+str(i+1) +" of "+str(test_episodes))
             # initializations
-            obs, taking_actions = env.reset()
+            obs, taking_actions, action_masks = env.reset()
     
             game_history = GameHistory(env.action_space_size(), max_length=max_episode_steps, config=config)    
     
@@ -132,7 +132,7 @@ def test(config, model, counter, test_episodes, device, render, save_video=False
                     if p != player:
                         actions[p] = np.random.randint(0, env.action_space_size())
 
-                obs, ori_reward, taking_actions, done_dict = env.step(actions)
+                obs, ori_reward, taking_actions, done_dict, action_masks = env.step(actions)
 
                 done = done_dict[player]
                 if done:

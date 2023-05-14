@@ -276,14 +276,14 @@ class BaseConfig(object):
         self.priority_prob_beta = 0.4
         self.prioritized_replay_eps = 1e-6
 
-        # env
-        self.image_channel = 128
-
         # contrastive arch
         self.proj_hid = proj_hid
         self.proj_out = proj_out
         self.pred_hid = pred_hid
         self.pred_out = pred_out
+        
+        self.mcts_queue_size = 10
+        self.batch_queue_size = 10
 
     def visit_softmax_temperature_fn(self, num_moves, trained_steps):
         raise NotImplementedError
@@ -421,7 +421,7 @@ class BaseConfig(object):
         localtime = "".join(localtime.split(" "))
         seed_tag = 'seed={}'.format(self.seed)
         self.exp_path = os.path.join(args.result_dir, args.case, args.info, args.env, seed_tag, localtime)
-
+        self.load_model = args.load_model
         self.model_path = os.path.join(self.exp_path, 'model.p')
         self.model_dir = os.path.join(self.exp_path, 'model')
         return self.exp_path

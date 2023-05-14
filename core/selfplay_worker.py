@@ -133,10 +133,12 @@ class DataWorker(object):
                     time.sleep(30)
                     break
 
-                init_obses, taking_actions = env.reset()
+                init_obses, taking_actions, action_masks = env.reset()
+
+                num_actors = len(env.live_agents)
 
                 dones = {p:False for p in env.live_agents}
-                game_histories = {p: GameHistory(env.action_space_size(), max_length=self.config.history_length,
+                game_histories = {p: GameHistory(env.action_space_size(), env.obs_shape, max_length=self.config.history_length,
                                               config=self.config) for p in env.live_agents}
                 last_game_histories = {p: None for p in env.live_agents}
                 last_game_priorities = {p: None for p in env.live_agents}
@@ -170,7 +172,7 @@ class DataWorker(object):
                 prev_search_values = {}
                 done_cnt = 0
                 # play games until max moves
-                while done_cnt < 8 and (step_counter <= self.config.max_moves):
+                while done_cnt < num_actors and (step_counter <= self.config.max_moves):
 
                     if not start_training:
                         start_training = ray.get(self.storage.get_start_signal.remote())
@@ -237,6 +239,7 @@ class DataWorker(object):
                     stack_obs = [game_histories[p].step_obs() for p in env.live_agents]
                     if self.config.image_based:
                         stack_obs = prepare_observation_lst(stack_obs)
+                        stack_obs = np.squeeze(stack_obs, 1)
                         stack_obs = torch.from_numpy(stack_obs).to(self.device).float()
                     else:
                         #stack_obs = [game_history.step_obs() for game_history in game_histories]
@@ -249,13 +252,12 @@ class DataWorker(object):
                     hidden_state_roots = network_output.hidden_state
                     reward_hidden_roots = network_output.reward_hidden
                     value_prefix_pool = network_output.value_prefix
-                    policy_logits_pool = network_output.policy_logits.tolist()
-                    
+                    policy_logits_pool = (network_output.policy_logits * np.array([action_masks[p] for p in env.live_agents])).tolist()
                     roots = cytree.Roots(len(env.live_agents), self.config.action_space_size, self.config.num_simulations)
-                    noises = [np.random.dirichlet([self.config.root_dirichlet_alpha] * self.config.action_space_size).astype(np.float32).tolist() for _ in range(len(env.live_agents))]
+                    noises = [(np.random.dirichlet([self.config.root_dirichlet_alpha] * self.config.action_space_size) * action_masks[p]).astype(np.float32).tolist() for p in env.live_agents]
                     roots.prepare(self.config.root_exploration_fraction, noises, value_prefix_pool, policy_logits_pool)
                     # do MCTS for a policy
-                    MCTS(self.config).search(roots, model, hidden_state_roots, reward_hidden_roots)
+                    MCTS(self.config).search(roots, model, hidden_state_roots, reward_hidden_roots, training_start=(start_training or self.config.load_model))
 
                     roots_distributions = roots.get_distributions()
                     roots_values = roots.get_values()
@@ -272,14 +274,17 @@ class DataWorker(object):
                             # before starting training, use random policy
                             value, temperature = roots_values[i], _temperature[i]
                             distributions = np.ones(self.config.action_space_size)
+                        distributions *= action_masks[p]
+                        if np.sum(distributions) == 0:
+                            distributions[0] = 1 
                         dists[p] = distributions
                         vals[p] = value
                         prev_pred_values[p] = network_output.value[i].item()
                         prev_search_values[p] = value
-
+                        
                         action[p], visit_entropy[p] = select_action(distributions, temperature=temperature, deterministic=deterministic)
 
-                    obs, ori_reward, taking_actions, dones = env.step(action)
+                    obs, ori_reward, taking_actions, dones, action_masks = env.step(action)
 
                     for p in step_live_agents:
                         # clip the reward
@@ -291,7 +296,7 @@ class DataWorker(object):
                         # store data
                         game_histories[p].store_search_stats(dists[p], vals[p])
                         if dones[p]:
-                            obs[p] = np.zeros((48, 10, 128)).astype(int)
+                            obs[p] = np.zeros(env.obs_shape).astype(int)
                         game_histories[p].append(action[p], obs[p], clip_reward)
 
                         eps_reward_lst += clip_reward

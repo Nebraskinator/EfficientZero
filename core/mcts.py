@@ -10,7 +10,7 @@ class MCTS(object):
     def __init__(self, config):
         self.config = config
 
-    def search(self, roots, model, hidden_state_roots, reward_hidden_roots, device=None):
+    def search(self, roots, model, hidden_state_roots, reward_hidden_roots, device=None, training_start=True):
         """Do MCTS for the roots (a batch of root nodes in parallel). Parallel in model inference
         Parameters
         ----------
@@ -41,8 +41,11 @@ class MCTS(object):
             min_max_stats_lst = tree.MinMaxStatsList(num)
             min_max_stats_lst.set_delta(self.config.value_delta_max)
             horizons = self.config.lstm_horizon_len
-
-            for index_simulation in range(self.config.num_simulations):
+            if training_start:
+                iters = self.config.num_simulations
+            else:
+                iters = 2
+            for index_simulation in range(iters):
                 hidden_states = []
                 hidden_states_c_reward = []
                 hidden_states_h_reward = []

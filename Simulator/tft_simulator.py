@@ -44,7 +44,8 @@ class TFT_Simulator(AECEnv):
         self.NUM_DEAD = 0
         self.num_players = config.NUM_PLAYERS
         self.previous_rewards = {"player_" + str(player_id): 0 for player_id in range(config.NUM_PLAYERS)}
-
+        self.image_channel = 173
+        self.obs_shape = (self.num_players, 7, 9, self.image_channel)
         self.step_function = Step_Function(self.pool_obj)
         self.game_round = Game_Round(self.PLAYERS, self.pool_obj, self.step_function)
         self.actions_taken = 0
@@ -113,9 +114,9 @@ class TFT_Simulator(AECEnv):
 
     @functools.lru_cache(maxsize=None)
     def action_space(self, agent: str) -> gym.spaces.Space:
-        return 55
+        return 56
     def action_space_size(self):
-        return 55
+        return 56
     def check_dead(self):
         num_alive = 0
         for key, player in self.PLAYERS.items():
@@ -181,8 +182,9 @@ class TFT_Simulator(AECEnv):
         self.public_observations = {player: self.PLAYERS[player].observation() for player in list(self.PLAYERS.keys())}
         obs_dict = {player: self.make_observation(player) for player in list(self.PLAYERS.keys()) if self.PLAYERS[player].is_alive}
         taking_actions_dict = {player: self.PLAYERS[player].taking_actions for player in list(self.PLAYERS.keys())}
+        action_masks = {player: self.PLAYERS[player].action_mask for player in list(self.PLAYERS.keys())}
 
-        return obs_dict, taking_actions_dict
+        return obs_dict, taking_actions_dict, action_masks
 
     def render(self):
         ...
@@ -192,15 +194,15 @@ class TFT_Simulator(AECEnv):
 
 
     def make_observation(self, player):
-        obs = np.zeros((48, 10, 128))
-        obs[:6, :, :] = self.PLAYERS[player].observation(True)
+        obs = np.zeros(self.obs_shape)
+        obs[0] = self.PLAYERS[player].observation(True)
         cnt = 1
         for p in list(self.PLAYERS.keys()):
             if p != player:
                 if self.PLAYERS[p].is_alive:
-                    obs[6*cnt : 6*cnt + 6, :, :] = self.public_observations[p]
+                    obs[cnt] = self.public_observations[p]
                 cnt += 1
-        return obs
+        return obs.astype(int)
 
     def step(self, action):
         for player in list(action.keys()):
@@ -232,7 +234,8 @@ class TFT_Simulator(AECEnv):
         if len(self.live_agents) <= 1:
             for p in self.live_agents:
                 dones[p] = True
-        return obs_dict, rewards_dict, taking_actions_dict, dones
+        action_masks = {p: self.PLAYERS[p].action_mask for p in list(self.PLAYERS.keys())}
+        return obs_dict, rewards_dict, taking_actions_dict, dones, action_masks
             
             
     

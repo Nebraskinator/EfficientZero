@@ -11,6 +11,7 @@ from Simulator.item_stats import basic_items, item_builds, thieves_gloves_items,
 from Simulator.stats import COST
 from Simulator.pool_stats import cost_star_values
 from Simulator.origin_class_stats import tiers, fortune_returns
+from Simulator.origin_class_stats import origin_class as origin_dict
 from math import floor
 
 DEBUG = False
@@ -68,7 +69,9 @@ class Player:
         self.num_units_in_play = 0
         self.max_units = 1
         self.exp_cost = 4
+        self.exp_per_buy = 4
         self.round = 0
+        self.action_mask = np.zeros(56)
 
         # This could be in a config file, but we could implement something that alters the
         # Amount of gold required to level that differs player to player
@@ -120,7 +123,7 @@ class Player:
         # reward levers
         self.refresh_reward = 0
         self.minion_count_reward = 0
-        self.mistake_reward = -0.05
+        self.mistake_reward = 0
         self.level_reward = 0
         self.item_reward = 0
         self.won_game_reward = 0
@@ -291,8 +294,9 @@ class Player:
     """
 
     def take_action(self, action):
-        if action <= 27:
-            x, y = action % 7, action // 7
+        if 1 <= action <= 28:
+            t = action - 1
+            x, y = t % 7, t // 7
             if self.selection:                                 
                 if self.selection['origin'] == 'item_bench':
                     self.move_item_to_board(self.selection['coord'], x, y)
@@ -312,8 +316,8 @@ class Player:
             else:
                 self.reward += self.mistake_reward
                 self.actionless_click('board')
-        elif 28 <= action <= 36:
-            x = action - 28
+        elif 29 <= action <= 37:
+            x = action - 29
             if self.selection:
                 if self.selection['origin'] == 'item_bench':
                     self.move_item_to_bench(self.selection['coord'], x)
@@ -329,8 +333,8 @@ class Player:
             else:
                 self.reward += self.mistake_reward
                 self.actionless_click('bench')
-        elif 37 <= action <= 46:
-            x = action - 37
+        elif 38 <= action <= 47:
+            x = action - 38
             if self.selection: 
                 self.reward += self.mistake_reward                                
                 self.clear_selection('item bench')
@@ -339,7 +343,7 @@ class Player:
             else:
                 self.reward += self.mistake_reward
                 self.actionless_click('item_bench')
-        elif 47 <= action <= 51:
+        elif 48 <= action <= 52:
             if self.selection:
                 if self.selection['origin'] == 'board':
                     self.sell_champion(self.selection['selected'], field=True)
@@ -352,7 +356,7 @@ class Player:
                     self.actionless_click('shop')
                 self.clear_selection('shop')
             else:
-                x = action - 47
+                x = action - 48
                 success = False
                 if not self.shop[x]:
                     self.reward += self.mistake_reward
@@ -368,17 +372,109 @@ class Player:
                     self.print("champions in play: "+str(self.num_units_in_play))
                 if success:
                     self.shop[x] = None
-        elif action == 52:
-            self.buy_exp()
         elif action == 53:
             if self.refresh():
                 self.shop = self.pool_obj.sample(self, 5)
                 self.printShop(self.shop)
         elif action == 54:
+            self.buy_exp()
+        elif action == 55:
+            exp_to_level = 0
+            if self.level < self.max_level:
+                exp_to_level = self.level_costs[self.level] - self.exp
+                num_buys = math.ceil(exp_to_level / self.exp_per_buy)
+                self.buy_exp(num_buys)
+        elif action == 0:
             self.pass_turn()
         self.actions_taken_this_round += 1
         
 
+    def generate_action_mask(self):
+        mask = np.zeros(56)
+        for i in range(1, 29):
+            t = i-1
+            x, y = t % 7, t // 7            
+            if self.selection:
+                if self.selection['origin'] == 'board' and [x, y] != self.selection['coord']:
+                    mask[i] = 1
+                if self.selection['origin'] == 'bench':
+                    if self.board[x][y] and not self.board[x][y].target_dummy:
+                        mask[i] = 1
+                    elif self.num_units_in_play < self.max_units:
+                        mask[i] = 1
+                if self.selection['origin'] == 'item_bench':
+                    if self.board[x][y] and not self.board[x][y].target_dummy:
+                        if self.selection['selected'] == 'champion_duplicator':
+                            mask[i] = 1
+                        elif self.selection['selected'] in ['magnetic_remover','reforger']:
+                            if len(self.board[x][y].items) > 0:
+                                mask[i] = 1
+                        elif self.selection['selected'] == 'thieves_gloves':
+                            if len(self.board[x][y].items) == 0:
+                                mask[i] = 1
+                        elif self.selection['selected'] in ['kayn_shadowassassin','kayn_rhast']:
+                            if self.board[x][y].name == 'kayn':
+                                mask[i] = 1
+                        elif len(self.board[x][y].items) < 3:
+                            mask[i] = 1
+            elif self.board[x][y]:
+                mask[i] = 1
+        for i in range(29, 38):
+            x_bench = i - 29
+            if self.selection:
+                if self.selection['origin'] == 'board' and not self.selection['selected'].target_dummy:
+                    mask[i] = 1
+                if self.selection['origin'] == 'bench':
+                    continue
+                if self.selection['origin'] == 'item_bench':
+                    if self.bench[x_bench]:
+                        if self.selection['selected'] == 'champion_duplicator':
+                            mask[i] = 1
+                        elif self.selection['selected'] in ['magnetic_remover','reforger']:
+                            if len(self.bench[x_bench].items) > 0:
+                                mask[i] = 1
+                        elif self.selection['selected'] == 'thieves_gloves':
+                            if len(self.bench[x_bench].items) == 0:
+                                mask[i] = 1
+                        elif self.selection['selected'] in ['kayn_shadowassassin','kayn_rhast']:
+                            if self.bench[x_bench].name == 'kayn':
+                                mask[i] = 1
+                        elif len(self.bench[x_bench].items) < 3:
+                            mask[i] = 1
+            elif self.bench[x_bench]:
+                mask[i] = 1
+        for i in range(38, 48):
+            if not self.selection:
+                x = i - 38
+                if self.item_bench[x]:
+                    mask[i] = 1
+        for i in range(48, 53):
+            if self.selection:
+                if self.selection['origin'] in ['board', 'bench'] and not self.selection['selected'].target_dummy:
+                    mask[i] = 1
+            else:
+                x = i - 48
+                if self.shop[x]:
+                    cost = COST[self.shop[x].split('_')[0]]
+                    if self.shop[x].endswith('_c'):
+                        cost = cost_star_values[cost - 1][1]
+                    if cost <= self.gold:
+                        mask[i] = 1
+        if self.gold >= 4:
+            mask[54] = 1
+        if self.gold >= 2:
+            mask[53] = 1
+        exp_to_level = 0
+        if self.level < self.max_level:
+            exp_to_level = self.level_costs[self.level] - self.exp
+            num_buys = math.ceil(exp_to_level / self.exp_per_buy)
+            if self.gold >= num_buys * self.exp_cost:
+                mask[55] = 1
+        mask[0] = 1
+        self.action_mask = mask
+                
+            
+                    
 
     """
     Description - Adds an item to the item_bench. 
@@ -465,18 +561,18 @@ class Player:
     Outputs     - True: exp purchase successful
                   False: Not enough gold or already max level
     """
-    def buy_exp(self):
+    def buy_exp(self, num=1):
         # if the player doesn't have enough gold to buy exp or is max level, give bad reward
-        if self.gold < self.exp_cost or self.level == self.max_level:
+        if self.gold < self.exp_cost * num or self.level == self.max_level:
             self.reward += self.mistake_reward
             #self.decision_mask[4] = 0
             if DEBUG:
                 print("Did not have gold to buy_exp")
             return False
-        self.gold -= 4
-        # self.reward += 0.02
+        self.gold -= num * self.exp_cost
+        # self.reward += 0.02        
+        self.exp += num * self.exp_per_buy
         self.print("exp to {} on level {}".format(self.exp, self.level))
-        self.exp += 4
         self.level_up()
         #self.generate_player_vector()
         return True
@@ -674,95 +770,210 @@ class Player:
 
     """
     Description - Generates the observation space of the player. 
-                    Observation space is 6x10x128
+                    Observation space is 12x12x164
                     See "TFT AI Notes" Google sheet for full description
     Inputs      - private: bool
                     indicates if the observation is public or private                    
     """
     def observation(self, private=False):
-        obs = np.zeros((6, 10, 128))
+        
+        # 161 length 
+        def embed_champion(champ):
+            embedding = np.zeros(162)                        
+            try:
+                c_index = list(COST.keys()).index(curr_champ.name)
+            except:
+                c_index = 0
+            embedding[c_index] = 255
+            embedding[63 + champ.stars] = 255
+            if champ.chosen:
+                embedding[67] = 255
+                embedding[68 + list(tiers).index(curr_champ.chosen)] += 127
+            for ind, item in enumerate(curr_champ.items):
+                embedding[94 + list(items).index(item)] += 84        
+            if curr_champ.target_dummy:
+                embedding[153] = 255 
+            for origin in curr_champ.origin:
+                embedding[68 + list(tiers).index(origin)] += 127
+            
+            lookup = {'AD' : [False, 0],
+                      'crit_chance' : [False, 1],
+                      'armor' : [False, 2],
+                      'MR' : [False, 3],
+                      'dodge' : [False, 4],
+                      'health' : [False, 5],
+                      'AS' : [True, 6],
+                      'SP' : [True, 7],
+                      }
+            
+            stat_emb = np.zeros(8)
+            stat_emb[0] = champ.AD
+            stat_emb[1] = champ.crit_chance
+            stat_emb[2] = champ.armor
+            stat_emb[3] = champ.MR
+            stat_emb[4] = champ.dodge
+            stat_emb[5] = champ.health
+            stat_emb[6] = champ.AS
+            stat_emb[7] = champ.SP
+            
+            for item in champ.items:
+                for key, value in items[item].items():
+                    if key in lookup:
+                        if lookup[key][0]:
+                            stat_emb[lookup[key][1]] *= value
+                        else:
+                            stat_emb[lookup[key][1]] += value
+            
+            stat_emb[0] = np.clip(stat_emb[0] / 2, 0, 255)
+            stat_emb[1] = np.clip(stat_emb[1] * 255, 0, 255)
+            stat_emb[2] = np.clip(stat_emb[2], 0, 255)
+            stat_emb[3] = np.clip(stat_emb[3], 0, 255)
+            stat_emb[4] = np.clip(stat_emb[4] * 400, 0, 255)
+            stat_emb[5] = np.clip(stat_emb[5] * (255/6000), 0, 255)
+            stat_emb[6] = np.clip(stat_emb[6] * 51, 0, 255)
+            stat_emb[7] = np.clip(stat_emb[7] * 128, 0, 255)
+            
+            embedding[154:] = stat_emb
+            
+            return embedding
+        
+        def embed_item(item):
+            embedding = np.zeros(162)
+            embedding[94 + list(items).index(item)] += 84
+            lookup = {'AD' : [False, 0],
+                      'crit_chance' : [False, 1],
+                      'armor' : [False, 2],
+                      'MR' : [False, 3],
+                      'dodge' : [False, 4],
+                      'health' : [False, 5],
+                      'AS' : [True, 6],
+                      'SP' : [True, 7],
+                      }
+            
+            stat_emb = np.zeros(8)
+            stat_emb[-2:] = 1
+                        
+            for key, value in items[item].items():
+                if key in lookup:
+                    if lookup[key][0]:
+                        stat_emb[lookup[key][1]] *= value
+                    else:
+                        stat_emb[lookup[key][1]] += value
+            
+            
+            stat_emb[0] = np.clip(stat_emb[0] / 2, 0, 255)
+            stat_emb[1] = np.clip(stat_emb[1] * 255, 0, 255)
+            stat_emb[2] = np.clip(stat_emb[2], 0, 255)
+            stat_emb[3] = np.clip(stat_emb[3], 0, 255)
+            stat_emb[4] = np.clip(stat_emb[4] * 400, 0, 255)
+            stat_emb[5] = np.clip(stat_emb[5] * (255/6000), 0, 255)
+            stat_emb[6] = np.clip(stat_emb[6] * 51, 0, 255)
+            stat_emb[7] = np.clip(stat_emb[7] * 128, 0, 255)
+            
+            embedding[154:] = stat_emb
+            return embedding
+                
+        obs = np.zeros((7, 9, 173))
         for y in range(0, 4):
             # IMPORTANT TO HAVE THE X INSIDE -- Silver is not sure why but ok.
             for x in range(0, 7):
                 # when using binary encoding (6 champ  + stars + chosen + 3 * 6 item) = 26
-                if self.board[x][y]:
+                obs[y, x, 3] = 255
+                if self.board[x][y]:                    
                     curr_champ = self.board[x][y]                        
-                    try:
-                        c_index = list(COST.keys()).index(curr_champ.name)
-                    except:
-                        c_index = -1
-                    obs[y, x, c_index + 1] = 1
-                    obs[y, x, 64 + curr_champ.stars] = 1
-                    if curr_champ.chosen:
-                        obs[y, x, 63] = 1
-                    for ind, item in enumerate(curr_champ.items):
-                        obs[y, x, 68 + list(items).index(item)] += 1
-        
-                    if curr_champ.target_dummy:
-                        obs[y, x, 64] = 1 
+                    obs[y, x, 10 : -1] = embed_champion(curr_champ)
+
         for x_bench in range(len(self.bench)):
+            x, y = 4 + x_bench // 3, 3 + x_bench % 3
+            obs[x, y, 4] = 255
             if self.bench[x_bench]:
                 curr_champ = self.bench[x_bench]                        
-                try:
-                    c_index = list(COST.keys()).index(curr_champ.name)
-                except:
-                    c_index = -1
-                obs[4, x_bench, c_index + 1] = 1
-                obs[4, x_bench, 64 + curr_champ.stars] = 1       
-                if curr_champ.chosen:
-                    obs[4, x_bench, 63] = 1
-                for ind, item in enumerate(curr_champ.items):
-                    obs[4, x_bench, 68 + list(items).index(item)] += 1
+                obs[y, x, 10 : -1] = embed_champion(curr_champ)
         for ind, item in enumerate(self.item_bench):
+            i = ind + 2
+            x, y = 3 + i // 3, 6 + i % 3
+            obs[x, y, 5] = 255
             if item and list(items).index(item):
-                if ind < 5:
-                    d = 1
-                else:
-                    d = 68
-                obs[5, ind % 5, d + list(items).index(item)] += 1
-        for x_shop in range(len(self.shop)):
-            if self.shop[x_shop]:
-                curr_champ = self.shop[x_shop]                        
-                if curr_champ.endswith('_c'):
-                    obs[5, 5+x_shop, 63] = 1
-                    curr_champ, comp = curr_champ.split('_')[:2]
-                    obs[5, 5+x_shop, 70 + list(self.team_composition.keys()).index(comp)]                   
-                c_index = list(COST.keys()).index(curr_champ)             
-                obs[5, 5+x_shop, c_index + 1] = 1     
-                obs[5, 5+x_shop, 63 + COST[curr_champ]] = 1
-
-        for i, key in enumerate(self.team_composition.keys()):
-            obs[1 + i // 14, 7, 9* (i % 14):9* (i % 14)+self.team_composition[key]] = 1
-        obs[2, 9, :self.health] = 1
-        obs[1, 9, self.level] = 1
-        obs[0, 8, self.max_units] = 1
-        obs[2, 8, self.round] = 1
+                obs[x, y, 10 : -1] = embed_item(item)
         if private:
-            obs[0, 9, :np.clip(self.gold, 0, 128)] = 1
+            for x_shop in range(len(self.shop)):
+                x, y = 1 + x_shop // 2, 7 + x_shop % 2
+                obs[x, y, 6] = 255
+                if self.shop[x_shop]:
+                    curr_champ = self.shop[x_shop]  
+                    origin = False                      
+                    if curr_champ.endswith('_c'):
+                        curr_champ, origin = curr_champ.split('_')[:2]
+                    curr_champ = champion.champion(curr_champ, chosen=origin)
+                    obs[x, y, 10 : -1] = embed_champion(curr_champ)     
+                    obs[x, y, 104 + COST[curr_champ.name]] = 255
+
+        for i, origin in enumerate(tiers):
+            d = i // 9
+            t = i % 9
+            x, y = 4 + t // 3, t % 3
+            obs[x, y, 8] = 255
+            obs[x, y, 10 + 16 * d + self.team_composition[origin]] = 255
+            obs[x, y, 10 + 16 * d + 9 + self.team_tiers[origin]] = 255
+        obs[0, 8, 9] = 255
+        obs[0, 8, 10] = np.clip(self.level * 25, 0, 255)
+        obs[0, 8, 11] = np.clip(self.max_units * 25, 0, 255)
+        obs[0, 8, 12] = np.clip(self.num_units_in_play * 25, 0, 255)
+        obs[0, 8, 15] = np.clip(self.round * 8.5, 0, 255)
+        obs[0, 8, 16] = np.clip(self.health * 2, 0, 255)
+        obs[0, 8, 17] = np.clip(self.win_streak * 20, 0, 255)
+        obs[0, 8, 18] = np.clip(self.loss_streak * 20, 0, 255)
+
+        if private:
+            obs[:, :, 0] = 255
+            obs[0, 8, 13] = np.clip(self.gold * 3, 0, 255)
             exp_to_level = 0
             if self.level < self.max_level:
                 exp_to_level = self.level_costs[self.level] - self.exp
-            obs[1, 8, :exp_to_level] = 1
+            obs[0, 8, 14] = np.clip(exp_to_level * 2, 0, 255)
+            obs[0, 7, 7] = 255
             if self.selection:
                 if self.selection['origin'] == 'board':
-                    obs[0, 7, :] = obs[self.selection['coord'][1], self.selection['coord'][0], :]
-                    obs[self.selection['coord'][1], self.selection['coord'][0], 0] = 1
+                    obs[0, 7, 10:] = obs[self.selection['coord'][1], self.selection['coord'][0], 10:]
+                    obs[self.selection['coord'][1], self.selection['coord'][0], 2] = 255
                 elif self.selection['origin'] == 'item_bench':
-                    if self.selection['coord'] < 5:
-                        d = 1
-                    else:
-                        d = 68
-                    obs[0, 7, 68:] = obs[5, self.selection['coord'] % 5, d:d+60]
-                    obs[5, self.selection['coord'], d-1] = 1
+                    i = self.selection['coord'] + 2
+                    x, y = 3 + i // 3, 6 + i % 3
+                    obs[0, 7, 10:] = obs[x, y, 10:]
+                    obs[x, y, 2] = 255
                 elif self.selection['origin'] == 'bench':
-                    obs[0, 7, :] = obs[4, self.selection['coord'], :]
-                    obs[4, self.selection['coord'], 0] = 1
+                    i = self.selection['coord']
+                    x, y = 4 + i // 3, 3 + i % 3
+                    obs[0, 7, 10:] = obs[x, y, 10:]
+                    obs[x, y, 2] = 255
             if self.taking_actions:
-                obs[3, 9, :] = 1
-            obs[3, 8, self.actions_per_round - self.actions_taken_this_round] = 1
-            obs[:, :, -1] = 1
+                obs[0, 8, 19] = 255
+            obs[0, 8, 20] = np.clip((self.actions_per_round - self.actions_taken_this_round) * 11, 0, 255)
         else:
-            obs[0, 9, :np.clip(self.gold//10 * 10, 0, 50)] = 1.
+            obs[:, :, 1] = 1
+            obs[0, 8, 13] = np.clip(np.clip(self.gold//10, 0, 5) * 30, 0, 255)
+        if private:
+            self.generate_action_mask()
+            obs[4, 0, -1] = self.action_mask[0] * 255
+            for i in range(1, 29):
+                t = i - 1
+                y, x = t % 7, t // 7 
+                obs[x, y, -1] = self.action_mask[i] * 255
+            for i in range(29, 38):
+                x_bench = i - 29
+                x, y = 4 + x_bench // 3, 3 + x_bench % 3
+                obs[x, y, -1] = self.action_mask[i] * 255
+            for i in range(38, 48):
+                ind = i - 38 + 2
+                x, y = 3 + ind // 3, 6 + ind % 3    
+                obs[x, y, -1] = self.action_mask[i] * 255
+            for i in range(48, 53):
+                x_shop = i - 48
+                x, y = 1 + x_shop // 2, 7 + x_shop % 2
+                obs[x, y, -1] = self.action_mask[i] * 255
+            obs[4, 1, -1] = self.action_mask[54] * 255
+            obs[4, 2, -1] = self.action_mask[53] * 255
+            obs[5, 0, -1] = self.action_mask[55] * 255
         return obs
         
 
@@ -1327,8 +1538,9 @@ class Player:
                         if champ.items[0] == 'thieves_gloves':
                             self.thieves_gloves(x, y)
                         self.reward += .2 * self.item_reward
-                        self.print(
-                            ".2 reward for combining two basic items into a {}".format(item_names[item_index]))
+                        if self.item_reward:
+                            self.print(
+                                ".2 reward for combining two basic items into a {}".format(item_names[item_index]))
                     elif champ.items[-1] in basic_items and self.item_bench[xBench] not in basic_items:
                         basic_piece = champ.items.pop()
                         champ.items.append(self.item_bench[xBench])
@@ -1337,7 +1549,7 @@ class Player:
                     else:
                         if self.item_bench[xBench] == "sparring_gloves":
                             coord = utils.x_y_to_1d_coord(champ.x, champ.y)
-                            self.glove_item_mask[coord] = 1
+                            #self.glove_item_mask[coord] = 1
                         champ.items.append(self.item_bench[xBench])
                         self.item_bench[xBench] = None
                 else:
