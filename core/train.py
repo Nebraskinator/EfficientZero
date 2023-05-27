@@ -350,10 +350,10 @@ def _train(model, target_model, replay_buffer, shared_storage, batch_storage, co
     model = model.to(config.device)
     target_model = target_model.to(config.device)
     lr=config.lr_init
-    #optimizer = optim.SGD(model.parameters(), lr=config.lr_init, momentum=config.momentum,
-    #                      weight_decay=config.weight_decay)
-    optimizer = optim.Adam(model.parameters(), lr=config.lr_init,
+    optimizer = optim.SGD(model.parameters(), lr=config.lr_init, momentum=config.momentum,
                           weight_decay=config.weight_decay)
+    #optimizer = optim.Adam(model.parameters(), lr=config.lr_init,
+    #                      weight_decay=config.weight_decay)
     
     scaler = GradScaler()
 
@@ -390,7 +390,7 @@ def _train(model, target_model, replay_buffer, shared_storage, batch_storage, co
             continue
 
         shared_storage.incr_counter.remote()
-        #lr = adjust_lr(config, optimizer, step_count)
+        lr = adjust_lr(config, optimizer, step_count)
 
         # update model for self-play
         if step_count % config.checkpoint_interval == 0:

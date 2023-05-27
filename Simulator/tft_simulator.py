@@ -114,9 +114,9 @@ class TFT_Simulator(AECEnv):
 
     @functools.lru_cache(maxsize=None)
     def action_space(self, agent: str) -> gym.spaces.Space:
-        return 56
+        return 1785
     def action_space_size(self):
-        return 56
+        return 1785
     def check_dead(self):
         num_alive = 0
         for key, player in self.PLAYERS.items():
@@ -135,8 +135,228 @@ class TFT_Simulator(AECEnv):
 
 
     
+    def generate_random_matchup(self):
+        from Simulator import champion
+        from Simulator.item_stats import items
+        from Simulator.stats import COST
+        from Simulator.origin_class_stats import tiers
         
+        self.pool_obj = pool.pool()
+        self.PLAYERS = {"player_" + str(player_id): player_class(self.pool_obj, player_id)
+                        for player_id in range(2)}
+        self.step_function = Step_Function(self.pool_obj)
+        self.game_round = Game_Round(self.PLAYERS, self.pool_obj, self.step_function)
+        r = np.random.choice([3, 4, 5, 7,
+                                9, 10, 11,
+                                13, 15, 16,
+                                17, 19, 21,
+                                22, 23, 25,
+                                27, 28, 29,
+                                31, 33, 34,
+                                35, 37, 39,
+                                40, 41, 43])
+        self.game_round.current_round = r
+        p0_level = np.clip(np.random.randint(np.clip(r // 9 - 2, 1, 9), np.clip(r // 9 + 2, 1, 10)), 1, 9)
+        p1_level = np.clip(np.random.randint(np.clip(r // 9 - 2, 1, 9), np.clip(r // 9 + 2, 1, 10)), 1, 9)
+        self.PLAYERS['player_0'].level = p0_level
+        self.PLAYERS['player_0'].max_units = p0_level
+        self.PLAYERS['player_0'].round = r
+        self.PLAYERS['player_1'].level = p1_level
+        self.PLAYERS['player_1'].max_units = p1_level
+        self.PLAYERS['player_1'].round = r
         
+        positions = [(x, y) for x in range(7) for y in range(4)]
+        
+        p0_positions = np.random.choice(np.arange(len(positions)), p0_level, replace=False)
+        p1_positions = np.random.choice(np.arange(len(positions)), p1_level, replace=False)
+        item_list = list(items.keys())
+        
+        for i in range(np.random.randint(10)):
+            self.PLAYERS['player_0'].item_bench[i] = item_list[np.random.randint(9)]
+        for i in range(np.random.randint(10)):
+            self.PLAYERS['player_1'].item_bench[i] = item_list[np.random.randint(9)]
+        
+        for i, champ in enumerate(self.PLAYERS['player_0'].pool_obj.sample(self.PLAYERS['player_0'], p0_level)):
+            if champ.endswith("_c"):
+                c_shop = champ.split('_')
+                a_champion = champion.champion(c_shop[0], chosen=c_shop[1], itemlist=[])
+            else:
+                a_champion = champion.champion(champ)
+            for _ in range(np.random.randint(4 - a_champion.stars)):
+                a_champion.golden()
+            x, y = positions[p0_positions[i]]
+            a_champion.x, a_champion.y = x, y
+            self.PLAYERS['player_0'].board[x][y] = a_champion
+        
+        for i, champ in enumerate(self.PLAYERS['player_1'].pool_obj.sample(self.PLAYERS['player_1'], p1_level)):
+            if champ.endswith("_c"):
+                c_shop = champ.split('_')
+                a_champion = champion.champion(c_shop[0], chosen=c_shop[1], itemlist=[])
+            else:
+                a_champion = champion.champion(champ)
+            for _ in range(np.random.randint(4 - a_champion.stars)):
+                a_champion.golden()
+            x, y = positions[p1_positions[i]]
+            a_champion.x, a_champion.y = x, y
+            self.PLAYERS['player_1'].board[x][y] = a_champion
+            
+        for i, item in enumerate(self.PLAYERS['player_0'].item_bench):
+            if item:
+                x, y = positions[p0_positions[np.random.randint(len(p0_positions))]]
+                self.PLAYERS['player_0'].move_item(i, x, y)
+                
+        for i, item in enumerate(self.PLAYERS['player_1'].item_bench):
+            if item:
+                x, y = positions[p1_positions[np.random.randint(len(p1_positions))]]
+                self.PLAYERS['player_1'].move_item(i, x, y)
+              
+        def embed_champion(champ):
+            embedding = np.zeros(162)                        
+            try:
+                c_index = list(COST.keys()).index(champ.name)
+            except:
+                c_index = 0
+            embedding[c_index] = 255
+            embedding[63 + champ.stars] = 255
+            if champ.chosen:
+                embedding[67] = 255
+                embedding[68 + list(tiers).index(champ.chosen)] += 127
+            for ind, item in enumerate(champ.items):
+                embedding[94 + list(items).index(item)] += 84        
+            if champ.target_dummy:
+                embedding[153] = 255 
+            for origin in champ.origin:
+                embedding[68 + list(tiers).index(origin)] += 127
+            
+            lookup = {'AD' : [False, 0],
+                      'crit_chance' : [False, 1],
+                      'armor' : [False, 2],
+                      'MR' : [False, 3],
+                      'dodge' : [False, 4],
+                      'health' : [False, 5],
+                      'AS' : [True, 6],
+                      'SP' : [True, 7],
+                      }
+            
+            stat_emb = np.zeros(8)
+            stat_emb[0] = champ.AD
+            stat_emb[1] = champ.crit_chance
+            stat_emb[2] = champ.armor
+            stat_emb[3] = champ.MR
+            stat_emb[4] = champ.dodge
+            stat_emb[5] = champ.health
+            stat_emb[6] = champ.AS
+            stat_emb[7] = champ.SP
+            
+            for item in champ.items:
+                for key, value in items[item].items():
+                    if key in lookup:
+                        if lookup[key][0]:
+                            stat_emb[lookup[key][1]] *= value
+                        else:
+                            stat_emb[lookup[key][1]] += value
+            
+            stat_emb[0] = np.clip(stat_emb[0] / 2, 0, 255)
+            stat_emb[1] = np.clip(stat_emb[1] * 255, 0, 255)
+            stat_emb[2] = np.clip(stat_emb[2], 0, 255)
+            stat_emb[3] = np.clip(stat_emb[3], 0, 255)
+            stat_emb[4] = np.clip(stat_emb[4] * 400, 0, 255)
+            stat_emb[5] = np.clip(stat_emb[5] * (255/6000), 0, 255)
+            stat_emb[6] = np.clip(stat_emb[6] * 51, 0, 255)
+            stat_emb[7] = np.clip(stat_emb[7] * 128, 0, 255)
+            
+            embedding[154:] = stat_emb
+            
+            return embedding
+
+        obs = []
+        for p in list(self.PLAYERS.values()):
+            ob = np.zeros((7, 4, 162))
+            for x in range(7):
+                for y in range(4):
+                    if p.board[x][y]:
+                        ob[x, y, :] = embed_champion(p.board[x][y]) / 255
+            obs.append(ob)
+        
+        r_obs = np.zeros(50)
+        r_obs[r] = 1
+        
+        self.game_round.start_round()
+        self.game_round.play_game_round()
+        
+        hp = self.PLAYERS['player_0'].reward / 20
+        return obs[0], obs[1], r_obs, hp
+    
+    def generate_matchup(self, p1_vector, p2_vector, r, stars=1):
+        from Simulator import champion
+        from Simulator.item_stats import items
+        from Simulator.stats import COST
+        from Simulator.origin_class_stats import tiers
+        
+        self.pool_obj = pool.pool()
+        self.PLAYERS = {"player_" + str(player_id): player_class(self.pool_obj, player_id)
+                        for player_id in range(2)}
+        self.step_function = Step_Function(self.pool_obj)
+        self.game_round = Game_Round(self.PLAYERS, self.pool_obj, self.step_function)
+
+        self.game_round.current_round = r
+        p0_level = p1_vector[0]
+        p1_level = p2_vector[0]
+        self.PLAYERS['player_0'].level = p0_level
+        self.PLAYERS['player_0'].max_units = p0_level
+        self.PLAYERS['player_0'].round = r
+        self.PLAYERS['player_1'].level = p1_level
+        self.PLAYERS['player_1'].max_units = p1_level
+        self.PLAYERS['player_1'].round = r
+        
+        positions = [(x, y) for x in range(7) for y in range(4)]
+        
+        p0_positions = p1_vector[1]
+        p1_positions = p2_vector[1]
+        item_list = list(items.keys())
+        
+        for i, b in enumerate(p1_vector[2]):
+            self.PLAYERS['player_0'].item_bench[i] = item_list[b]
+        for i, b in enumerate(p2_vector[2]):
+            self.PLAYERS['player_1'].item_bench[i] = item_list[b]
+        
+        for i, champ in enumerate(p1_vector[3]):
+            if champ.endswith("_c"):
+                c_shop = champ.split('_')
+                a_champion = champion.champion(c_shop[0], chosen=c_shop[1], itemlist=[])
+            else:
+                a_champion = champion.champion(champ, stars=stars)
+            x, y = positions[p0_positions[i]]
+            a_champion.x, a_champion.y = x, y
+            self.PLAYERS['player_0'].board[x][y] = a_champion
+        
+        for i, champ in enumerate(p2_vector[3]):
+            if champ.endswith("_c"):
+                c_shop = champ.split('_')
+                a_champion = champion.champion(c_shop[0], chosen=c_shop[1], itemlist=[])
+            else:
+                a_champion = champion.champion(champ, stars=stars)
+            x, y = positions[p1_positions[i]]
+            a_champion.x, a_champion.y = x, y
+            self.PLAYERS['player_1'].board[x][y] = a_champion
+            
+        for i, item in enumerate(self.PLAYERS['player_0'].item_bench):
+            if item:
+                x, y = positions[p1_vector[4][i]]
+                self.PLAYERS['player_0'].move_item(i, x, y)
+                
+        for i, item in enumerate(self.PLAYERS['player_1'].item_bench):
+            if item:
+                x, y = positions[p2_vector[4][i]]
+                self.PLAYERS['player_1'].move_item(i, x, y)
+              
+        
+        self.game_round.start_round()
+        self.game_round.play_game_round()
+        
+        hp = self.PLAYERS['player_0'].reward
+        return hp
+
 
     def generate_public_observations(self):
         for player in self.PLAYERS:
@@ -182,7 +402,7 @@ class TFT_Simulator(AECEnv):
         self.public_observations = {player: self.PLAYERS[player].observation() for player in list(self.PLAYERS.keys())}
         obs_dict = {player: self.make_observation(player) for player in list(self.PLAYERS.keys()) if self.PLAYERS[player].is_alive}
         taking_actions_dict = {player: self.PLAYERS[player].taking_actions for player in list(self.PLAYERS.keys())}
-        action_masks = {player: self.PLAYERS[player].action_mask for player in list(self.PLAYERS.keys())}
+        action_masks = {player: self.PLAYERS[player].generate_action_mask_single() for player in list(self.PLAYERS.keys())}
 
         return obs_dict, taking_actions_dict, action_masks
 
@@ -207,7 +427,7 @@ class TFT_Simulator(AECEnv):
     def step(self, action):
         for player in list(action.keys()):
             if self.PLAYERS[player].is_alive and self.PLAYERS[player].taking_actions:
-                self.PLAYERS[player].take_action(action[player])
+                self.PLAYERS[player].take_action_single(action[player])
         self.actions_taken_this_round += 1
         dones = {p: False for p in self.live_agents}
         if self.actions_taken_this_round >= self.max_actions_per_round:
@@ -234,7 +454,7 @@ class TFT_Simulator(AECEnv):
         if len(self.live_agents) <= 1:
             for p in self.live_agents:
                 dones[p] = True
-        action_masks = {p: self.PLAYERS[p].action_mask for p in list(self.PLAYERS.keys())}
+        action_masks = {p: self.PLAYERS[p].generate_action_mask_single() for p in list(self.PLAYERS.keys())}
         return obs_dict, rewards_dict, taking_actions_dict, dones, action_masks
             
             

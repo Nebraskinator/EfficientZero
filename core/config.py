@@ -269,7 +269,7 @@ class BaseConfig(object):
         self.lr_init = lr_init
         self.lr_decay_rate = lr_decay_rate
         self.lr_decay_steps = lr_decay_steps
-        self.mini_infer_size = 64
+        self.mini_infer_size = 128
 
         # replay buffer, priority related
         self.priority_prob_alpha = 0.6

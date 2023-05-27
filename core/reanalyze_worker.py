@@ -10,6 +10,8 @@ from core.mcts import MCTS
 from core.model import concat_output, concat_output_value
 from core.utils import prepare_observation_lst, LinearSchedule
 
+import gc
+
 
 @ray.remote(max_restarts=-1, max_task_retries=-1)
 class BatchWorker_CPU(object):
@@ -36,6 +38,8 @@ class BatchWorker_CPU(object):
         self.mcts_storage = mcts_storage
         self.config = config
         self.max_len = config.mcts_queue_size - 1
+        
+        self.put_cnt = 0
 
         self.last_model_index = -1
         self.batch_max_num = config.batch_queue_size
@@ -216,8 +220,9 @@ class BatchWorker_CPU(object):
             policy_non_re_context = self._prepare_policy_non_re_context(indices_lst[re_num:], game_lst[re_num:], game_pos_lst[re_num:])
         else:
             policy_non_re_context = None
-        countext = reward_value_context, policy_re_context, policy_non_re_context, inputs_batch, weights
-        self.mcts_storage.push(countext)
+        context = reward_value_context, policy_re_context, policy_non_re_context, inputs_batch, weights
+        self.mcts_storage.push(context)
+        self.put_cnt += 1
 
     def run(self):
         # start making mcts contexts to feed the GPU batch maker
@@ -257,6 +262,9 @@ class BatchWorker_CPU(object):
                     except:
                         print('Data is deleted...')
                         time.sleep(0.1)
+                if self.put_cnt > 2000:
+                    gc.collect()
+                    self.put_cnt = 0
             except:
                 print("error in batchworker cpu")
 
@@ -286,6 +294,8 @@ class BatchWorker_GPU(object):
         self.model = config.get_uniform_network()
         self.model.to(config.device)
         self.model.eval()
+
+        self.put_cnt = 0        
 
         self.mcts_storage = mcts_storage
         self.storage = storage
@@ -498,6 +508,10 @@ class BatchWorker_GPU(object):
             while self.batch_storage.get_len() >= self.max_len:
                 time.sleep(0.3)
             self.batch_storage.push([inputs_batch, targets_batch])
+            self.put_cnt += 1
+            if self.put_cnt > 2000:
+                gc.collect()
+                self.put_cnt = 0
 
     def run(self):
         start = False

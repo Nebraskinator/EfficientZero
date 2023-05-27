@@ -49,7 +49,8 @@ class ReplayBuffer(object):
             the priorities corresponding to the transitions in the game history
         """
         if self.get_total_len() >= self.config.total_transitions:
-            return
+            pass
+            #return
 
         if end_tag:
             self._eps_collected += 1

@@ -93,7 +93,7 @@ def test(config, model, counter, test_episodes, device, render, save_video=False
             # initializations
             obs, taking_actions, action_masks = env.reset()
     
-            game_history = GameHistory(env.action_space_size(), max_length=max_episode_steps, config=config)    
+            game_history = GameHistory(env.action_space_size(), env.obs_shape, max_length=max_episode_steps, config=config)    
     
             game_history.init([obs[player] for _ in range(config.stacked_observations)])
     
@@ -105,6 +105,7 @@ def test(config, model, counter, test_episodes, device, render, save_video=False
                     stack_obs = []
                     stack_obs.append(game_history.step_obs())
                     stack_obs = prepare_observation_lst(stack_obs)
+                    stack_obs = np.squeeze(stack_obs, 1)
                     stack_obs = torch.from_numpy(stack_obs).to(device).float()
                 else:
                     stack_obs = [game_history.step_obs()]
@@ -130,13 +131,13 @@ def test(config, model, counter, test_episodes, device, render, save_video=False
                 actions[player], _ = select_action(distributions, temperature=1, deterministic=True)
                 for p in env.live_agents:
                     if p != player:
-                        actions[p] = np.random.randint(0, env.action_space_size())
+                        actions[p] = np.random.choice(np.flatnonzero(action_masks[p]))
 
                 obs, ori_reward, taking_actions, done_dict, action_masks = env.step(actions)
 
                 done = done_dict[player]
                 if done:
-                    obs = np.zeros((48, 10, 128)).astype(int)
+                    obs = np.zeros(env.obs_shape).astype(int)
                 else:
                     obs = obs[player]
 

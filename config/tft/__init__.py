@@ -10,7 +10,7 @@ from Simulator.tft_simulator import TFT_Simulator
 class TFTConfig(BaseConfig):
     def __init__(self):
         super(TFTConfig, self).__init__(
-            training_steps=1000000,
+            training_steps=2000000,
             last_steps=20000,
             test_interval=5000,
             log_interval=1000,
@@ -25,8 +25,8 @@ class TFTConfig(BaseConfig):
             discount=0.997,
             dirichlet_alpha=0.3,
             value_delta_max=0.01,
-            num_simulations=200,
-            batch_size=64,
+            num_simulations=75,
+            batch_size=128,
             td_steps=10,
             num_actors=1,
             # network initialization/ & normalization
@@ -37,15 +37,15 @@ class TFTConfig(BaseConfig):
             cvt_string=False,
             image_based=True,
             # lr scheduler
-            lr_warm_up=0.005,
-            lr_init=0.001,
+            lr_warm_up=0.001,
+            lr_init=0.01,
             lr_decay_rate=0.1,
             lr_decay_steps=100000,
             auto_td_steps_ratio=0.3,
             # replay window
-            start_transitions=8000,
+            start_transitions=2000,
             total_transitions=100 * 1000,
-            transition_num=200000,
+            transition_num=180000,
             # frame skip & stack observation
             gray_scale=False,
             frame_skip=1,
@@ -56,7 +56,7 @@ class TFTConfig(BaseConfig):
             policy_loss_coeff=1,
             consistency_coeff=2,
             # reward sum
-            lstm_hidden_size=512,
+            lstm_hidden_size=1024,
             lstm_horizon_len=5,
             # siamese
             proj_hid=1024,
@@ -69,7 +69,7 @@ class TFTConfig(BaseConfig):
 
         self.start_transitions = self.start_transitions // self.frame_skip
         self.start_transitions = max(1, self.start_transitions)
-
+        self.easy_mode = False
         self.bn_mt = 0.1
         self.blocks = 6  # Number of blocks in the ResNet
         self.channels = 256  # Number of channels in the ResNet
@@ -106,6 +106,7 @@ class TFTConfig(BaseConfig):
     def get_uniform_network(self):
         return EfficientZeroNet(
             self.obs_shape,
+            self.num_players,
             self.action_space_size,
             self.blocks,
             self.channels,
@@ -158,14 +159,17 @@ class TFTConfig(BaseConfig):
         
         obs_batch shape is (batch_size, channel * (unroll_steps + 1), obs height, obs width)
         '''    
-        ret = obs_batch.copy()  
-        for b in range(ret.shape[0]):
-            for to_swap in np.random.choice(np.arange(1, 8), size=(3,2), replace=False):
-                temp = ret[b, :, to_swap[0], :, :, :]
-                ret[b, :, to_swap[0], :, :, :] = \
-                    ret[b, :, to_swap[1], :, :, :]                        
-                ret[b, :, to_swap[1], :, :, :] = temp            
-        return ret
+        if self.num_players > 2:
+            ret = obs_batch.copy()  
+            for b in range(ret.shape[0]):
+                for to_swap in np.random.choice(np.arange(1, self.num_players), size=(3,2), replace=False):
+                    temp = ret[b, :, to_swap[0], :, :, :]
+                    ret[b, :, to_swap[0], :, :, :] = \
+                        ret[b, :, to_swap[1], :, :, :]                        
+                    ret[b, :, to_swap[1], :, :, :] = temp            
+            return ret
+        else:
+            return obs_batch
 
     def transform(self, images):
         return self.transforms.transform(images)

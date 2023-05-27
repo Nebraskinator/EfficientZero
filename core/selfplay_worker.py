@@ -134,25 +134,26 @@ class DataWorker(object):
                     break
 
                 init_obses, taking_actions, action_masks = env.reset()
-
+                
                 num_actors = len(env.live_agents)
+                live_actors = env.live_agents
 
-                dones = {p:False for p in env.live_agents}
+                dones = {p:False for p in live_actors}
                 game_histories = {p: GameHistory(env.action_space_size(), env.obs_shape, max_length=self.config.history_length,
-                                              config=self.config) for p in env.live_agents}
-                last_game_histories = {p: None for p in env.live_agents}
-                last_game_priorities = {p: None for p in env.live_agents}
+                                              config=self.config) for p in live_actors}
+                last_game_histories = {p: None for p in live_actors}
+                last_game_priorities = {p: None for p in live_actors}
 
                 # stack observation windows in boundary: s398, s399, s400, current s1 -> for not init trajectory
-                stack_obs_windows = {p: [] for p in env.live_agents}
+                stack_obs_windows = {p: [] for p in live_actors}
 
-                for p in env.live_agents:
+                for p in live_actors:
                     stack_obs_windows[p] = [init_obses[p] for _ in range(self.config.stacked_observations)]
                     game_histories[p].init(stack_obs_windows[p])
 
                 # for priorities in self-play
-                search_values_lst = {p: [] for p in env.live_agents}
-                pred_values_lst = {p: [] for p in env.live_agents}
+                search_values_lst = {p: [] for p in live_actors}
+                pred_values_lst = {p: [] for p in live_actors}
 
                 # some logs
                 eps_ori_reward_lst, eps_reward_lst, eps_steps_lst, visit_entropies_lst = 0, 0, 0, 0
@@ -174,6 +175,8 @@ class DataWorker(object):
                 # play games until max moves
                 while done_cnt < num_actors and (step_counter <= self.config.max_moves):
 
+                    live_actors = [p for p in env.live_agents if p in live_actors]
+                    step_acting_agents = [i for i in live_actors if taking_actions[i]]
                     if not start_training:
                         start_training = ray.get(self.storage.get_start_signal.remote())
 
@@ -194,7 +197,7 @@ class DataWorker(object):
                     # set temperature for distributions
                     _temperature = np.array(
                         [self.config.visit_softmax_temperature_fn(num_moves=0, trained_steps=trained_steps) for player in
-                         env.live_agents])
+                         step_acting_agents])
 
                     # update the models in self-play every checkpoint_interval
                     new_model_index = trained_steps // self.config.checkpoint_interval
@@ -235,58 +238,72 @@ class DataWorker(object):
                     step_counter += 1
 
                     # stack obs for model inference
-
-                    stack_obs = [game_histories[p].step_obs() for p in env.live_agents]
-                    if self.config.image_based:
-                        stack_obs = prepare_observation_lst(stack_obs)
-                        stack_obs = np.squeeze(stack_obs, 1)
-                        stack_obs = torch.from_numpy(stack_obs).to(self.device).float()
-                    else:
-                        #stack_obs = [game_history.step_obs() for game_history in game_histories]
-                        stack_obs = torch.from_numpy(np.array(stack_obs)).to(self.device)
-                    if self.config.amp_type == 'torch_amp':
-                        with autocast():
-                            network_output = model.initial_inference(stack_obs.float())
-                    else:                        
-                        network_output = model.initial_inference(stack_obs.float())
-                    hidden_state_roots = network_output.hidden_state
-                    reward_hidden_roots = network_output.reward_hidden
-                    value_prefix_pool = network_output.value_prefix
-                    policy_logits_pool = (network_output.policy_logits * np.array([action_masks[p] for p in env.live_agents])).tolist()
-                    roots = cytree.Roots(len(env.live_agents), self.config.action_space_size, self.config.num_simulations)
-                    noises = [(np.random.dirichlet([self.config.root_dirichlet_alpha] * self.config.action_space_size) * action_masks[p]).astype(np.float32).tolist() for p in env.live_agents]
-                    roots.prepare(self.config.root_exploration_fraction, noises, value_prefix_pool, policy_logits_pool)
-                    # do MCTS for a policy
-                    MCTS(self.config).search(roots, model, hidden_state_roots, reward_hidden_roots, training_start=(start_training or self.config.load_model))
-
-                    roots_distributions = roots.get_distributions()
-                    roots_values = roots.get_values()
-                    action, visit_entropy, dists, vals = {}, {}, {}, {}
-                    step_live_agents = list(env.live_agents)
-                    for i, p in enumerate(env.live_agents):
-                        if self.config.use_priority and not self.config.use_max_priority and start_training:
-                            pred_values_lst[p].append(network_output.value[i].item())
-                            search_values_lst[p].append(roots_values[i])
-                        deterministic = False
-                        if start_training or self.config.resume_training:
-                            distributions, value, temperature = roots_distributions[i], roots_values[i], _temperature[i]
+                    if step_acting_agents:
+                        stack_obs = [game_histories[p].step_obs() for p in step_acting_agents]
+                        if self.config.image_based:
+                            stack_obs = prepare_observation_lst(stack_obs)
+                            stack_obs = np.squeeze(stack_obs, 1)
+                            stack_obs = torch.from_numpy(stack_obs).to(self.device).float()
                         else:
-                            # before starting training, use random policy
-                            value, temperature = roots_values[i], _temperature[i]
-                            distributions = np.ones(self.config.action_space_size)
-                        distributions *= action_masks[p]
-                        if np.sum(distributions) == 0:
-                            distributions[0] = 1 
-                        dists[p] = distributions
-                        vals[p] = value
-                        prev_pred_values[p] = network_output.value[i].item()
-                        prev_search_values[p] = value
+                            #stack_obs = [game_history.step_obs() for game_history in game_histories]
+                            stack_obs = torch.from_numpy(np.array(stack_obs)).to(self.device)
+                        if self.config.amp_type == 'torch_amp':
+                            with autocast():
+                                network_output = model.initial_inference(stack_obs.float())
+                        else:                        
+                            network_output = model.initial_inference(stack_obs.float())
+                        hidden_state_roots = network_output.hidden_state
+                        reward_hidden_roots = network_output.reward_hidden
+                        value_prefix_pool = network_output.value_prefix
+                        policy_logits_pool = (network_output.policy_logits * np.array([action_masks[p] for p in step_acting_agents])).tolist()
+                        roots = cytree.Roots(len(step_acting_agents), self.config.action_space_size, self.config.num_simulations)
+                        noises = []
+                        for p in step_acting_agents:
+                            noise = np.zeros(self.config.action_space_size)
+                            sample = np.random.dirichlet([self.config.root_dirichlet_alpha] * np.sum(action_masks[p]).astype(int))
+                            cnt = 0
+                            for i in range(len(noise)):
+                                if action_masks[p][i]:
+                                    noise[i] = sample[cnt]
+                                    cnt += 1
+                            noises.append(noise.astype(np.float32).tolist())                            
+                        #noises = [(np.random.dirichlet([self.config.root_dirichlet_alpha] * np.sum(action_masks[p]))).astype(np.float32).tolist() for p in step_acting_agents]
+                        roots.prepare(self.config.root_exploration_fraction, noises, value_prefix_pool, policy_logits_pool)
+                        # do MCTS for a policy
+                        MCTS(self.config).search(roots, model, hidden_state_roots, reward_hidden_roots, training_start=(start_training or self.config.load_model))
+    
+                        roots_distributions = roots.get_distributions()
+                        roots_values = roots.get_values()
+                        action, visit_entropy, dists, vals = {}, {}, {}, {}
                         
-                        action[p], visit_entropy[p] = select_action(distributions, temperature=temperature, deterministic=deterministic)
-
+                        for i, p in enumerate(step_acting_agents):
+                            if self.config.use_priority and not self.config.use_max_priority and start_training:
+                                pred_values_lst[p].append(network_output.value[i].item())
+                                search_values_lst[p].append(roots_values[i])
+                            deterministic = False
+                            if start_training or self.config.resume_training:
+                                distributions, value, temperature = roots_distributions[i], roots_values[i], _temperature[i]
+                            else:
+                                # before starting training, use random policy
+                                value, temperature = roots_values[i], _temperature[i]
+                                distributions = np.ones(self.config.action_space_size)
+                            distributions *= action_masks[p]
+                            if np.sum(distributions) == 0:
+                                distributions[0] = 1 
+                            dists[p] = distributions
+                            vals[p] = value
+                            prev_pred_values[p] = network_output.value[i].item()
+                            prev_search_values[p] = value
+                            
+                            action[p], visit_entropy[p] = select_action(distributions, temperature=temperature, deterministic=deterministic)
+                        
+                    for p in env.live_agents:
+                        if p not in step_acting_agents:
+                            action[p] = 0
+                    
                     obs, ori_reward, taking_actions, dones, action_masks = env.step(action)
 
-                    for p in step_live_agents:
+                    for p in step_acting_agents:
                         # clip the reward
                         if self.config.clip_reward:
                             clip_reward = np.sign(ori_reward[p])
@@ -331,7 +348,7 @@ class DataWorker(object):
                             game_histories[p].init(stack_obs_windows[p])
                     for player in list(dones.keys()):
                         # reset env if finished
-                        if dones[player]:
+                        if player in live_actors and dones[player]:
 
                             done_cnt += 1
                             # pad over last block trajectory

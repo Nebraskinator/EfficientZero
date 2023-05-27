@@ -387,6 +387,142 @@ class Player:
         elif action == 0:
             self.pass_turn()
         self.actions_taken_this_round += 1
+
+    def take_action_single(self, action):
+        if action == 0:
+            self.pass_turn()
+        elif 1 <= action <= 1064: #28 * (28 + 9 + 1):
+            # board action
+            t = action - 1
+            xy_det = t // (38)            
+            x, y = xy_det % 7, xy_det // 7
+            a = t % (38)
+            if 0 <= a <= 27:
+                # board to board
+                x2, y2 = a % 7, a // 7
+                if x != x2 and y != y2:
+                    self.move_board_to_board(x, y, x2, y2)
+            elif 28 <= a <= 36:
+                # board to bench
+                x_bench = a - 28
+                if self.round > 1:
+                    self.move_board_to_bench(x, y, x_bench)
+            elif a == 37:
+                if self.round > 1:
+                    self.sell_champion(self.board[x][y], field=True)
+        elif 1065 <= action <= 1406: #37 * (28 + 9 + 1):
+            t = action - 1065
+            x_bench = t // (38) 
+            a = t % (38)
+            if 0 <= a <= 27:
+                # bench to board
+                x2, y2 = a % 7, a // 7
+                self.move_bench_to_board(x_bench, x2, y2)
+            elif 28 <= a <= 36:
+                # bench to bench
+                x_bench2 = a - 28
+                if x_bench != x_bench2:
+                    self.move_bench_to_bench(x_bench, x_bench2)
+            elif a == 37:
+                self.sell_from_bench(x_bench)    
+        elif 1407 <= action <= 1776: #37 * (28 + 9 + 1) + 10 * (28 + 9):
+            t = action - 1407
+            i_bench = t // (37) 
+            a = t % (37)
+            if 0 <= a <= 27:
+                # item bench to board
+                x2, y2 = a % 7, a // 7
+                self.move_item_to_board(i_bench, x2, y2)
+            elif 28 <= a <= 36:
+                # item bench to bench
+                x_bench = a - 28
+                self.move_item_to_bench(i_bench, x_bench)
+        elif 1777 <= action <= 1781 and self.round > 1:
+            x = action - 1777
+            success = False
+            if not self.shop[x]:
+                self.reward += self.mistake_reward
+                self.actionless_click('shop')
+            if self.shop[x] and self.shop[x].endswith("_c"):
+                c_shop = self.shop[x].split('_')
+                a_champion = champion.champion(c_shop[0], chosen=c_shop[1], itemlist=[])
+                success = self.buy_champion(a_champion)
+                self.print("champions in play: "+str(self.num_units_in_play))
+            elif self.shop[x]:
+                a_champion = champion.champion(self.shop[x])
+                success = self.buy_champion(a_champion)
+                self.print("champions in play: "+str(self.num_units_in_play))
+            if success:
+                self.shop[x] = None
+        elif action == 1782 and self.round > 1:
+            if self.refresh():
+                self.shop = self.pool_obj.sample(self, 5)
+                self.printShop(self.shop)
+        elif action == 1783 and self.round > 1:
+            self.buy_exp()
+        elif action == 1784 and self.round > 1:
+            exp_to_level = 0
+            if self.level < self.max_level:
+                exp_to_level = self.level_costs[self.level] - self.exp
+                num_buys = math.ceil(exp_to_level / self.exp_per_buy)
+                self.buy_exp(num_buys)
+            
+    def generate_action_mask_single(self):
+        mask = np.zeros(1785)
+        mask[0] = 1
+        for i in range(1, 29):
+            t = i-1
+            x, y = t % 7, t // 7    
+            if self.board[x][y]:
+                mask[t * (38) + 1 : t * (38) + 1 + (38)] = 1
+        for i in range(29, 38):
+            x_bench = i - 29
+            if self.bench[x_bench]:
+                if self.num_units_in_play < self.max_units:
+                    mask[x_bench * (38) + 1065 : x_bench * (38) + 1065 + (38)] = 1
+                else:
+                    mask[x_bench * (38) + 1065 + 28 : x_bench * (38) + 1065 + (38)] = 1
+                    for ii in range(28):
+                        x, y = ii % 7, ii // 7
+                        if self.board[x][y]:
+                            mask[x_bench * (38) + 1065 + ii] = 1
+        for i in range(38, 48):
+            i_bench = i - 38
+            if self.item_bench[i_bench]:
+                for ii in range(28):
+                    x, y = ii % 7, ii // 7
+                    if self.board[x][y]:
+                        mask[i_bench * (37) + 1407 + ii] = 1
+                for x_bench in range(9):
+                    if self.bench[x_bench]:
+                        mask[i_bench * (37) + 1407 + 28 + x_bench] = 1
+        for i in range(1777, 1782):
+            x_shop = i - 1777
+            if self.shop[x_shop]:
+                champ_name = self.shop[x_shop].split('_')[0]
+                level = 1
+                cost = COST[champ_name]
+                if self.shop[x_shop].endswith('_c'):
+                    cost = cost_star_values[cost - 1][1]
+                    level = 2
+                if cost <= self.gold:
+                    if self.bench_full():
+                        for trip in self.triple_catalog:
+                            if trip['name'] == champ_name and trip['num'] == 2 and trip['level'] == level:
+                                mask[i] = 1
+                    else:
+                        mask[i] = 1
+        if self.gold >= 4:
+            mask[1783] = 1
+        if self.gold >= 2:
+            mask[1782] = 1
+        exp_to_level = 0
+        if self.level < self.max_level:
+            exp_to_level = self.level_costs[self.level] - self.exp
+            num_buys = math.ceil(exp_to_level / self.exp_per_buy)
+            if self.gold >= num_buys * self.exp_cost:
+                mask[1784] = 1
+        return mask
         
 
     def generate_action_mask(self):
@@ -593,25 +729,28 @@ class Player:
     """
     # TODO: Move the print board / comp / items / bench to the start round function so it will be more accurate when
     # TODO: Combat starts to change the player state. (for example, urgot in set 8)
-    def end_turn_actions(self):
+    def end_turn_actions(self, fill_board=False):
         # autofill the board.
-        num_units_to_move = self.max_units - self.num_units_in_play
-        position_found = -1
-        for _ in range(num_units_to_move):
-            found_position = False
-            for i in range(position_found + 1, len(self.bench)):
-                if self.bench[i]:
-                    for x in range(len(self.board)):
-                        for y in range(len(self.board[0])):
-                            if self.board[x][y] is None:
-                                self.move_bench_to_board(i, x, y)
-                                found_position = True
-                                position_found = i
+        if fill_board:
+            num_units_to_move = self.max_units - self.num_units_in_play
+            position_found = -1
+            
+            for _ in range(num_units_to_move):
+                found_position = False
+                for i in range(position_found + 1, len(self.bench)):
+                    if self.bench[i]:
+                        for x in range(len(self.board)):
+                            for y in range(len(self.board[0])):
+                                if self.board[x][y] is None:
+                                    self.move_bench_to_board(i, x, y)
+                                    found_position = True
+                                    position_found = i
+                                    break
+                            if found_position:
                                 break
-                        if found_position:
-                            break
-                if found_position:
-                    break
+                    if found_position:
+                        break
+        
         # update board to survive combat = False, will update after combat if they survived
         # update board to participated in combat
         for x in range(len(self.board)):
@@ -781,19 +920,19 @@ class Player:
         def embed_champion(champ):
             embedding = np.zeros(162)                        
             try:
-                c_index = list(COST.keys()).index(curr_champ.name)
+                c_index = list(COST.keys()).index(champ.name)
             except:
                 c_index = 0
             embedding[c_index] = 255
             embedding[63 + champ.stars] = 255
             if champ.chosen:
                 embedding[67] = 255
-                embedding[68 + list(tiers).index(curr_champ.chosen)] += 127
-            for ind, item in enumerate(curr_champ.items):
+                embedding[68 + list(tiers).index(champ.chosen)] += 127
+            for ind, item in enumerate(champ.items):
                 embedding[94 + list(items).index(item)] += 84        
-            if curr_champ.target_dummy:
+            if champ.target_dummy:
                 embedding[153] = 255 
-            for origin in curr_champ.origin:
+            for origin in champ.origin:
                 embedding[68 + list(tiers).index(origin)] += 127
             
             lookup = {'AD' : [False, 0],
@@ -1118,10 +1257,15 @@ class Player:
         # if b_champion.stars == 3:
         #     self.reward += 1.0
         #     self.print("+1.0 reward for making a level 3 champion")
-
+        temp = None
+        if self.bench_full():
+            temp = self.bench[0]
+            self.bench[0] = None
         self.add_to_bench(b_champion)
         if y != -1:
             self.move_bench_to_board(b_champion.bench_loc, x, y)
+        if temp:
+            self.bench[0] = temp
         self.print("champion {} was made golden".format(b_champion.name))
         return b_champion
 
@@ -1236,6 +1380,29 @@ class Player:
                 self.fortune_loss_streak += 1
                 if self.team_tiers['fortune'] > 1:
                     self.fortune_loss_streak += 1
+                    
+    def move_bench_to_bench(self, bench_x, bench_x2):
+        if 0 <= bench_x < 9 and self.bench[bench_x] and 0 <= bench_x2 < 9:
+            m_champion = self.bench[bench_x]
+            added_log = ""
+            if self.bench[bench_x2]:
+                self.bench[bench_x] = self.bench[bench_x2]
+                self.bench[bench_x].x = bench_x
+                self.bench[bench_x].y = -1
+                added_log = ", and moved {} from bench {} to bench {}".format(self.bench[bench_x].name, 
+                                                                                    bench_x2, bench_x)
+            else:
+                self.bench[bench_x] = None
+            self.bench[bench_x2] = m_champion
+            self.bench[bench_x2].x = bench_x2
+            self.bench[bench_x2].x = -1
+            self.print("moved {} from bench {} to bench {}".format(self.bench[bench_x2].name,
+                                                                         bench_x, bench_x2) + added_log)
+            return True
+        self.reward += self.mistake_reward
+        if DEBUG:
+            print(f"Outside bench range, bench: {self.bench[bench_x]}, bench: {self.board[bench_x2]}, bench_x: {bench_x}, bench_x2: {bench_x2}")
+        return False
 
     """
     Description - Moves a unit from bench to board if possible. Will switch if max units on board and board slot is used
