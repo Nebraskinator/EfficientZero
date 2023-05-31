@@ -167,11 +167,13 @@ class RepresentationNetwork(nn.Module):
             num_channels_per_board,
         )
         
+        self.num_boards = observation_shape[0]
+        
         self.num_players = num_players
         self.bn_board = nn.BatchNorm2d(num_channels_per_board, momentum=momentum)
         
         self.conv = conv1x1(
-            int(num_channels_per_board * observation_shape[0]),
+            int(num_channels_per_board * self.num_boards),
             num_channels,
         )
         self.bn = nn.BatchNorm2d(num_channels, momentum=momentum)
@@ -186,8 +188,8 @@ class RepresentationNetwork(nn.Module):
     def forward(self, x):
         
         conc = []
-        for i in range(self.num_players):
-            y = self.conv_board(x[:, i, :, :])
+        for i in range(self.num_boards):
+            y = self.conv_board(x[:, i, :, :, :])
             y = self.bn_board(y)
             y = nn.functional.leaky_relu(y)
 
@@ -320,10 +322,9 @@ class PredictionNetwork(nn.Module):
         reduced_channels_value,
         reduced_channels_policy,
         fc_value_layers,
-        fc_policy_layers,
+        policy_layers,
         full_support_size,
         block_output_size_value,
-        block_output_size_policy,
         momentum=0.1,
         init_zero=False,
     ):
@@ -357,15 +358,12 @@ class PredictionNetwork(nn.Module):
         self.resblocks = nn.ModuleList(
             [ResidualBlock(num_channels, num_channels, momentum=momentum) for _ in range(num_blocks)]
         )
-
+        self.action_space_size = action_space_size
         self.conv1x1_value = nn.Conv2d(num_channels, reduced_channels_value, 1)
-        self.conv1x1_policy = nn.Conv2d(num_channels, reduced_channels_policy, 1)
+        self.conv1x1_policy = nn.Conv2d(num_channels, policy_layers, 1)
         self.bn_value = nn.BatchNorm2d(reduced_channels_value, momentum=momentum)
-        self.bn_policy = nn.BatchNorm2d(reduced_channels_policy, momentum=momentum)
         self.block_output_size_value = block_output_size_value
-        self.block_output_size_policy = block_output_size_policy
         self.fc_value = mlp(self.block_output_size_value, fc_value_layers, full_support_size, init_zero=init_zero, momentum=momentum)
-        self.fc_policy = mlp(self.block_output_size_policy, fc_policy_layers, action_space_size, init_zero=init_zero, momentum=momentum)
 
     def forward(self, x):
         for block in self.resblocks:
@@ -374,14 +372,13 @@ class PredictionNetwork(nn.Module):
         value = self.bn_value(value)
         value = nn.functional.leaky_relu(value)
         policy = self.conv1x1_policy(x)
-        policy = self.bn_policy(policy)
         policy = nn.functional.leaky_relu(policy)
         value = value.reshape(value.shape[0], self.block_output_size_value)
         #value = value.view(-1, self.block_output_size_value)
-        policy = policy.reshape(policy.shape[0], self.block_output_size_policy)
+        policy = policy.moveaxis(1, -1)
+        policy = policy.reshape(policy.shape[0], self.action_space_size)
         #policy = policy.view(-1, self.block_output_size_policy)
         value = self.fc_value(value)
-        policy = self.fc_policy(policy)
         return policy, value
 
 
@@ -398,7 +395,7 @@ class EfficientZeroNet(BaseNet):
         reduced_channels_policy,
         fc_reward_layers,
         fc_value_layers,
-        fc_policy_layers,
+        policy_layers,
         reward_support_size,
         value_support_size,
         downsample,
@@ -530,10 +527,9 @@ class EfficientZeroNet(BaseNet):
             reduced_channels_value,
             reduced_channels_policy,
             fc_value_layers,
-            fc_policy_layers,
+            policy_layers,
             value_support_size,
             block_output_size_value,
-            block_output_size_policy,
             momentum=bn_mt,
             init_zero=self.init_zero,
         )
@@ -590,69 +586,21 @@ class EfficientZeroNet(BaseNet):
         
         
         for i in range(encoded_state.shape[0]):
-            #print(action[i].data[0])
-            if action[i].data[0] == 0:
-                action_one_hot[i, :, 4, 0] = 1
-            elif 1 <= action[i] <= 1064: #28 * (28 + 9 + 1):
-                # board action
-                t = action[i].data[0] - 1
-                xy_det = t // (28 + 9 + 1)            
-                x, y = xy_det % 7, xy_det // 7
-                action_one_hot[i, 0, x, y] = 1
-                a = t % (28 + 9 + 1)
-                if 0 <= a <= 27:
-                    # board to board
-                    x2, y2 = a % 7, a // 7
-                    action_one_hot[i, 1, x2, y2] = 1
-                elif 28 <= a <= 36:
-                    # board to bench
-                    x2 = a - 28
-                    x, y = 4 + x2 // 3, 3 + x2 % 3
-                    action_one_hot[i, 1, x, y] = 1
-                elif a == 37:
-                    action_one_hot[i, 1, 1, 7] = 1
-            elif 1064 + 1 <= action[i].data[0] <= 1406: #37 * (28 + 9 + 1):
-                t = action[i].data[0] - 1064 - 1
-                x = t // (28 + 9 + 1) 
-                a = t % (28 + 9 + 1)
-                x2, y2 = 4 + x // 3, 3 + x % 3
-                action_one_hot[i, 0, x2, y2] = 1
-                if 0 <= a <= 27:
-                    # bench to board
-                    x2, y2 = a % 7, a // 7
-                    action_one_hot[i, 1, x2, y2] = 1
-                elif 28 <= a <= 36:
-                    # bench to bench
-                    x_bench = a - 28
-                    x2, y2 = 4 + x_bench // 3, 3 + x_bench % 3
-                    action_one_hot[i, 1, x2, y2] = 1
-                elif a == 37:
-                    action_one_hot[i, 1, 1, 7] = 1    
-            elif 1406 + 1 <= action[i].data[0] <= 1776: #37 * (28 + 9 + 1) + 10 * (28 + 9):
-                t = action[i].data[0] - 1406 - 1
-                x = t // (28 + 9) 
-                a = t % (28 + 9)
-                x2, y2 = 3 + x // 3, 6 + x % 3
-                action_one_hot[i, 0, x2, y2] = 1
-                if 0 <= a <= 27:
-                    # item bench to board
-                    x2, y2 = a % 7, a // 7
-                    action_one_hot[i, 1, x2, y2] = 1
-                elif 28 <= a <= 36:
-                    # item bench to bench
-                    x_bench = a - 28
-                    x2, y2 = 4 + x_bench // 3, 3 + x_bench % 3
-                    action_one_hot[i, 1, x2, y2] = 1
-            elif 1776 + 1 <= action[i].data[0] <= 1776 + 5:
-                x_shop = action[i].data[0] - 1776 - 1
-                x, y = 1 + x_shop // 2, 7 + x_shop % 2
-                action_one_hot[i, :, x, y] = 1
-            elif action[i].data[0] == 1776 + 6:
-                action_one_hot[i, :, 4, 2] = 1
-            elif action[i].data[0] == 1776 + 7:
-                action_one_hot[i, :, 4, 1] = 1
-            elif action[i].data[0] == 1776 + 8:
-                action_one_hot[i, :, 5, 0] = 1
+            a = action[i].data[0]
+            x, y, z = a // 38 // 9, a // 38 % 9, a % 38
+            action_one_hot[i, 0, x, y] = 1
+            if x > 4 and y >= 4:
+                dest_x, dest_y = x, y
+            else:
+                if z < 28:
+                    dest_x, dest_y = z // 4, z % 4
+                elif z < 37:
+                    x_bench = z - 28
+                    dest_x, dest_y = x_bench // 5, 4 + x_bench % 5                   
+                else:
+                    dest_x, dest_y = 6, 8
+            action_one_hot[i, 1, dest_x, dest_y] = 1
+            
             
         '''
         action_one_hot = (

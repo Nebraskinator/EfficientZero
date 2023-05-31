@@ -126,7 +126,7 @@ class Player:
         self.mistake_reward = 0
         self.level_reward = 0
         self.item_reward = 0
-        self.won_game_reward = 0
+        self.won_game_reward = 100
         self.prev_rewards = 0
         self.damage_reward = 1
 
@@ -389,116 +389,102 @@ class Player:
         self.actions_taken_this_round += 1
 
     def take_action_single(self, action):
-        if action == 0:
-            self.pass_turn()
-        elif 1 <= action <= 1064: #28 * (28 + 9 + 1):
-            # board action
-            t = action - 1
-            xy_det = t // (38)            
-            x, y = xy_det % 7, xy_det // 7
-            a = t % (38)
-            if 0 <= a <= 27:
-                # board to board
-                x2, y2 = a % 7, a // 7
-                if x != x2 and y != y2:
-                    self.move_board_to_board(x, y, x2, y2)
-            elif 28 <= a <= 36:
-                # board to bench
-                x_bench = a - 28
-                if self.round > 1:
-                    self.move_board_to_bench(x, y, x_bench)
-            elif a == 37:
-                if self.round > 1:
-                    self.sell_champion(self.board[x][y], field=True)
-        elif 1065 <= action <= 1406: #37 * (28 + 9 + 1):
-            t = action - 1065
-            x_bench = t // (38) 
-            a = t % (38)
-            if 0 <= a <= 27:
-                # bench to board
-                x2, y2 = a % 7, a // 7
-                self.move_bench_to_board(x_bench, x2, y2)
-            elif 28 <= a <= 36:
-                # bench to bench
-                x_bench2 = a - 28
-                if x_bench != x_bench2:
-                    self.move_bench_to_bench(x_bench, x_bench2)
-            elif a == 37:
-                self.sell_from_bench(x_bench)    
-        elif 1407 <= action <= 1776: #37 * (28 + 9 + 1) + 10 * (28 + 9):
-            t = action - 1407
-            i_bench = t // (37) 
-            a = t % (37)
-            if 0 <= a <= 27:
-                # item bench to board
-                x2, y2 = a % 7, a // 7
-                self.move_item_to_board(i_bench, x2, y2)
-            elif 28 <= a <= 36:
-                # item bench to bench
-                x_bench = a - 28
-                self.move_item_to_bench(i_bench, x_bench)
-        elif 1777 <= action <= 1781 and self.round > 1:
-            x = action - 1777
+        x, y, z = action // 38 // 9, action // 38 % 9, action % 38
+        self.print("action: {}, x: {}, y: {}, z: {}".format(action, x, y, z))
+        if x < 7 and y < 4:
+            if z < 28:
+                dest_x, dest_y = z // 4, z % 4
+                if x != dest_x or y != dest_y:
+                    self.move_board_to_board(x, y, dest_x, dest_y)
+            elif z < 37:
+                x_bench = z - 28
+                self.move_board_to_bench(x, y, x_bench)
+            else:
+                self.sell_champion(self.board[x][y], field=True)
+        elif x <= 1 and 4 <= y < 9:
+            x_bench = 5*x + y - 4
+            if z < 28:
+                dest_x, dest_y = z // 4, z % 4
+                self.move_bench_to_board(x_bench, dest_x, dest_y)
+            elif z < 37:
+                dest_x = z - 28
+                if x_bench != dest_x:
+                    self.move_bench_to_bench(x_bench, dest_x)
+            else:
+                self.sell_from_bench(x_bench)            
+        elif 2 <= x <= 3 and 4 <= y < 9:
+            x_itembench = 5 * (x - 2) + y - 4
+            if z < 28:
+                dest_x, dest_y = z // 4, z % 4
+                self.move_item_to_board(x_itembench, dest_x, dest_y)
+            elif z < 37:
+                dest_x = z - 28
+                self.move_item_to_bench(x_itembench, dest_x)
+        elif x == 4 and 4 <= y < 9:
+            x_shop = y - 4
             success = False
-            if not self.shop[x]:
+            if not self.shop[x_shop]:
                 self.reward += self.mistake_reward
                 self.actionless_click('shop')
-            if self.shop[x] and self.shop[x].endswith("_c"):
-                c_shop = self.shop[x].split('_')
+            elif self.shop[x_shop] and self.shop[x_shop].endswith("_c"):
+                c_shop = self.shop[x_shop].split('_')
                 a_champion = champion.champion(c_shop[0], chosen=c_shop[1], itemlist=[])
                 success = self.buy_champion(a_champion)
                 self.print("champions in play: "+str(self.num_units_in_play))
-            elif self.shop[x]:
-                a_champion = champion.champion(self.shop[x])
+            elif self.shop[x_shop]:
+                a_champion = champion.champion(self.shop[x_shop])
                 success = self.buy_champion(a_champion)
                 self.print("champions in play: "+str(self.num_units_in_play))
             if success:
-                self.shop[x] = None
-        elif action == 1782 and self.round > 1:
+                self.shop[x_shop] = None
+        elif x == 5 and y == 4 and self.round > 1:
             if self.refresh():
                 self.shop = self.pool_obj.sample(self, 5)
                 self.printShop(self.shop)
-        elif action == 1783 and self.round > 1:
+        elif x == 5 and y == 5 and self.round > 1:
             self.buy_exp()
-        elif action == 1784 and self.round > 1:
+        elif x == 5 and y == 6 and self.round > 1:
             exp_to_level = 0
             if self.level < self.max_level:
                 exp_to_level = self.level_costs[self.level] - self.exp
                 num_buys = math.ceil(exp_to_level / self.exp_per_buy)
-                self.buy_exp(num_buys)
+                self.buy_exp(num_buys)        
+        elif x == 5 and y == 7:
+            self.pass_turn() 
+
             
     def generate_action_mask_single(self):
-        mask = np.zeros(1785)
-        mask[0] = 1
-        for i in range(1, 29):
-            t = i-1
-            x, y = t % 7, t // 7    
-            if self.board[x][y]:
-                mask[t * (38) + 1 : t * (38) + 1 + (38)] = 1
-        for i in range(29, 38):
-            x_bench = i - 29
+        mask = np.zeros((7, 9, 38))
+        for y in range(4):
+            for x in range(7):
+                if self.board[x][y]:
+                    mask[x, y, :] = 1
+                    mask[x, y, x*4 + y] = 0
+        for x_bench in range(len(self.bench)):
             if self.bench[x_bench]:
+                x, y = x_bench // 5, 4 + x_bench % 5
                 if self.num_units_in_play < self.max_units:
-                    mask[x_bench * (38) + 1065 : x_bench * (38) + 1065 + (38)] = 1
+                    mask[x, y, :] = 1                    
                 else:
-                    mask[x_bench * (38) + 1065 + 28 : x_bench * (38) + 1065 + (38)] = 1
-                    for ii in range(28):
-                        x, y = ii % 7, ii // 7
-                        if self.board[x][y]:
-                            mask[x_bench * (38) + 1065 + ii] = 1
-        for i in range(38, 48):
-            i_bench = i - 38
-            if self.item_bench[i_bench]:
-                for ii in range(28):
-                    x, y = ii % 7, ii // 7
-                    if self.board[x][y]:
-                        mask[i_bench * (37) + 1407 + ii] = 1
-                for x_bench in range(9):
-                    if self.bench[x_bench]:
-                        mask[i_bench * (37) + 1407 + 28 + x_bench] = 1
-        for i in range(1777, 1782):
-            x_shop = i - 1777
+                    mask[x, y, 28:] = 1                    
+                    for board_y in range(4):
+                        for board_x in range(7):
+                            if self.board[board_x][board_y]:
+                                mask[x, y, board_x*4 + board_y] = 1
+                mask[x, y, 28 + x_bench] = 0
+        for x_itembench, item in enumerate(self.item_bench):
+            if item:
+                x, y = x_itembench // 5 + 2, 4 + x_itembench % 5 
+                for board_y in range(4):
+                    for board_x in range(7):
+                        if self.board[board_x][board_y] and len(self.board[board_x][board_y].items) < 3:
+                            mask[x, y, board_x*4 + board_y] = 1
+                for x_bench in range(len(self.bench)):
+                    if self.bench[x_bench] and len(self.bench[x_bench].items) < 3:
+                        mask[x, y, 28 + x_bench] = 1
+        for x_shop in range(5):
             if self.shop[x_shop]:
+                x, y = 4, 4 + x_shop % 5
                 champ_name = self.shop[x_shop].split('_')[0]
                 level = 1
                 cost = COST[champ_name]
@@ -509,20 +495,21 @@ class Player:
                     if self.bench_full():
                         for trip in self.triple_catalog:
                             if trip['name'] == champ_name and trip['num'] == 2 and trip['level'] == level:
-                                mask[i] = 1
+                                mask[x, y, 28] = 1
                     else:
-                        mask[i] = 1
+                        mask[x, y, 28] = 1
         if self.gold >= 4:
-            mask[1783] = 1
+            mask[5, 5, 0] = 1
         if self.gold >= 2:
-            mask[1782] = 1
+            mask[5, 4, 0] = 1
         exp_to_level = 0
         if self.level < self.max_level:
             exp_to_level = self.level_costs[self.level] - self.exp
             num_buys = math.ceil(exp_to_level / self.exp_per_buy)
             if self.gold >= num_buys * self.exp_cost:
-                mask[1784] = 1
-        return mask
+                mask[5, 6, 0] = 1
+        mask[5, 7, 0] = 1
+        return np.reshape(mask, 7*9*38)
         
 
     def generate_action_mask(self):
@@ -1017,26 +1004,28 @@ class Player:
             # IMPORTANT TO HAVE THE X INSIDE -- Silver is not sure why but ok.
             for x in range(0, 7):
                 # when using binary encoding (6 champ  + stars + chosen + 3 * 6 item) = 26
-                obs[y, x, 3] = 255
+                obs[x, y, 3] = 255
                 if self.board[x][y]:                    
                     curr_champ = self.board[x][y]                        
-                    obs[y, x, 10 : -1] = embed_champion(curr_champ)
+                    obs[x, y, 10 : -1] = embed_champion(curr_champ)
+                    obs[x, y, -1] = 255
 
         for x_bench in range(len(self.bench)):
-            x, y = 4 + x_bench // 3, 3 + x_bench % 3
+            x, y = x_bench // 5, 4 + x_bench % 5
             obs[x, y, 4] = 255
             if self.bench[x_bench]:
                 curr_champ = self.bench[x_bench]                        
-                obs[y, x, 10 : -1] = embed_champion(curr_champ)
+                obs[x, y, 10 : -1] = embed_champion(curr_champ)
+                obs[x, y, -1] = 255
         for ind, item in enumerate(self.item_bench):
-            i = ind + 2
-            x, y = 3 + i // 3, 6 + i % 3
+            x, y = ind // 5 + 2, 4 + ind % 5
             obs[x, y, 5] = 255
             if item and list(items).index(item):
                 obs[x, y, 10 : -1] = embed_item(item)
+                obs[x, y, -1] = 255
         if private:
             for x_shop in range(len(self.shop)):
-                x, y = 1 + x_shop // 2, 7 + x_shop % 2
+                x, y = 4, 4 + x_shop % 5
                 obs[x, y, 6] = 255
                 if self.shop[x_shop]:
                     curr_champ = self.shop[x_shop]  
@@ -1046,73 +1035,37 @@ class Player:
                     curr_champ = champion.champion(curr_champ, chosen=origin)
                     obs[x, y, 10 : -1] = embed_champion(curr_champ)     
                     obs[x, y, 104 + COST[curr_champ.name]] = 255
+                    obs[x, y, -1] = 255
 
         for i, origin in enumerate(tiers):
             d = i // 9
             t = i % 9
-            x, y = 4 + t // 3, t % 3
+            x, y = 5 + t // 5, 4 + t % 5
             obs[x, y, 8] = 255
             obs[x, y, 10 + 16 * d + self.team_composition[origin]] = 255
             obs[x, y, 10 + 16 * d + 9 + self.team_tiers[origin]] = 255
-        obs[0, 8, 9] = 255
-        obs[0, 8, 10] = np.clip(self.level * 25, 0, 255)
-        obs[0, 8, 11] = np.clip(self.max_units * 25, 0, 255)
-        obs[0, 8, 12] = np.clip(self.num_units_in_play * 25, 0, 255)
-        obs[0, 8, 15] = np.clip(self.round * 8.5, 0, 255)
-        obs[0, 8, 16] = np.clip(self.health * 2, 0, 255)
-        obs[0, 8, 17] = np.clip(self.win_streak * 20, 0, 255)
-        obs[0, 8, 18] = np.clip(self.loss_streak * 20, 0, 255)
+        obs[1, 8, 9] = 255
+        obs[1, 8, 10] = np.clip(self.level * 25, 0, 255)
+        obs[1, 8, 11] = np.clip(self.max_units * 25, 0, 255)
+        obs[1, 8, 12] = np.clip(self.num_units_in_play * 25, 0, 255)
+        obs[1, 8, 15] = np.clip(self.round * 8.5, 0, 255)
+        obs[1, 8, 16] = np.clip(self.health * 2, 0, 255)
+        obs[1, 8, 17] = np.clip(self.win_streak * 20, 0, 255)
+        obs[1, 8, 18] = np.clip(self.loss_streak * 20, 0, 255)
 
         if private:
             obs[:, :, 0] = 255
-            obs[0, 8, 13] = np.clip(self.gold * 3, 0, 255)
+            obs[1, 8, 13] = np.clip(self.gold * 3, 0, 255)
             exp_to_level = 0
             if self.level < self.max_level:
                 exp_to_level = self.level_costs[self.level] - self.exp
-            obs[0, 8, 14] = np.clip(exp_to_level * 2, 0, 255)
-            obs[0, 7, 7] = 255
-            if self.selection:
-                if self.selection['origin'] == 'board':
-                    obs[0, 7, 10:] = obs[self.selection['coord'][1], self.selection['coord'][0], 10:]
-                    obs[self.selection['coord'][1], self.selection['coord'][0], 2] = 255
-                elif self.selection['origin'] == 'item_bench':
-                    i = self.selection['coord'] + 2
-                    x, y = 3 + i // 3, 6 + i % 3
-                    obs[0, 7, 10:] = obs[x, y, 10:]
-                    obs[x, y, 2] = 255
-                elif self.selection['origin'] == 'bench':
-                    i = self.selection['coord']
-                    x, y = 4 + i // 3, 3 + i % 3
-                    obs[0, 7, 10:] = obs[x, y, 10:]
-                    obs[x, y, 2] = 255
+            obs[1, 8, 14] = np.clip(exp_to_level * 2, 0, 255)
             if self.taking_actions:
-                obs[0, 8, 19] = 255
-            obs[0, 8, 20] = np.clip((self.actions_per_round - self.actions_taken_this_round) * 11, 0, 255)
+                obs[6, 8, :] = 255
+            obs[1, 8, 20] = np.clip((self.actions_per_round - self.actions_taken_this_round) * 11, 0, 255)
         else:
-            obs[:, :, 1] = 1
-            obs[0, 8, 13] = np.clip(np.clip(self.gold//10, 0, 5) * 30, 0, 255)
-        if private:
-            self.generate_action_mask()
-            obs[4, 0, -1] = self.action_mask[0] * 255
-            for i in range(1, 29):
-                t = i - 1
-                y, x = t % 7, t // 7 
-                obs[x, y, -1] = self.action_mask[i] * 255
-            for i in range(29, 38):
-                x_bench = i - 29
-                x, y = 4 + x_bench // 3, 3 + x_bench % 3
-                obs[x, y, -1] = self.action_mask[i] * 255
-            for i in range(38, 48):
-                ind = i - 38 + 2
-                x, y = 3 + ind // 3, 6 + ind % 3    
-                obs[x, y, -1] = self.action_mask[i] * 255
-            for i in range(48, 53):
-                x_shop = i - 48
-                x, y = 1 + x_shop // 2, 7 + x_shop % 2
-                obs[x, y, -1] = self.action_mask[i] * 255
-            obs[4, 1, -1] = self.action_mask[54] * 255
-            obs[4, 2, -1] = self.action_mask[53] * 255
-            obs[5, 0, -1] = self.action_mask[55] * 255
+            obs[:, :, 1] = 255
+            obs[1, 8, 13] = np.clip(np.clip(self.gold//10, 0, 5) * 30, 0, 255)
         return obs
         
 
@@ -1461,6 +1414,8 @@ class Player:
                 self.reward += self.mistake_reward
             return True
         self.reward += self.mistake_reward
+        self.print("Outside board range, bench: {}, board: {}, {}".format(bench_x, board_x, board_y))
+
         if DEBUG:
             print(f"Outside board range, bench: {self.bench[bench_x]}, board: {self.board[board_x][board_y]}, bench_x: {bench_x}, board_x: {board_x}, board_y: {board_y}")
         return False
@@ -1493,8 +1448,8 @@ class Player:
                     if self.board[x][y].items and self.board[x][y].items[0] == 'thieves_gloves':
                         self.thieves_gloves_loc_update(x, y, x_bench, -1)
                     self.update_team_tiers()
-                    self.print("moved {} from board [{}, {}] to bench {}".format(self.board[x][y].name, x, y, x_bench) + \
-                               ", and moved {} from bench {} to board [{}, {}]".format(self.bench[x_bench].name, x_bench, x, y))
+                    self.print("moved {} from board [{}, {}] to bench {}".format(self.bench[x_bench].name, x, y, x_bench) + \
+                               ", and moved {} from bench {} to board [{}, {}]".format(self.board[x][y].name, x_bench, x, y))
                     return True
                 else:                    
                     self.reward += self.mistake_reward

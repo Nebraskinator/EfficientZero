@@ -114,9 +114,9 @@ class TFT_Simulator(AECEnv):
 
     @functools.lru_cache(maxsize=None)
     def action_space(self, agent: str) -> gym.spaces.Space:
-        return 1785
+        return 7*9*38
     def action_space_size(self):
-        return 1785
+        return 7*9*38
     def check_dead(self):
         num_alive = 0
         for key, player in self.PLAYERS.items():
@@ -447,13 +447,14 @@ class TFT_Simulator(AECEnv):
             self.game_round.start_round()
         
         obs_dict = {player: self.make_observation(player) for player in self.live_agents}
+        if len(self.live_agents) <= 1:
+            for p in self.live_agents:
+                dones[p] = True
+                self.PLAYERS[p].won_game()
         rewards_dict = {player: self.PLAYERS[player].reward for player in list(self.PLAYERS.keys())}
         for p in list(self.PLAYERS.keys()):
             self.PLAYERS[p].reward = 0
         taking_actions_dict = {player: self.PLAYERS[player].taking_actions for player in list(self.PLAYERS.keys())}
-        if len(self.live_agents) <= 1:
-            for p in self.live_agents:
-                dones[p] = True
         action_masks = {p: self.PLAYERS[p].generate_action_mask_single() for p in list(self.PLAYERS.keys())}
         return obs_dict, rewards_dict, taking_actions_dict, dones, action_masks
             

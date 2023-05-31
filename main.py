@@ -93,12 +93,11 @@ if __name__ == '__main__':
     device = game_config.device
     try:
         if args.opr == 'train':
-            summary_writer = SummaryWriter(exp_path, flush_secs=10)
-            if not os.path.exists(args.model_path):
+            summary_writer = SummaryWriter(exp_path, flush_secs=10)            
+            if args.load_model:
+                model_path = [args.model_path + "_{}.p".format(i) for i in range(game_config.num_models)]
+            if not args.load_model or not all([os.path.exists(path) for path in model_path]):
                 print("model path not found, proceeding without previous weights")
-            if args.load_model and os.path.exists(args.model_path):
-                model_path = args.model_path
-            else:
                 model_path = None
             model, weights = train(game_config, summary_writer, model_path)
             model.set_weights(weights)

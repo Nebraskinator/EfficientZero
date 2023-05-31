@@ -56,7 +56,7 @@ def update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_r
     vis_result: bool
         True -> log some visualization data in tensorboard (some distributions, values, etc)
     """
-    inputs_batch, targets_batch = batch
+    curr_model, inputs_batch, targets_batch = batch
     obs_batch_ori, action_batch, mask_batch, indices, weights_lst, make_time = inputs_batch
     target_value_prefix, target_value, target_policy = targets_batch
 
@@ -70,9 +70,8 @@ def update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_r
     obs_batch_ori = torch.from_numpy(obs_batch_ori).to(config.device).float()
     #obs_batch = obs_batch_ori[:, 0: config.stacked_observations * config.image_channel, :, :]
     #obs_target_batch = obs_batch_ori[:, config.image_channel:, :, :]
-    
-    obs_batch = obs_batch_ori[:, 0, :, :, :]
-    obs_target_batch = obs_batch_ori[:, 1:, :, :, :]
+    obs_batch = torch.reshape(obs_batch_ori[:, 0:config.stacked_observations, :, :, :, :], (obs_batch_ori.shape[0],config.stacked_observations*obs_batch_ori.shape[2], *obs_batch_ori.shape[3:]))
+    obs_target_batch = obs_batch_ori[:, 1:, :, :, :, :]
 
     # do augmentations
     if config.use_augmentation and config.augmentation[0] != 'tft':
@@ -156,7 +155,7 @@ def update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_r
                 # consistency loss
                 if config.consistency_coeff > 0:
                     # obtain the oracle hidden states from representation function
-                    _, _, _, presentation_state, _ = model.initial_inference(obs_target_batch[:, i, :, :, :])
+                    _, _, _, presentation_state, _ = model.initial_inference(torch.reshape(obs_batch_ori[:, i:i+config.stacked_observations, :, :, :, :], (obs_batch_ori.shape[0],config.stacked_observations*obs_batch_ori.shape[2], *obs_batch_ori.shape[3:])))
                     # no grad for the presentation_state branch
                     dynamic_proj = model.project(hidden_state, with_grad=True)
                     observation_proj = model.project(presentation_state, with_grad=False)
@@ -329,7 +328,7 @@ def update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_r
     return loss_data, td_data, priority_data, scaler
 
 
-def _train(model, target_model, replay_buffer, shared_storage, batch_storage, config, summary_writer):
+def _train(models, target_models, replay_buffers, shared_storage, mcts_storage, batch_storage, config, summary_writer):
     """training loop
     Parameters
     ----------
@@ -347,88 +346,99 @@ def _train(model, target_model, replay_buffer, shared_storage, batch_storage, co
         logging for tensorboard
     """
     # ----------------------------------------------------------------------------------
-    model = model.to(config.device)
-    target_model = target_model.to(config.device)
-    lr=config.lr_init
-    optimizer = optim.SGD(model.parameters(), lr=config.lr_init, momentum=config.momentum,
-                          weight_decay=config.weight_decay)
+    models = [model.to(config.device) for model in models]
+    target_models = [target_model.to(config.device) for target_model in target_models]
+    lrs = [config.lr_init for _ in models]
+    optimizers = [optim.SGD(model.parameters(), lr=config.lr_init, momentum=config.momentum,
+                          weight_decay=config.weight_decay) for model in models]
     #optimizer = optim.Adam(model.parameters(), lr=config.lr_init,
     #                      weight_decay=config.weight_decay)
     
     scaler = GradScaler()
 
-    model.train()
-    target_model.eval()
+    [model.train() for model in models]
+    [target_model.eval() for target_model in target_models]
     # ----------------------------------------------------------------------------------
     # set augmentation tools
     if config.use_augmentation and config.augmentation[0] != 'tft':
         config.set_transforms()
 
     # wait until collecting enough data to start
-    while not (ray.get(replay_buffer.get_total_len.remote()) >= config.start_transitions):
+    while not (all([ray.get(replay_buffer.get_total_len.remote()) >= config.start_transitions for replay_buffer in replay_buffers])):
         time.sleep(1)
         pass
     print('Begin training...')
     # set signals for other workers
     shared_storage.set_start_signal.remote()
 
-    step_count = 0
+    step_counts = [0 for _ in models]
     # Note: the interval of the current model and the target model is between x and 2x. (x = target_model_interval)
     # recent_weights is the param of the target model
-    recent_weights = model.get_weights()
+    recent_weights = [model.get_weights() for model in models]
+    
+    curr_model = 0
 
     # while loop
-    while step_count < config.training_steps + config.last_steps:
+    while any([step_counts[m] < config.training_steps + config.last_steps for m in range(config.num_models)]):
         # remove data if the replay buffer is full. (more data settings)
-        if step_count % 1000 == 0:
-            replay_buffer.remove_to_fit.remote()
+        if step_counts[curr_model] % 1000 == 0:
+            replay_buffers[curr_model].remove_to_fit.remote()
 
         # obtain a batch
         batch = batch_storage.pop()
         if batch is None:
             time.sleep(0.3)
             continue
+        if batch[0] != curr_model:
+            continue
 
-        shared_storage.incr_counter.remote()
-        lr = adjust_lr(config, optimizer, step_count)
+        shared_storage.incr_counter.remote(curr_model)
+        lrs[curr_model] = adjust_lr(config, optimizers[curr_model], step_counts[curr_model])
 
         # update model for self-play
-        if step_count % config.checkpoint_interval == 0:
-            shared_storage.set_weights.remote(model.get_weights())
+        if step_counts[curr_model] % config.checkpoint_interval == 0:
+            shared_storage.set_weights.remote(models[curr_model].get_weights(), curr_model)
 
         # update model for reanalyzing
-        if step_count % config.target_model_interval == 0:
-            shared_storage.set_target_weights.remote(recent_weights)
-            recent_weights = model.get_weights()
+        if step_counts[curr_model] % config.target_model_interval == 0:
+            shared_storage.set_target_weights.remote(recent_weights[curr_model], curr_model)
+            recent_weights[curr_model] = models[curr_model].get_weights()
 
-        if step_count % config.vis_interval == 0:
+        if step_counts[curr_model] % config.vis_interval == 0:
             vis_result = True
         else:
             vis_result = False
 
         if config.amp_type == 'torch_amp':
-            log_data = update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_result)
+            log_data = update_weights(models[curr_model], batch, optimizers[curr_model], replay_buffers[curr_model], config, scaler, vis_result)
             scaler = log_data[3]
         else:
-            log_data = update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_result)
+            log_data = update_weights(models[curr_model], batch, optimizers[curr_model], replay_buffers[curr_model], config, scaler, vis_result)
 
-        if step_count % config.log_interval == 0:
-            _log(config, step_count, log_data[0:3], model, replay_buffer, lr, shared_storage, summary_writer, vis_result)
+        if step_counts[curr_model] % config.log_interval == 0:
+            _log(config, step_counts[curr_model], log_data[0:3], models[curr_model], replay_buffers[curr_model], lrs[curr_model], shared_storage, summary_writer, vis_result)
 
         # The queue is empty.
-        if step_count >= 100 and step_count % 50 == 0 and batch_storage.get_len() == 0:
+        if step_counts[curr_model] >= 100 and step_counts[curr_model] % 50 == 0 and batch_storage.get_len() == 0:
             print('Warning: Batch Queue is empty (Require more batch actors Or batch actor fails).')
 
-        step_count += 1
+        step_counts[curr_model] += 1
         #print("training ongoing, step : " + step_count)
         # save models
-        if step_count % config.save_ckpt_interval == 0:
-            model_path = os.path.join(config.model_dir, 'model_{}.p'.format(step_count))
-            torch.save(model.state_dict(), model_path)
+        if step_counts[curr_model] % config.save_ckpt_interval == 0:
+            model_path = os.path.join(config.model_dir, 'model_{}_{}.p'.format(step_counts[curr_model], curr_model))
+            torch.save(models[curr_model].state_dict(), model_path)
+            
+        if step_counts[curr_model] % config.model_switch_interval == 0:
+            curr_model += 1
+            if curr_model >= config.num_models:
+                curr_model = 0
+            print('training model '+str(curr_model))
+            shared_storage.set_current_model.remote(curr_model)
 
-    shared_storage.set_weights.remote(model.get_weights())
+    shared_storage.set_weights.remote(models[curr_model].get_weights(), curr_model)
     time.sleep(30)
-    return model.get_weights()
+    return models[curr_model].get_weights()
 
 
 def train(config, summary_writer, model_path=None):
@@ -441,41 +451,42 @@ def train(config, summary_writer, model_path=None):
         model path for resuming
         default: train from scratch
     """
-    model = config.get_uniform_network()
-    target_model = config.get_uniform_network()
+    models = [config.get_uniform_network() for _ in range(config.num_models)]
+    target_models = [config.get_uniform_network() for _ in range(config.num_models)]
     if model_path:
-        print('resume model from path: ', model_path)
-        weights = torch.load(model_path)
+        for i, path in enumerate(model_path):
+            print('resume model from path: ', path)
+            weights = torch.load(path)
+    
+            models[i].load_state_dict(weights)
+            target_models[i].load_state_dict(weights)
 
-        model.load_state_dict(weights)
-        target_model.load_state_dict(weights)
-
-    storage = SharedStorage.remote(model, target_model)
+    storage = SharedStorage.remote(models, target_models)
 
     # prepare the batch and mctc context storage
     batch_storage = QueueStorage(int(config.batch_queue_size - 1), config.batch_queue_size)
     mcts_storage = QueueStorage(int(config.mcts_queue_size - 1), config.mcts_queue_size)
-    replay_buffer = ReplayBuffer.remote(config=config)
+    replay_buffers = [ReplayBuffer.remote(config=config) for _ in range(config.num_models)]
 
     # other workers
     workers = []
 
     # reanalyze workers
-    cpu_workers = [BatchWorker_CPU.remote(idx, replay_buffer, storage, batch_storage, mcts_storage, config) for idx in range(config.cpu_actor)]
+    cpu_workers = [BatchWorker_CPU.remote(idx, replay_buffers, storage, batch_storage, mcts_storage, config) for idx in range(config.cpu_actor)]
     workers += [cpu_worker.run.remote() for cpu_worker in cpu_workers]
-    gpu_workers = [BatchWorker_GPU.remote(idx, replay_buffer, storage, batch_storage, mcts_storage, config) for idx in range(config.gpu_actor)]
+    gpu_workers = [BatchWorker_GPU.remote(idx, replay_buffers, storage, batch_storage, mcts_storage, config) for idx in range(config.gpu_actor)]
     workers += [gpu_worker.run.remote() for gpu_worker in gpu_workers]
 
     # self-play workers
-    data_workers = [DataWorker.remote(rank, replay_buffer, storage, config) for rank in range(0, config.num_actors)]
+    data_workers = [DataWorker.remote(rank, replay_buffers, storage, config) for rank in range(config.num_actors)]
     workers += [worker.run.remote() for worker in data_workers]
     # test workers
     #workers += [_test.remote(config, storage)]
 
     # training loop
-    final_weights = _train(model, target_model, replay_buffer, storage, batch_storage, config, summary_writer)
+    final_weights = _train(models, target_models, replay_buffers, storage, mcts_storage, batch_storage, config, summary_writer)
 
     ray.wait(workers)
     print('Training over...')
 
-    return model, final_weights
+    return models, final_weights

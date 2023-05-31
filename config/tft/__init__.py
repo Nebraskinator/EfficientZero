@@ -44,12 +44,12 @@ class TFTConfig(BaseConfig):
             auto_td_steps_ratio=0.3,
             # replay window
             start_transitions=2000,
-            total_transitions=100 * 1000,
-            transition_num=180000,
+            total_transitions=10000 * 1000,
+            transition_num=50000,
             # frame skip & stack observation
             gray_scale=False,
             frame_skip=1,
-            stacked_observations=1,
+            stacked_observations=4,
             # coefficient
             reward_loss_coeff=1,
             value_loss_coeff=0.25,
@@ -66,6 +66,8 @@ class TFTConfig(BaseConfig):
         self.discount **= self.frame_skip
         self.max_moves //= self.frame_skip
         self.test_max_moves //= self.frame_skip
+        self.num_models = 1
+        self.model_switch_interval = 5000
 
         self.start_transitions = self.start_transitions // self.frame_skip
         self.start_transitions = max(1, self.start_transitions)
@@ -80,7 +82,7 @@ class TFTConfig(BaseConfig):
         self.reduced_channels_policy = 64  # x36 Number of channels in policy head
         self.resnet_fc_reward_layers = [128]  # Define the hidden layers in the reward head of the dynamic network
         self.resnet_fc_value_layers = [128]  # Define the hidden layers in the value head of the prediction network
-        self.resnet_fc_policy_layers = [128]  # Define the hidden layers in the policy head of the prediction network
+        self.resnet_policy_layers = 38  # Define the hidden layers in the policy head of the prediction network
         self.downsample = False  # Downsample observations before representation network (See paper appendix Network Architecture)
 
     def visit_softmax_temperature_fn(self, num_moves, trained_steps):
@@ -94,13 +96,25 @@ class TFTConfig(BaseConfig):
         else:
             return 1.0
 
+    def action_int_list_to_array(self, actions):
+        flat = np.zeros((len(actions), 7*9*38))
+        for i, action in enumerate(actions):
+            flat[i, action] = 1
+        return np.reshape(flat, (len(actions), 7, 9, 38))
+    
+    def action_flatten_array(self, action_array):
+        return
+    
+    def action_expand_logits(self, action_logits):
+        pass
+    
     def set_game(self, env_name, save_video=False, save_path=None, video_callable=None):
         self.env_name = env_name
         game = self.new_game()
         self.num_players = game.num_players
         self.image_channel = game.image_channel
         obs_shape = (self.num_players, self.image_channel, game.obs_shape[1],game.obs_shape[2])
-        self.obs_shape = (self.num_players, self.image_channel * self.stacked_observations, obs_shape[-2], obs_shape[-1])        
+        self.obs_shape = (self.num_players * self.stacked_observations, self.image_channel, obs_shape[-2], obs_shape[-1])        
         self.action_space_size = game.action_space_size()
 
     def get_uniform_network(self):
@@ -115,7 +129,7 @@ class TFTConfig(BaseConfig):
             self.reduced_channels_policy,
             self.resnet_fc_reward_layers,
             self.resnet_fc_value_layers,
-            self.resnet_fc_policy_layers,
+            self.resnet_policy_layers,
             self.reward_support.size,
             self.value_support.size,
             self.downsample,
@@ -158,7 +172,7 @@ class TFTConfig(BaseConfig):
         in the observation space.
         
         obs_batch shape is (batch_size, channel * (unroll_steps + 1), obs height, obs width)
-        '''    
+        '''   
         if self.num_players > 2:
             ret = obs_batch.copy()  
             for b in range(ret.shape[0]):

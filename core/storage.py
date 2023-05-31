@@ -14,11 +14,15 @@ class QueueStorage(object):
             the size of the queue
         """
         self.threshold = threshold
-        self.queue = Queue(maxsize=size, actor_options={"num_cpus": 3})
+        self.size = size
+        self.queue = Queue(maxsize=self.size, actor_options={"num_cpus": 3})
+        self.current_model = 0
 
-    def push(self, batch):
+
+    def push(self, batch, curr_model):
         if self.queue.qsize() <= self.threshold:
             self.queue.put(batch)
+
 
     def pop(self):
         if self.queue.qsize() > 0:
@@ -32,7 +36,7 @@ class QueueStorage(object):
 
 @ray.remote
 class SharedStorage(object):
-    def __init__(self, model, target_model):
+    def __init__(self, models, target_models):
         """Shared storage for models and others
         Parameters
         ----------
@@ -41,10 +45,11 @@ class SharedStorage(object):
         target_model: any
             models for reanalyzing (update every target_model_interval)
         """
-        self.step_counter = 0
-        self.test_counter = 0
-        self.model = model
-        self.target_model = target_model
+        self.step_counters = [0 for _ in range(len(models))]
+        self.test_counters = [0 for _ in range(len(models))]
+        self.models = models
+        self.target_models = target_models
+        self.current_model = 0
         self.ori_reward_log = []
         self.reward_log = []
         self.reward_max_log = []
@@ -63,23 +68,29 @@ class SharedStorage(object):
     def get_start_signal(self):
         return self.start
 
-    def get_weights(self):
-        return self.model.get_weights()
+    def get_weights(self, curr_model):
+        return self.models[curr_model].get_weights()
 
-    def set_weights(self, weights):
-        return self.model.set_weights(weights)
+    def set_weights(self, weights, curr_model):
+        return self.models[curr_model].set_weights(weights)
 
-    def get_target_weights(self):
-        return self.target_model.get_weights()
+    def get_target_weights(self, curr_model):
+        return self.target_models[curr_model].get_weights()
 
-    def set_target_weights(self, weights):
-        return self.target_model.set_weights(weights)
+    def set_target_weights(self, weights, curr_model):
+        return self.target_models[curr_model].set_weights(weights)
 
-    def incr_counter(self):
-        self.step_counter += 1
+    def incr_counter(self, curr_model):
+        self.step_counters[curr_model] += 1
 
-    def get_counter(self):
-        return self.step_counter
+    def get_counter(self, curr_model):
+        return self.step_counters[curr_model]
+    
+    def get_current_model(self):
+        return self.current_model
+    
+    def set_current_model(self, curr_model):
+        self.current_model = curr_model
 
     def set_data_worker_logs(self, eps_len, eps_len_max, eps_ori_reward, eps_reward, eps_reward_max, temperature, visit_entropy, priority_self_play, distributions):
         self.eps_lengths.append(eps_len)
