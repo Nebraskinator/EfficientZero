@@ -162,6 +162,11 @@ class RepresentationNetwork(nn.Module):
 
         num_channels_per_board = num_channels // 4
 
+        self.conv_self_board = conv1x1(
+            observation_shape[1],
+            num_channels_per_board,
+        )
+        
         self.conv_board = conv1x1(
             observation_shape[1],
             num_channels_per_board,
@@ -170,13 +175,30 @@ class RepresentationNetwork(nn.Module):
         self.num_boards = observation_shape[0]
         
         self.num_players = num_players
+        self.bn_self_board = nn.BatchNorm2d(num_channels_per_board, momentum=momentum)
         self.bn_board = nn.BatchNorm2d(num_channels_per_board, momentum=momentum)
         
-        self.conv = conv1x1(
-            int(num_channels_per_board * self.num_boards),
+        self.conv_self = conv1x1(
+            int(num_channels_per_board * self.num_boards / self.num_players),
             num_channels,
         )
+        self.conv_opp = conv1x1(
+            int(num_channels_per_board * (self.num_boards - self.num_boards / self.num_players)),
+            num_channels,
+        )
+        
+        self.conv = conv1x1(
+            num_channels*2,
+            num_channels,
+        )
+        
+        self.bn_self = nn.BatchNorm2d(num_channels, momentum=momentum)
+        self.bn_opp = nn.BatchNorm2d(num_channels, momentum=momentum)
         self.bn = nn.BatchNorm2d(num_channels, momentum=momentum)
+        
+        self.resblocks_self_board = nn.ModuleList(
+            [ResidualBlock(num_channels_per_board, num_channels_per_board, momentum=momentum) for _ in range(num_blocks)]
+        )
         
         self.resblocks_board = nn.ModuleList(
             [ResidualBlock(num_channels_per_board, num_channels_per_board, momentum=momentum) for _ in range(num_blocks)]
@@ -185,19 +207,41 @@ class RepresentationNetwork(nn.Module):
             [ResidualBlock(num_channels, num_channels, momentum=momentum) for _ in range(num_blocks)]
         )
 
+
     def forward(self, x):
         
-        conc = []
+        s = []
+        o = []
         for i in range(self.num_boards):
-            y = self.conv_board(x[:, i, :, :, :])
-            y = self.bn_board(y)
-            y = nn.functional.leaky_relu(y)
-
-            for block in self.resblocks_board:
-                y = block(y)
-            conc.append(y)
+            if i % self.num_players:
+                y = self.conv_board(x[:, i, :, :, :])
+                y = self.bn_board(y)
+                y = nn.functional.leaky_relu(y)
+    
+                for block in self.resblocks_board:
+                    y = block(y)
+                o.append(y)
+            else:
+                z = self.conv_self_board(x[:, i, :, :, :])
+                z = self.bn_self_board(z)
+                z = nn.functional.leaky_relu(z)
+    
+                for block in self.resblocks_self_board:
+                    z = block(z)
+                s.append(z)
+                
         
-        x = torch.concat(conc, dim=1)
+        s = torch.concat(s, dim=1)
+        s = self.conv_self(s)
+        s = self.bn_self(s)
+        s = nn.functional.leaky_relu(s)
+        
+        o = torch.concat(o, dim=1)
+        o = self.conv_opp(o)
+        o = self.bn_opp(o)
+        o = nn.functional.leaky_relu(o)
+        
+        x = torch.concat([s, o], dim=1)
         x = self.conv(x)
         x = self.bn(x)
         x = nn.functional.leaky_relu(x)
@@ -522,7 +566,7 @@ class EfficientZeroNet(BaseNet):
 
         self.prediction_network = PredictionNetwork(
             action_space_size,
-            max(num_blocks // 3, 1),
+            max(num_blocks // 2, 1),
             num_channels,
             reduced_channels_value,
             reduced_channels_policy,
@@ -589,7 +633,7 @@ class EfficientZeroNet(BaseNet):
             a = action[i].data[0]
             x, y, z = a // 38 // 9, a // 38 % 9, a % 38
             action_one_hot[i, 0, x, y] = 1
-            if x > 4 and y >= 4:
+            if x >= 4 and y >= 4:
                 dest_x, dest_y = x, y
             else:
                 if z < 28:

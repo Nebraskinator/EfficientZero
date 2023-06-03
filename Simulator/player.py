@@ -392,34 +392,37 @@ class Player:
         x, y, z = action // 38 // 9, action // 38 % 9, action % 38
         self.print("action: {}, x: {}, y: {}, z: {}".format(action, x, y, z))
         if x < 7 and y < 4:
-            if z < 28:
-                dest_x, dest_y = z // 4, z % 4
-                if x != dest_x or y != dest_y:
-                    self.move_board_to_board(x, y, dest_x, dest_y)
-            elif z < 37:
-                x_bench = z - 28
-                self.move_board_to_bench(x, y, x_bench)
-            else:
-                self.sell_champion(self.board[x][y], field=True)
+            if self.board[x][y]:
+                if z < 28:
+                    dest_x, dest_y = z // 4, z % 4
+                    if x != dest_x or y != dest_y:
+                        self.move_board_to_board(x, y, dest_x, dest_y)
+                elif z < 37:
+                    x_bench = z - 28
+                    self.move_board_to_bench(x, y, x_bench)
+                else:
+                    self.sell_champion(self.board[x][y], field=True)
         elif x <= 1 and 4 <= y < 9:
             x_bench = 5*x + y - 4
-            if z < 28:
-                dest_x, dest_y = z // 4, z % 4
-                self.move_bench_to_board(x_bench, dest_x, dest_y)
-            elif z < 37:
-                dest_x = z - 28
-                if x_bench != dest_x:
-                    self.move_bench_to_bench(x_bench, dest_x)
-            else:
-                self.sell_from_bench(x_bench)            
+            if x_bench < len(self.bench) and self.bench[x_bench]:
+                if z < 28:
+                    dest_x, dest_y = z // 4, z % 4
+                    self.move_bench_to_board(x_bench, dest_x, dest_y)
+                elif z < 37:
+                    dest_x = z - 28
+                    if x_bench != dest_x:
+                        self.move_bench_to_bench(x_bench, dest_x)
+                else:
+                    self.sell_from_bench(x_bench)            
         elif 2 <= x <= 3 and 4 <= y < 9:
             x_itembench = 5 * (x - 2) + y - 4
-            if z < 28:
-                dest_x, dest_y = z // 4, z % 4
-                self.move_item_to_board(x_itembench, dest_x, dest_y)
-            elif z < 37:
-                dest_x = z - 28
-                self.move_item_to_bench(x_itembench, dest_x)
+            if self.item_bench[x_itembench]:
+                if z < 28:
+                    dest_x, dest_y = z // 4, z % 4
+                    self.move_item_to_board(x_itembench, dest_x, dest_y)
+                elif z < 37:
+                    dest_x = z - 28
+                    self.move_item_to_bench(x_itembench, dest_x)
         elif x == 4 and 4 <= y < 9:
             x_shop = y - 4
             success = False
@@ -1429,7 +1432,7 @@ class Player:
     """
     def move_board_to_bench(self, x, y, x_bench) -> bool:
         if 0 <= x < 7 and 0 <= y < 4 and 0 <= x_bench < 9:
-            if self.bench[x_bench] and not self.board[x][y].target_dummy:
+            if self.bench[x_bench] and self.board[x][y] and not self.board[x][y].target_dummy:
                 s_champion = self.bench[x_bench]
                 if self.board[x][y]:
                     self.bench[x_bench] = self.board[x][y]
