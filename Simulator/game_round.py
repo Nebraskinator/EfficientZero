@@ -9,7 +9,7 @@ from Simulator.carousel import carousel
 
 
 class Game_Round:
-    def __init__(self, game_players, pool_obj, step_func_obj):
+    def __init__(self, game_players, pool_obj, step_func_obj, log=True):
         # Amount of damage taken as a base per round. First number is max round, second is damage
         self.ROUND_DAMAGE = [
             [3, 0],
@@ -22,12 +22,12 @@ class Game_Round:
         self.PLAYERS = game_players
         self.pool_obj = pool_obj
         self.step_func_obj = step_func_obj
-
+        self.log = log
         self.NUM_DEAD = 0
         self.current_round = 0
         self.matchups = []
-
-        log_to_file_start()
+        if self.log:
+            log_to_file_start()
 
         self.game_rounds = [
             [self.round_1],
@@ -150,7 +150,8 @@ class Game_Round:
                                 alive.append(other)
                     for other in alive:
                         other.spill_reward(damage / len(alive))
-        log_to_file_combat()
+        if self.log:
+            log_to_file_combat()
         return True
 
     def decide_player_combat(self):
@@ -237,7 +238,8 @@ class Game_Round:
     def round_1(self):
         carousel(list(self.PLAYERS.values()), self.current_round, self.pool_obj)
         for player in self.PLAYERS.values():
-                log_to_file(player)
+                if self.log:
+                    log_to_file(player)
                 player.end_turn_actions(fill_board=True)
 
         for player in self.PLAYERS.values():
@@ -249,8 +251,10 @@ class Game_Round:
     def minion_round(self):
         for player in self.PLAYERS.values():
             if player:
-                log_to_file(player)
-        log_end_turn(self.current_round)
+                if self.log:
+                    log_to_file(player)
+        if self.log:
+            log_end_turn(self.current_round)
 
         for player in self.PLAYERS.values():
             if player:
@@ -268,14 +272,17 @@ class Game_Round:
             if player:
                 player.end_turn_actions()
                 player.combat = False
-                log_to_file(player)
-        log_end_turn(self.current_round)
+                if self.log:
+                    log_to_file(player)
+        if self.log:
+            log_end_turn(self.current_round)
 
         self.combat_phase(self.PLAYERS, self.current_round)
         # Will implement check dead later
         # if self.check_dead(agent, buffer, game_episode):
         #     return True
-        log_to_file_combat()
+        if self.log:
+            log_to_file_combat()
         return False
 
     # executes carousel round for all players
@@ -283,7 +290,8 @@ class Game_Round:
         carousel(list(self.PLAYERS.values()), self.current_round, self.pool_obj)
         for player in self.PLAYERS.values():
                 if player:
-                    log_to_file(player)
+                    if self.log:
+                        log_to_file(player)
                     player.refill_item_pool()
 
     def terminate_game(self):

@@ -1002,7 +1002,7 @@ class Player:
             embedding[154:] = stat_emb
             return embedding
                 
-        obs = np.zeros((7, 9, 173))
+        obs = np.zeros((7, 9, 195))
         for y in range(0, 4):
             # IMPORTANT TO HAVE THE X INSIDE -- Silver is not sure why but ok.
             for x in range(0, 7):
@@ -1010,22 +1010,22 @@ class Player:
                 obs[x, y, 3] = 255
                 if self.board[x][y]:                    
                     curr_champ = self.board[x][y]                        
-                    obs[x, y, 10 : -1] = embed_champion(curr_champ)
-                    obs[x, y, -1] = 255
+                    obs[x, y, 7 : 169] = embed_champion(curr_champ)
+                    obs[x, y, 2] = 255
 
         for x_bench in range(len(self.bench)):
             x, y = x_bench // 5, 4 + x_bench % 5
             obs[x, y, 4] = 255
             if self.bench[x_bench]:
                 curr_champ = self.bench[x_bench]                        
-                obs[x, y, 10 : -1] = embed_champion(curr_champ)
-                obs[x, y, -1] = 255
+                obs[x, y, 7 : 169] = embed_champion(curr_champ)
+                obs[x, y, 2] = 255
         for ind, item in enumerate(self.item_bench):
             x, y = ind // 5 + 2, 4 + ind % 5
             obs[x, y, 5] = 255
             if item and list(items).index(item):
-                obs[x, y, 10 : -1] = embed_item(item)
-                obs[x, y, -1] = 255
+                obs[x, y, 7 : 169] = embed_item(item)
+                obs[x, y, 2] = 255
         if private:
             for x_shop in range(len(self.shop)):
                 x, y = 4, 4 + x_shop % 5
@@ -1036,39 +1036,37 @@ class Player:
                     if curr_champ.endswith('_c'):
                         curr_champ, origin = curr_champ.split('_')[:2]
                     curr_champ = champion.champion(curr_champ, chosen=origin)
-                    obs[x, y, 10 : -1] = embed_champion(curr_champ)     
-                    obs[x, y, 104 + COST[curr_champ.name]] = 255
-                    obs[x, y, -1] = 255
+                    obs[x, y, 7 : 169] = embed_champion(curr_champ)     
+                    obs[x, y, 169 + COST[curr_champ.name]] = 255
+                    obs[x, y, 2] = 255
 
         for i, origin in enumerate(tiers):
-            d = i // 9
-            t = i % 9
-            x, y = 5 + t // 5, 4 + t % 5
-            obs[x, y, 8] = 255
-            obs[x, y, 10 + 16 * d + self.team_composition[origin]] = 255
-            obs[x, y, 10 + 16 * d + 9 + self.team_tiers[origin]] = 255
-        obs[1, 8, 9] = 255
-        obs[1, 8, 10] = np.clip(self.level * 25, 0, 255)
-        obs[1, 8, 11] = np.clip(self.max_units * 25, 0, 255)
-        obs[1, 8, 12] = np.clip(self.num_units_in_play * 25, 0, 255)
-        obs[1, 8, 15] = np.clip(self.round * 8.5, 0, 255)
-        obs[1, 8, 16] = np.clip(self.health * 2, 0, 255)
-        obs[1, 8, 17] = np.clip(self.win_streak * 20, 0, 255)
-        obs[1, 8, 18] = np.clip(self.loss_streak * 20, 0, 255)
+            d = i + 169
+            obs[:, :4, d] = self.team_tiers[origin] / 4 * 255
+            
+        obs[5, 5:7, 2 + self.level] = 255
+        obs[5, 5:7, 12 + self.max_units] = 255
+        obs[5, 5:7, 24 + self.max_units - self.num_units_in_play] = 255
+        obs[6, 4, 3 + self.round] = 255
+        hp, rem = self.health // 5, self.health % 5
+        obs[6, 5, 3 + hp] = 255 * (5 - rem) / 5
+        obs[6, 5, 3 + hp + 1] = 255 * rem / 5
+        obs[6, 6, 3 + np.clip(self.win_streak, 0, 10)] = 255
+        obs[6, 6, 12 + np.clip(self.loss_streak, 0, 10)] = 255
 
         if private:
             obs[:, :, 0] = 255
-            obs[1, 8, 13] = np.clip(self.gold * 3, 0, 255)
+            gold, rem = self.gold // 10, self.gold % 10
+            obs[5, 8, 3 + gold] = 255 * (10 - rem) / 10
+            obs[5, 8, 3 + gold + 1] = 255 * rem / 10
             exp_to_level = 0
             if self.level < self.max_level:
                 exp_to_level = self.level_costs[self.level] - self.exp
-            obs[1, 8, 14] = np.clip(exp_to_level * 2, 0, 255)
-            if self.taking_actions:
-                obs[6, 8, :] = 255
-            obs[1, 8, 20] = np.clip((self.actions_per_round - self.actions_taken_this_round) * 11, 0, 255)
+            obs[5, 5:7, 34 + exp_to_level // 2] = 255
+            obs[6, 7, 3 + self.actions_per_round - self.actions_taken_this_round ] = 255
         else:
             obs[:, :, 1] = 255
-            obs[1, 8, 13] = np.clip(np.clip(self.gold//10, 0, 5) * 30, 0, 255)
+            obs[6, 8, 3 + np.clip(self.gold // 10, 0, 5)] = 255
         return obs
         
 

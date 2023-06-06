@@ -384,7 +384,7 @@ class BaseConfig(object):
         self.device = args.device
         self.cpu_actor = args.cpu_actor
         self.gpu_actor = args.gpu_actor
-        self.selfplay_actor = args.selfplay_actor
+        self.num_actors = args.selfplay_actor
         self.p_mcts_num = args.p_mcts_num
         self.use_root_value = args.use_root_value
         self.resume_training = args.load_model

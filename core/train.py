@@ -349,10 +349,10 @@ def _train(models, target_models, replay_buffers, shared_storage, mcts_storage, 
     models = [model.to(config.device) for model in models]
     target_models = [target_model.to(config.device) for target_model in target_models]
     lrs = [config.lr_init for _ in models]
-    optimizers = [optim.SGD(model.parameters(), lr=config.lr_init, momentum=config.momentum,
+    #optimizers = [optim.SGD(model.parameters(), lr=config.lr_init, momentum=config.momentum,
+    #                      weight_decay=config.weight_decay) for model in models]
+    optimizers = [optim.Adam(model.parameters(), lr=config.lr_init,
                           weight_decay=config.weight_decay) for model in models]
-    #optimizer = optim.Adam(model.parameters(), lr=config.lr_init,
-    #                      weight_decay=config.weight_decay)
     
     scaler = GradScaler()
 
@@ -429,6 +429,9 @@ def _train(models, target_models, replay_buffers, shared_storage, mcts_storage, 
             model_path = os.path.join(config.model_dir, 'model_{}_{}.p'.format(step_counts[curr_model], curr_model))
             torch.save(models[curr_model].state_dict(), model_path)
             
+        if step_counts[curr_model] % config.prev_model_update_interval == 0:
+            shared_storage.update_previous_models.remote(curr_model)
+            
         if step_counts[curr_model] % config.model_switch_interval == 0:
             curr_model += 1
             if curr_model >= config.num_models:
@@ -453,6 +456,8 @@ def train(config, summary_writer, model_path=None):
     """
     models = [config.get_uniform_network() for _ in range(config.num_models)]
     target_models = [config.get_uniform_network() for _ in range(config.num_models)]
+    prev_models = [config.get_uniform_network() for _ in range(config.num_prev_models)]
+    counter_init = 0
     if model_path:
         for i, path in enumerate(model_path):
             print('resume model from path: ', path)
@@ -460,9 +465,14 @@ def train(config, summary_writer, model_path=None):
     
             models[i].load_state_dict(weights)
             target_models[i].load_state_dict(weights)
+            for m in prev_models:
+                m.load_state_dict(weights)
+            try:
+                counter_init = int(path.split('_')[-2])
+            except:
+                continue
 
-    storage = SharedStorage.remote(models, target_models)
-
+    storage = SharedStorage.remote(models, target_models, prev_models, counter_init=counter_init)
     # prepare the batch and mctc context storage
     batch_storage = QueueStorage(int(config.batch_queue_size - 1), config.batch_queue_size)
     mcts_storage = QueueStorage(int(config.mcts_queue_size - 1), config.mcts_queue_size)
@@ -478,7 +488,7 @@ def train(config, summary_writer, model_path=None):
     workers += [gpu_worker.run.remote() for gpu_worker in gpu_workers]
 
     # self-play workers
-    data_workers = [DataWorker.remote(rank, replay_buffers, storage, config) for rank in range(config.num_actors)]
+    data_workers = [DataWorker.remote(rank, replay_buffers, storage, config, log=rank==0) for rank in range(config.num_actors)]
     workers += [worker.run.remote() for worker in data_workers]
     # test workers
     #workers += [_test.remote(config, storage)]

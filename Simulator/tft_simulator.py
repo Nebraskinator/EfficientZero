@@ -34,7 +34,7 @@ def env():
 class TFT_Simulator(AECEnv):
     metadata = {"is_parallelizable": True, "name": "tft-set4-v0"}
 
-    def __init__(self, env_config):
+    def __init__(self, env_config, log=True):
         self.pool_obj = pool.pool()
         self.PLAYERS = {"player_" + str(player_id): player_class(self.pool_obj, player_id)
                         for player_id in range(config.NUM_PLAYERS)}
@@ -43,11 +43,12 @@ class TFT_Simulator(AECEnv):
         self.live_agents = list(self.PLAYERS.keys())
         self.NUM_DEAD = 0
         self.num_players = config.NUM_PLAYERS
+        self.log = log
         self.previous_rewards = {"player_" + str(player_id): 0 for player_id in range(config.NUM_PLAYERS)}
-        self.image_channel = 173
+        self.image_channel = 195
         self.obs_shape = (self.num_players, 7, 9, self.image_channel)
         self.step_function = Step_Function(self.pool_obj)
-        self.game_round = Game_Round(self.PLAYERS, self.pool_obj, self.step_function)
+        self.game_round = Game_Round(self.PLAYERS, self.pool_obj, self.step_function, self.log)
         self.actions_taken = 0
         self.actions_taken_this_round = 0
         self.max_actions_per_round = config.ACTION_PER_TURN
@@ -145,7 +146,7 @@ class TFT_Simulator(AECEnv):
         self.PLAYERS = {"player_" + str(player_id): player_class(self.pool_obj, player_id)
                         for player_id in range(2)}
         self.step_function = Step_Function(self.pool_obj)
-        self.game_round = Game_Round(self.PLAYERS, self.pool_obj, self.step_function)
+        self.game_round = Game_Round(self.PLAYERS, self.pool_obj, self.step_function, self.log)
         r = np.random.choice([3, 4, 5, 7,
                                 9, 10, 11,
                                 13, 15, 16,
@@ -297,7 +298,7 @@ class TFT_Simulator(AECEnv):
         self.PLAYERS = {"player_" + str(player_id): player_class(self.pool_obj, player_id)
                         for player_id in range(2)}
         self.step_function = Step_Function(self.pool_obj)
-        self.game_round = Game_Round(self.PLAYERS, self.pool_obj, self.step_function)
+        self.game_round = Game_Round(self.PLAYERS, self.pool_obj, self.step_function, self.log)
 
         self.game_round.current_round = r
         p0_level = p1_vector[0]
@@ -372,7 +373,7 @@ class TFT_Simulator(AECEnv):
         self.previous_rewards = {"player_" + str(player_id): 0 for player_id in range(config.NUM_PLAYERS)}
 
         self.step_function = Step_Function(self.pool_obj)
-        self.game_round = Game_Round(self.PLAYERS, self.pool_obj, self.step_function)
+        self.game_round = Game_Round(self.PLAYERS, self.pool_obj, self.step_function, self.log)
         self.actions_taken = 0
         self.game_round.play_game_round()
         for key, p in self.PLAYERS.items():

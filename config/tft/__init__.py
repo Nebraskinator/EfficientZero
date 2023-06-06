@@ -25,7 +25,7 @@ class TFTConfig(BaseConfig):
             discount=0.997,
             dirichlet_alpha=0.3,
             value_delta_max=0.01,
-            num_simulations=75,
+            num_simulations=40,
             batch_size=64,
             td_steps=10,
             num_actors=1,
@@ -43,13 +43,13 @@ class TFTConfig(BaseConfig):
             lr_decay_steps=100000,
             auto_td_steps_ratio=0.3,
             # replay window
-            start_transitions=8000,
+            start_transitions=20000,
             total_transitions=10000 * 1000,
             transition_num=50000,
             # frame skip & stack observation
             gray_scale=False,
             frame_skip=1,
-            stacked_observations=2,
+            stacked_observations=1,
             # coefficient
             reward_loss_coeff=1,
             value_loss_coeff=0.25,
@@ -68,14 +68,16 @@ class TFTConfig(BaseConfig):
         self.test_max_moves //= self.frame_skip
         self.num_models = 1
         self.model_switch_interval = 5000
-        self.random_actors = 2
+        self.num_random_actors = 2
+        self.num_prev_models = 0
+        self.prev_model_update_interval = 15000
 
         self.start_transitions = self.start_transitions // self.frame_skip
         self.start_transitions = max(1, self.start_transitions)
         self.easy_mode = False
         self.bn_mt = 0.1
-        self.blocks = 6  # Number of blocks in the ResNet
-        self.channels = 256  # Number of channels in the ResNet
+        self.blocks = 3  # Number of blocks in the ResNet
+        self.channels = 128  # Number of channels in the ResNet
         if self.gray_scale:
             self.channels = 32
         self.reduced_channels_reward = 64  # x36 Number of channels in reward head
@@ -133,15 +135,15 @@ class TFTConfig(BaseConfig):
             init_zero=self.init_zero,
             state_norm=self.state_norm)
 
-    def new_game(self, seed=None, save_video=False, save_path=None, video_callable=None, uid=None, test=False, final_test=False):
+    def new_game(self, log=True, seed=None, save_video=False, save_path=None, video_callable=None, uid=None, test=False, final_test=False):
         if test:
             if final_test:
                 max_moves = 108000 // self.frame_skip
             else:
                 max_moves = self.test_max_moves
-            env = TFT_Simulator(env_config=self)
+            env = TFT_Simulator(env_config=self, log=log)
         else:
-            env = TFT_Simulator(env_config=self)
+            env = TFT_Simulator(env_config=self, log=log)
 
         return env
 

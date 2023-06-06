@@ -48,7 +48,10 @@ def mlp(
 
     return nn.Sequential(*layers)
 
-
+def convkxk(in_channels, out_channels, k=3, stride=1):
+    return nn.Conv2d(
+        in_channels, out_channels, kernel_size=k, stride=stride, padding=k//2, bias=False
+    )
 def conv3x3(in_channels, out_channels, stride=1):
     return nn.Conv2d(
         in_channels, out_channels, kernel_size=3, stride=stride, padding=1, bias=False
@@ -60,11 +63,11 @@ def conv1x1(in_channels, out_channels, stride=1):
 
 # Residual block
 class ResidualBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, downsample=None, stride=1, momentum=0.1):
+    def __init__(self, in_channels, out_channels, k=3, downsample=None, stride=1, momentum=0.1):
         super().__init__()
-        self.conv1 = conv3x3(in_channels, out_channels, stride)
+        self.conv1 = convkxk(in_channels, out_channels, k=k, stride=stride)
         self.bn1 = nn.BatchNorm2d(out_channels, momentum=momentum)
-        self.conv2 = conv3x3(out_channels, out_channels)
+        self.conv2 = convkxk(out_channels, out_channels, k=k, stride=stride)
         self.bn2 = nn.BatchNorm2d(out_channels, momentum=momentum)
         self.downsample = downsample
 
@@ -160,7 +163,7 @@ class RepresentationNetwork(nn.Module):
         """
         super().__init__()
 
-        num_channels_per_board = num_channels // 4
+        num_channels_per_board = num_channels // 2
 
         self.conv_self_board = conv1x1(
             observation_shape[1],
@@ -197,14 +200,14 @@ class RepresentationNetwork(nn.Module):
         self.bn = nn.BatchNorm2d(num_channels, momentum=momentum)
         
         self.resblocks_self_board = nn.ModuleList(
-            [ResidualBlock(num_channels_per_board, num_channels_per_board, momentum=momentum) for _ in range(num_blocks)]
+            [ResidualBlock(num_channels_per_board, num_channels_per_board, k=7, momentum=momentum) for _ in range(num_blocks)]
         )
         
         self.resblocks_board = nn.ModuleList(
-            [ResidualBlock(num_channels_per_board, num_channels_per_board, momentum=momentum) for _ in range(num_blocks)]
+            [ResidualBlock(num_channels_per_board, num_channels_per_board, k=7, momentum=momentum) for _ in range(num_blocks)]
         )
         self.resblocks = nn.ModuleList(
-            [ResidualBlock(num_channels, num_channels, momentum=momentum) for _ in range(num_blocks)]
+            [ResidualBlock(num_channels, num_channels, k=7, momentum=momentum) for _ in range(num_blocks)]
         )
 
 
@@ -298,11 +301,11 @@ class DynamicsNetwork(nn.Module):
         self.conv = conv3x3(num_channels + 2, num_channels)
         self.bn = nn.BatchNorm2d(num_channels, momentum=momentum)
         self.resblocks = nn.ModuleList(
-            [ResidualBlock(num_channels, num_channels, momentum=momentum) for _ in range(num_blocks)]
+            [ResidualBlock(num_channels, num_channels, k=7, momentum=momentum) for _ in range(num_blocks)]
         )
 
         self.reward_resblocks = nn.ModuleList(
-            [ResidualBlock(num_channels, num_channels, momentum=momentum) for _ in range(num_blocks)]
+            [ResidualBlock(num_channels, num_channels, k=7, momentum=momentum) for _ in range(num_blocks)]
         )
 
         self.conv1x1_reward = nn.Conv2d(num_channels, reduced_channels_reward, 1)
@@ -400,7 +403,7 @@ class PredictionNetwork(nn.Module):
         """
         super().__init__()
         self.resblocks = nn.ModuleList(
-            [ResidualBlock(num_channels, num_channels, momentum=momentum) for _ in range(num_blocks)]
+            [ResidualBlock(num_channels, num_channels, k=7, momentum=momentum) for _ in range(num_blocks)]
         )
         self.action_space_size = action_space_size
         self.conv1x1_value = nn.Conv2d(num_channels, reduced_channels_value, 1)

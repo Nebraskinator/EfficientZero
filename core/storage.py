@@ -36,7 +36,7 @@ class QueueStorage(object):
 
 @ray.remote
 class SharedStorage(object):
-    def __init__(self, models, target_models):
+    def __init__(self, models, target_models, prev_models, counter_init=0):
         """Shared storage for models and others
         Parameters
         ----------
@@ -45,10 +45,11 @@ class SharedStorage(object):
         target_model: any
             models for reanalyzing (update every target_model_interval)
         """
-        self.step_counters = [0 for _ in range(len(models))]
+        self.step_counters = [counter_init for _ in range(len(models))]
         self.test_counters = [0 for _ in range(len(models))]
         self.models = models
         self.target_models = target_models
+        self.prev_models = prev_models
         self.current_model = 0
         self.ori_reward_log = []
         self.reward_log = []
@@ -79,6 +80,17 @@ class SharedStorage(object):
 
     def set_target_weights(self, weights, curr_model):
         return self.target_models[curr_model].set_weights(weights)
+
+    def update_previous_models(self, curr_model):
+        if self.prev_models:
+            self.prev_models[0].set_weights(self.models[curr_model].get_weights())
+            self.prev_models = self.prev_models[1:] + [self.prev_models[0]]
+    
+    def get_previous_models_weights(self):
+        return [m.get_weights() for m in self.prev_models]
+    
+    def set_counter(self, count, curr_model):
+        self.step_counters[curr_model] = count
 
     def incr_counter(self, curr_model):
         self.step_counters[curr_model] += 1

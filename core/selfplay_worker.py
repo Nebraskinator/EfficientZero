@@ -14,7 +14,7 @@ from core.utils import select_action, prepare_observation_lst
 
 @ray.remote(num_gpus=0.125, max_restarts=-1, max_task_retries=-1)
 class DataWorker(object):
-    def __init__(self, rank, replay_buffers, storage, config):
+    def __init__(self, rank, replay_buffers, storage, config, log=True):
         """Data Worker for collecting data through self-play
         Parameters
         ----------
@@ -26,6 +26,7 @@ class DataWorker(object):
             The model storage
         """
         self.rank = rank
+        self.log=log
         self.config = config
         self.storage = storage
         self.replay_buffers = replay_buffers
@@ -105,16 +106,23 @@ class DataWorker(object):
         # number of parallel mcts
         env_nums = 1 #self.config.p_mcts_num
         models = [self.config.get_uniform_network() for _ in range(self.config.num_models)]
+        prev_models = [self.config.get_uniform_network() for _ in range(self.config.num_prev_models)]
         if self.config.resume_training:
             for i, model in enumerate(models):
                 print("Self-Play with Stored Weights")
                 weights = ray.get(self.storage.get_weights.remote(i))
                 model.set_weights(weights)
+            prev_weights = ray.get(self.storage.get_previous_models_weights.remote())
+            for model, weights in zip(prev_models, prev_weights):
+                model.set_weights(weights)
+                model.to(self.device)
+                model.eval()
         [model.to(self.device) for model in models]
         [model.eval() for model in models]
-
+        [model.to(self.device) for model in prev_models]
+        [model.eval() for model in prev_models]
         start_training = False
-        env = self.config.new_game(self.config.seed) 
+        env = self.config.new_game(seed=self.config.seed, log=self.log) 
 
         def _get_max_entropy(action_space):
             p = 1.0 / action_space
@@ -128,6 +136,11 @@ class DataWorker(object):
         with torch.no_grad():
             while True:
                 print("self play: new game")
+                prev_weights = ray.get(self.storage.get_previous_models_weights.remote())
+                for model, weights in zip(prev_models, prev_weights):
+                    model.set_weights(weights)
+                    model.to(self.device)
+                    model.eval()
                 trained_steps = [ray.get(self.storage.get_counter.remote(i)) for i in range(self.config.num_models)]
                 # training finished
                 if all([s >= self.config.training_steps + self.config.last_steps for s in trained_steps]):
@@ -137,24 +150,31 @@ class DataWorker(object):
                 init_obses, taking_actions, action_masks = env.reset()
                 
                 num_actors = len(env.live_agents)
-                live_actors = env.live_agents
+                live_actors = env.live_agents[:-self.config.num_random_actors - self.config.num_prev_models]
+                prev_actors = env.live_agents[-self.config.num_random_actors - self.config.num_prev_models : -self.config.num_random_actors]
+                random_actors = env.live_agents[-self.config.num_random_actors:]
                 rewards = {p: [] for p in live_actors}
                 actor_model_dict = {i: [] for i in range(self.config.num_models)}
                 for i, actor in enumerate(live_actors):
-                    actor_model_dict[i % self.config.num_models].append(actor)
-
+                    actor_model_dict[i % self.config.num_models].append(actor)                  
+                
                 dones = {p:False for p in live_actors}
+                prev_game_histories = {p: GameHistory(env.action_space_size(), env.obs_shape, max_length=self.config.history_length,
+                                              config=self.config) for p in prev_actors}
                 game_histories = {p: GameHistory(env.action_space_size(), env.obs_shape, max_length=self.config.history_length,
                                               config=self.config) for p in live_actors}
                 last_game_histories = {p: None for p in live_actors}
                 last_game_priorities = {p: None for p in live_actors}
 
                 # stack observation windows in boundary: s398, s399, s400, current s1 -> for not init trajectory
-                stack_obs_windows = {p: [] for p in live_actors}
+                stack_obs_windows = {p: [] for p in live_actors + prev_actors}
 
                 for p in live_actors:
                     stack_obs_windows[p] = [init_obses[p] for _ in range(self.config.stacked_observations)]
                     game_histories[p].init(stack_obs_windows[p])
+                for p in prev_actors:
+                    stack_obs_windows[p] = [init_obses[p] for _ in range(self.config.stacked_observations)]
+                    prev_game_histories[p].init(stack_obs_windows[p])
 
                 # for priorities in self-play
                 search_values_lst = {p: [] for p in live_actors}
@@ -181,7 +201,10 @@ class DataWorker(object):
                 while done_cnt < num_actors and (step_counter <= self.config.max_moves):
                     
                     live_actors = [p for p in env.live_agents if p in live_actors]
+                    prev_actors = [p for p in env.live_agents if p in prev_actors]
+                    random_actors = [p for p in env.live_agents if p in random_actors]
                     step_acting_agents = [i for i in live_actors if taking_actions[i]]
+                    prev_acting_agents = [i for i in prev_actors if taking_actions[i]]
                     if not start_training:
                         start_training = ray.get(self.storage.get_start_signal.remote())
                     
@@ -201,15 +224,15 @@ class DataWorker(object):
 
 
                     # update the models in self-play every checkpoint_interval
-                    for i, model in enumerate(models):
+                    for i in range(self.config.num_models):
                         new_model_index = trained_steps[i] // self.config.checkpoint_interval
                         if new_model_index > self.last_model_index[i]:
                             self.last_model_index[i] = new_model_index
                             # update model
                             weights = ray.get(self.storage.get_weights.remote(i))
-                            model.set_weights(weights)
-                            model.to(self.device)
-                            model.eval()
+                            models[i].set_weights(weights)
+                            models[i].to(self.device)
+                            models[i].eval()
 
                         '''
                         # log if more than 1 env in parallel because env will reset in this loop.
@@ -263,12 +286,7 @@ class DataWorker(object):
                             noises = []
                             for p in model_acting_agents:
                                 noise = np.zeros(self.config.action_space_size)
-                                sample = np.random.dirichlet([self.config.root_dirichlet_alpha] * np.sum(action_masks[p]).astype(int))
-                                cnt = 0
-                                for i in range(len(noise)):
-                                    if action_masks[p][i]:
-                                        noise[i] = sample[cnt]
-                                        cnt += 1
+                                noise[np.flatnonzero(action_masks[p])] = np.random.dirichlet([self.config.root_dirichlet_alpha] * np.sum(action_masks[p]).astype(int))
                                 noises.append(noise.astype(np.float32).tolist())                            
                             #noises = [(np.random.dirichlet([self.config.root_dirichlet_alpha] * np.sum(action_masks[p]))).astype(np.float32).tolist() for p in step_acting_agents]
                             roots.prepare(self.config.root_exploration_fraction, noises, value_prefix_pool, policy_logits_pool)
@@ -298,14 +316,61 @@ class DataWorker(object):
                                 prev_search_values[p] = value
                                 
                                 action[p], visit_entropy[p] = select_action(distributions, temperature=temperature, deterministic=deterministic)
+
+                    for p, model in zip(prev_actors, prev_models):
+                        if taking_actions[p]:
+                            # set temperature for distributions
+                            _temperature = np.array(
+                                [self.config.visit_softmax_temperature_fn(num_moves=0, trained_steps=trained_steps[0])])
+                            stack_obs = np.array([np.concatenate(prev_game_histories[p].step_obs(), 0)])
+                            stack_obs = np.moveaxis(stack_obs, -1, -3)
+                            stack_obs = torch.from_numpy(stack_obs).to(self.device).float()
+                            if self.config.amp_type == 'torch_amp':
+                                with autocast():
+                                    network_output = model.initial_inference(stack_obs.float())
+                            else:                        
+                                network_output = model.initial_inference(stack_obs.float())
+                            hidden_state_roots = network_output.hidden_state
+                            reward_hidden_roots = network_output.reward_hidden
+                            value_prefix_pool = network_output.value_prefix
+                            policy_logits_pool = (network_output.policy_logits * np.array([action_masks[p]])).tolist()
+                            roots = cytree.Roots(1, self.config.action_space_size, self.config.num_simulations)
+                            noises = []
+                            noise = np.zeros(self.config.action_space_size)
+                            noise[np.flatnonzero(action_masks[p])] = np.random.dirichlet([self.config.root_dirichlet_alpha] * np.sum(action_masks[p]).astype(int))
+                            noises.append(noise.astype(np.float32).tolist())                           
+                            #noises = [(np.random.dirichlet([self.config.root_dirichlet_alpha] * np.sum(action_masks[p]))).astype(np.float32).tolist() for p in step_acting_agents]
+                            roots.prepare(self.config.root_exploration_fraction, noises, value_prefix_pool, policy_logits_pool)
+                            # do MCTS for a policy
+                            MCTS(self.config).search(roots, model, hidden_state_roots, reward_hidden_roots, training_start=(start_training or self.config.load_model))
+                    
+                            roots_distributions = roots.get_distributions()
+                            roots_values = roots.get_values()
+                            #print((np.array(roots_distributions).shape, np.array(roots_values).shape, np.array(_temperature).shape))
+                            if start_training or self.config.resume_training:
+                                distributions, value, temperature = roots_distributions[0], roots_values[0], _temperature[0]
+                            else:
+                                # before starting training, use random policy
+                                value, temperature = roots_values[0], _temperature[0]
+                                distributions = np.ones(self.config.action_space_size)
+                            distributions *= action_masks[p]
+                            if np.sum(distributions) == 0:
+                                distributions[1976] = 1 
+                                
+                            action[p], visit_entropy[p] = select_action(distributions, temperature=temperature, deterministic=deterministic)
+                        else:
+                            action[p] = 1976
                             
-                    for p in env.live_agents:
+                    for p in live_actors:
                         if p not in step_acting_agents:
-                            action[p] = 0
+                            action[p] = 1976
+                    
+                    for p in random_actors:
+                        action[p] = np.random.choice(np.where(action_masks[p])[0].tolist())
                     
                     obs, ori_reward, taking_actions, dones, action_masks = env.step(action)
 
-                    for p in env.live_agents:
+                    for p in live_actors:
                         rewards[p].append(ori_reward[p])
 
                     for p in step_acting_agents:
@@ -351,6 +416,17 @@ class DataWorker(object):
                             game_histories[p] = GameHistory(env.action_space_size(), max_length=self.config.history_length,
                                                             config=self.config)
                             game_histories[p].init(stack_obs_windows[p])
+                    for p in prev_acting_agents:
+                        # clip the reward
+                        if dones[p]:
+                            obs[p] = np.zeros(env.obs_shape).astype(int)
+                        prev_game_histories[p].append(action[p], obs[p], clip_reward)
+                        total_transitions += 1
+
+                        # fresh stack windows
+                        del stack_obs_windows[p][0]
+                        stack_obs_windows[p].append(obs[p])
+                        
                     for player in list(dones.keys()):
                         # reset env if finished
                         if player in live_actors and dones[player]:
@@ -373,6 +449,11 @@ class DataWorker(object):
                             self.free(curr_model)
                             
                             del game_histories[player]
+                        if player in prev_actors and dones[player]:
+                            del prev_game_histories[player]
+                            done_cnt += 1
+                        if player in random_actors and dones[player]:
+                            done_cnt += 1
                 if self.config.num_models > 1:
                     print_rewards = ""
                     for m_num, ps in actor_model_dict.items():

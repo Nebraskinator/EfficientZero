@@ -35,7 +35,7 @@ if __name__ == '__main__':
     parser.add_argument('--cpu_actor', type=int, default=8, help='batch cpu actor')
     # test works uses 0.125 GPU
     parser.add_argument('--gpu_actor', type=int, default=2, help='batch gpu actor (0.125)')
-    parser.add_argument('--selfplay_actor', type=int, default=1, help='selfplay gpu actor (0.125)')
+    parser.add_argument('--selfplay_actor', type=int, default=3, help='selfplay gpu actor (0.125)')
     parser.add_argument('--p_mcts_num', type=int, default=4, help='number of parallel mcts')
     parser.add_argument('--seed', type=int, default=0, help='seed (default: %(default)s)')
     parser.add_argument('--num_gpus', type=int, default=1, help='gpus available')

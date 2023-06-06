@@ -218,6 +218,8 @@ class BatchWorker_CPU(object):
         else:
             policy_non_re_context = None
         context = self.current_model, reward_value_context, policy_re_context, policy_non_re_context, inputs_batch, weights
+        while self.mcts_storage.get_len() >= self.max_len:
+            time.sleep(0.3)
         self.mcts_storage.push(context, self.current_model)
 
     def run(self):
