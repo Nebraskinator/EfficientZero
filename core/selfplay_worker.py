@@ -5,6 +5,9 @@ import torch
 import numpy as np
 import core.ctree.cytree as cytree
 
+import gc
+import tracemalloc
+
 from torch.nn import L1Loss
 from torch.cuda.amp import autocast as autocast
 from core.mcts import MCTS
@@ -103,24 +106,25 @@ class DataWorker(object):
         return priorities
 
     def run(self):
+        
         # number of parallel mcts
         env_nums = 1 #self.config.p_mcts_num
         models = [self.config.get_uniform_network() for _ in range(self.config.num_models)]
-        prev_models = [self.config.get_uniform_network() for _ in range(self.config.num_prev_models)]
+        #prev_models = [self.config.get_uniform_network() for _ in range(self.config.num_prev_models)]
         if self.config.resume_training:
             for i, model in enumerate(models):
                 print("Self-Play with Stored Weights")
                 weights = ray.get(self.storage.get_weights.remote(i))
                 model.set_weights(weights)
             prev_weights = ray.get(self.storage.get_previous_models_weights.remote())
-            for model, weights in zip(prev_models, prev_weights):
-                model.set_weights(weights)
-                model.to(self.device)
-                model.eval()
+            #for model, weights in zip(prev_models, prev_weights):
+            #    model.set_weights(weights)
+            #    model.to(self.device)
+            #    model.eval()
         [model.to(self.device) for model in models]
         [model.eval() for model in models]
-        [model.to(self.device) for model in prev_models]
-        [model.eval() for model in prev_models]
+        #[model.to(self.device) for model in prev_models]
+        #[model.eval() for model in prev_models]
         start_training = False
         env = self.config.new_game(seed=self.config.seed, log=self.log) 
 
@@ -135,12 +139,14 @@ class DataWorker(object):
         max_transitions = self.config.total_transitions // self.config.num_actors
         with torch.no_grad():
             while True:
+                gc.collect()
                 print("self play: new game")
-                prev_weights = ray.get(self.storage.get_previous_models_weights.remote())
-                for model, weights in zip(prev_models, prev_weights):
-                    model.set_weights(weights)
-                    model.to(self.device)
-                    model.eval()
+                #if prev_models:
+                #    prev_weights = ray.get(self.storage.get_previous_models_weights.remote())
+                #    for model, weights in zip(prev_models, prev_weights):
+                #       model.set_weights(weights)
+                #        model.to(self.device)
+                #        model.eval()
                 trained_steps = [ray.get(self.storage.get_counter.remote(i)) for i in range(self.config.num_models)]
                 # training finished
                 if all([s >= self.config.training_steps + self.config.last_steps for s in trained_steps]):
@@ -148,10 +154,11 @@ class DataWorker(object):
                     break
 
                 init_obses, taking_actions, action_masks = env.reset()
-                
+                             
                 num_actors = len(env.live_agents)
-                live_actors = env.live_agents[:-self.config.num_random_actors - self.config.num_prev_models]
-                prev_actors = env.live_agents[-self.config.num_random_actors - self.config.num_prev_models : -self.config.num_random_actors]
+                #live_actors = env.live_agents[:-self.config.num_random_actors - self.config.num_prev_models]
+                live_actors = env.live_agents[:-self.config.num_random_actors]
+                #prev_actors = env.live_agents[-self.config.num_random_actors - self.config.num_prev_models : -self.config.num_random_actors]
                 random_actors = env.live_agents[-self.config.num_random_actors:]
                 rewards = {p: [] for p in live_actors}
                 actor_model_dict = {i: [] for i in range(self.config.num_models)}
@@ -159,22 +166,23 @@ class DataWorker(object):
                     actor_model_dict[i % self.config.num_models].append(actor)                  
                 
                 dones = {p:False for p in live_actors}
-                prev_game_histories = {p: GameHistory(env.action_space_size(), env.obs_shape, max_length=self.config.history_length,
-                                              config=self.config) for p in prev_actors}
+                #prev_game_histories = {p: GameHistory(env.action_space_size(), env.obs_shape, max_length=self.config.history_length,
+                #                             config=self.config) for p in prev_actors}
                 game_histories = {p: GameHistory(env.action_space_size(), env.obs_shape, max_length=self.config.history_length,
                                               config=self.config) for p in live_actors}
                 last_game_histories = {p: None for p in live_actors}
                 last_game_priorities = {p: None for p in live_actors}
 
                 # stack observation windows in boundary: s398, s399, s400, current s1 -> for not init trajectory
-                stack_obs_windows = {p: [] for p in live_actors + prev_actors}
+                #stack_obs_windows = {p: [] for p in live_actors + prev_actors}
+                stack_obs_windows = {p: [] for p in live_actors}
 
                 for p in live_actors:
                     stack_obs_windows[p] = [init_obses[p] for _ in range(self.config.stacked_observations)]
                     game_histories[p].init(stack_obs_windows[p])
-                for p in prev_actors:
-                    stack_obs_windows[p] = [init_obses[p] for _ in range(self.config.stacked_observations)]
-                    prev_game_histories[p].init(stack_obs_windows[p])
+                #for p in prev_actors:
+                #    stack_obs_windows[p] = [init_obses[p] for _ in range(self.config.stacked_observations)]
+                #    prev_game_histories[p].init(stack_obs_windows[p])
 
                 # for priorities in self-play
                 search_values_lst = {p: [] for p in live_actors}
@@ -197,14 +205,15 @@ class DataWorker(object):
                 prev_pred_values = {}
                 prev_search_values = {}
                 done_cnt = 0
+
                 # play games until max moves
                 while done_cnt < num_actors and (step_counter <= self.config.max_moves):
                     
                     live_actors = [p for p in env.live_agents if p in live_actors]
-                    prev_actors = [p for p in env.live_agents if p in prev_actors]
+                    #prev_actors = [p for p in env.live_agents if p in prev_actors]
                     random_actors = [p for p in env.live_agents if p in random_actors]
                     step_acting_agents = [i for i in live_actors if taking_actions[i]]
-                    prev_acting_agents = [i for i in prev_actors if taking_actions[i]]
+                    #prev_acting_agents = [i for i in prev_actors if taking_actions[i]]
                     if not start_training:
                         start_training = ray.get(self.storage.get_start_signal.remote())
                     
@@ -271,7 +280,7 @@ class DataWorker(object):
                                 [self.config.visit_softmax_temperature_fn(num_moves=0, trained_steps=trained_steps[curr_model]) for player in
                                  model_acting_agents])
                             stack_obs = np.array([np.concatenate(game_histories[p].step_obs(), 0) for p in model_acting_agents])
-                            stack_obs = np.moveaxis(stack_obs, -1, -3)
+                            stack_obs = np.moveaxis(stack_obs, -1, -3).astype(float) / 255
                             stack_obs = torch.from_numpy(stack_obs).to(self.device).float()
                             if self.config.amp_type == 'torch_amp':
                                 with autocast():
@@ -316,14 +325,14 @@ class DataWorker(object):
                                 prev_search_values[p] = value
                                 
                                 action[p], visit_entropy[p] = select_action(distributions, temperature=temperature, deterministic=deterministic)
-
+                    '''
                     for p, model in zip(prev_actors, prev_models):
                         if taking_actions[p]:
                             # set temperature for distributions
                             _temperature = np.array(
                                 [self.config.visit_softmax_temperature_fn(num_moves=0, trained_steps=trained_steps[0])])
                             stack_obs = np.array([np.concatenate(prev_game_histories[p].step_obs(), 0)])
-                            stack_obs = np.moveaxis(stack_obs, -1, -3)
+                            stack_obs = np.moveaxis(stack_obs, -1, -3).astype(float) / 255
                             stack_obs = torch.from_numpy(stack_obs).to(self.device).float()
                             if self.config.amp_type == 'torch_amp':
                                 with autocast():
@@ -360,7 +369,7 @@ class DataWorker(object):
                             action[p], visit_entropy[p] = select_action(distributions, temperature=temperature, deterministic=deterministic)
                         else:
                             action[p] = 1976
-                            
+                    '''
                     for p in live_actors:
                         if p not in step_acting_agents:
                             action[p] = 1976
@@ -416,6 +425,7 @@ class DataWorker(object):
                             game_histories[p] = GameHistory(env.action_space_size(), max_length=self.config.history_length,
                                                             config=self.config)
                             game_histories[p].init(stack_obs_windows[p])
+                    '''
                     for p in prev_acting_agents:
                         # clip the reward
                         if dones[p]:
@@ -426,7 +436,7 @@ class DataWorker(object):
                         # fresh stack windows
                         del stack_obs_windows[p][0]
                         stack_obs_windows[p].append(obs[p])
-                        
+                    '''    
                     for player in list(dones.keys()):
                         # reset env if finished
                         if player in live_actors and dones[player]:
@@ -449,9 +459,9 @@ class DataWorker(object):
                             self.free(curr_model)
                             
                             del game_histories[player]
-                        if player in prev_actors and dones[player]:
-                            del prev_game_histories[player]
-                            done_cnt += 1
+                        #if player in prev_actors and dones[player]:
+                        #    del prev_game_histories[player]
+                        #    done_cnt += 1
                         if player in random_actors and dones[player]:
                             done_cnt += 1
                 if self.config.num_models > 1:

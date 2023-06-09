@@ -199,15 +199,16 @@ class RepresentationNetwork(nn.Module):
         self.bn_opp = nn.BatchNorm2d(num_channels, momentum=momentum)
         self.bn = nn.BatchNorm2d(num_channels, momentum=momentum)
         
+        ks = [3, 7]
         self.resblocks_self_board = nn.ModuleList(
-            [ResidualBlock(num_channels_per_board, num_channels_per_board, k=7, momentum=momentum) for _ in range(num_blocks)]
+            [ResidualBlock(num_channels_per_board, num_channels_per_board, k=ks[int(i/(num_blocks/2))], momentum=momentum) for i in range(num_blocks)]
         )
         
         self.resblocks_board = nn.ModuleList(
-            [ResidualBlock(num_channels_per_board, num_channels_per_board, k=7, momentum=momentum) for _ in range(num_blocks)]
+            [ResidualBlock(num_channels_per_board, num_channels_per_board, k=ks[int(i/(num_blocks/2))], momentum=momentum) for i in range(num_blocks)]
         )
         self.resblocks = nn.ModuleList(
-            [ResidualBlock(num_channels, num_channels, k=7, momentum=momentum) for _ in range(num_blocks)]
+            [ResidualBlock(num_channels, num_channels, k=ks[int(i/(num_blocks/2))], momentum=momentum) for i in range(num_blocks)]
         )
 
 
@@ -300,12 +301,9 @@ class DynamicsNetwork(nn.Module):
 
         self.conv = conv3x3(num_channels + 2, num_channels)
         self.bn = nn.BatchNorm2d(num_channels, momentum=momentum)
+        ks = [3, 7]
         self.resblocks = nn.ModuleList(
-            [ResidualBlock(num_channels, num_channels, k=7, momentum=momentum) for _ in range(num_blocks)]
-        )
-
-        self.reward_resblocks = nn.ModuleList(
-            [ResidualBlock(num_channels, num_channels, k=7, momentum=momentum) for _ in range(num_blocks)]
+            [ResidualBlock(num_channels, num_channels, k=ks[int(i/(num_blocks/2))], momentum=momentum) for i in range(num_blocks)]
         )
 
         self.conv1x1_reward = nn.Conv2d(num_channels, reduced_channels_reward, 1)
@@ -402,8 +400,9 @@ class PredictionNetwork(nn.Module):
             True -> zero initialization for the last layer of value/policy mlp
         """
         super().__init__()
+        ks = [3, 7]
         self.resblocks = nn.ModuleList(
-            [ResidualBlock(num_channels, num_channels, k=7, momentum=momentum) for _ in range(num_blocks)]
+            [ResidualBlock(num_channels, num_channels, k=ks[int(i/(num_blocks/2))], momentum=momentum) for i in range(num_blocks)]
         )
         self.action_space_size = action_space_size
         self.conv1x1_value = nn.Conv2d(num_channels, reduced_channels_value, 1)

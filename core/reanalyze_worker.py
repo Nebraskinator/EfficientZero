@@ -88,7 +88,7 @@ class BatchWorker_CPU(object):
                     value_mask.append(0)
                     obs = zero_obs
                 value_obs_lst.append(np.concatenate(obs, 0))
-        value_obs_lst = ray.put(value_obs_lst)
+        #value_obs_lst = ray.put(value_obs_lst)
         reward_value_context = [value_obs_lst, value_mask, state_index_lst, rewards_lst, traj_lens, td_steps_lst]
         return reward_value_context
 
@@ -304,12 +304,12 @@ class BatchWorker_GPU(object):
         """prepare reward and value targets from the context of rewards and values
         """
         value_obs_lst, value_mask, state_index_lst, rewards_lst, traj_lens, td_steps_lst = reward_value_context        
-        value_obs_lst = ray.get(value_obs_lst)
+        #value_obs_lst = ray.get(value_obs_lst)
         device = self.config.device
         batch_size = len(value_obs_lst)
         batch_values, batch_value_prefixs = [], []
         with torch.no_grad():
-            value_obs_lst = np.moveaxis(np.array(value_obs_lst), -1, -3)
+            value_obs_lst = np.moveaxis(np.array(value_obs_lst), -1, -3).astype(float) / 255
             #value_obs_lst = prepare_observation_lst(value_obs_lst)
             #value_obs_lst = np.squeeze(value_obs_lst, 1)
             # split a full batch into slices of mini_infer_size: to save the GPU memory for more GPU actors
@@ -382,7 +382,7 @@ class BatchWorker_GPU(object):
 
                 batch_value_prefixs.append(target_value_prefixs)
                 batch_values.append(target_values)
-
+        del value_obs_lst
         batch_value_prefixs = np.asarray(batch_value_prefixs)
         batch_values = np.asarray(batch_values)
         return batch_value_prefixs, batch_values
@@ -445,7 +445,7 @@ class BatchWorker_GPU(object):
                     policy_index += 1
 
                 batch_policies_re.append(target_policies)
-
+        del policy_obs_lst
         batch_policies_re = np.asarray(batch_policies_re)
         return batch_policies_re
 

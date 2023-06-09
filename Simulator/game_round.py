@@ -26,8 +26,7 @@ class Game_Round:
         self.NUM_DEAD = 0
         self.current_round = 0
         self.matchups = []
-        if self.log:
-            log_to_file_start()
+        log_to_file_start(self.log)
 
         self.game_rounds = [
             [self.round_1],
@@ -150,8 +149,7 @@ class Game_Round:
                                 alive.append(other)
                     for other in alive:
                         other.spill_reward(damage / len(alive))
-        if self.log:
-            log_to_file_combat()
+        log_to_file_combat(self.log)
         return True
 
     def decide_player_combat(self):
@@ -233,13 +231,12 @@ class Game_Round:
         self.decide_player_combat()
         for player in self.PLAYERS.values():
             if player:
-                player.start_round(self.current_round)
+                player.start_round(self.current_round, self.log)
 
     def round_1(self):
         carousel(list(self.PLAYERS.values()), self.current_round, self.pool_obj)
         for player in self.PLAYERS.values():
-                if self.log:
-                    log_to_file(player)
+                log_to_file(player, self.log)
                 player.end_turn_actions(fill_board=True)
 
         for player in self.PLAYERS.values():
@@ -251,10 +248,8 @@ class Game_Round:
     def minion_round(self):
         for player in self.PLAYERS.values():
             if player:
-                if self.log:
-                    log_to_file(player)
-        if self.log:
-            log_end_turn(self.current_round)
+                log_to_file(player, self.log)
+        log_end_turn(self.current_round, self.log)
 
         for player in self.PLAYERS.values():
             if player:
@@ -272,17 +267,14 @@ class Game_Round:
             if player:
                 player.end_turn_actions()
                 player.combat = False
-                if self.log:
-                    log_to_file(player)
-        if self.log:
-            log_end_turn(self.current_round)
+                log_to_file(player, self.log)
+        log_end_turn(self.current_round, self.log)
 
         self.combat_phase(self.PLAYERS, self.current_round)
         # Will implement check dead later
         # if self.check_dead(agent, buffer, game_episode):
         #     return True
-        if self.log:
-            log_to_file_combat()
+        log_to_file_combat(self.log)
         return False
 
     # executes carousel round for all players
@@ -290,8 +282,7 @@ class Game_Round:
         carousel(list(self.PLAYERS.values()), self.current_round, self.pool_obj)
         for player in self.PLAYERS.values():
                 if player:
-                    if self.log:
-                        log_to_file(player)
+                    log_to_file(player, self.log)
                     player.refill_item_pool()
 
     def terminate_game(self):
@@ -305,15 +296,15 @@ class Game_Round:
         self.PLAYERS = players
 
 
-def log_to_file_start():
-    if config.LOGMESSAGES:
+def log_to_file_start(write_log=True):
+    if config.LOGMESSAGES and write_log:
         with open('log.txt', "w") as out:
             out.write("Start of a new run")
             out.write('\n')
 
 
-def log_to_file(player):
-    if config.LOGMESSAGES:
+def log_to_file(player, write_log=True):
+    if config.LOGMESSAGES and write_log:
         with open('log.txt', "a") as out:
             for line in player.log:
                 out.write(str(line))
@@ -321,16 +312,16 @@ def log_to_file(player):
     player.log = []
 
 
-def log_end_turn(game_round):
-    if config.LOGMESSAGES:
+def log_end_turn(game_round, write_log=True):
+    if config.LOGMESSAGES and write_log:
         with open('log.txt', "a") as out:
             out.write("END OF ROUND " + str(game_round))
             out.write('\n')
 
 
 # This one is for the champion and logging the battles.
-def log_to_file_combat():
-    if config.LOGMESSAGES and config.LOG_COMBAT:
+def log_to_file_combat(write_log=True):
+    if config.LOGMESSAGES and config.LOG_COMBAT and write_log:
         with open('log.txt', "a") as out:
             if len(champion.log) > 0:
                 if MILLIS() < 75000:

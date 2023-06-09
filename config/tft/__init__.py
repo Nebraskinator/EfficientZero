@@ -26,7 +26,7 @@ class TFTConfig(BaseConfig):
             dirichlet_alpha=0.3,
             value_delta_max=0.01,
             num_simulations=40,
-            batch_size=64,
+            batch_size=32,
             td_steps=10,
             num_actors=1,
             # network initialization/ & normalization
@@ -43,9 +43,9 @@ class TFTConfig(BaseConfig):
             lr_decay_steps=100000,
             auto_td_steps_ratio=0.3,
             # replay window
-            start_transitions=20000,
+            start_transitions=40000,
             total_transitions=10000 * 1000,
-            transition_num=50000,
+            transition_num=45000,
             # frame skip & stack observation
             gray_scale=False,
             frame_skip=1,

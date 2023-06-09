@@ -381,7 +381,7 @@ def _train(models, target_models, replay_buffers, shared_storage, mcts_storage, 
     # while loop
     while any([step_counts[m] < config.training_steps + config.last_steps for m in range(config.num_models)]):
         # remove data if the replay buffer is full. (more data settings)
-        if step_counts[curr_model] % 1000 == 0:
+        if step_counts[curr_model] % 200 == 0:
             replay_buffers[curr_model].remove_to_fit.remote()
 
         # obtain a batch
@@ -438,6 +438,8 @@ def _train(models, target_models, replay_buffers, shared_storage, mcts_storage, 
                 curr_model = 0
             print('training model '+str(curr_model))
             shared_storage.set_current_model.remote(curr_model)
+            
+        
 
     shared_storage.set_weights.remote(models[curr_model].get_weights(), curr_model)
     time.sleep(30)

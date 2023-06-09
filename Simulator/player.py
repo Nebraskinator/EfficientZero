@@ -1067,7 +1067,7 @@ class Player:
         else:
             obs[:, :, 1] = 255
             obs[6, 8, 3 + np.clip(self.gold // 10, 0, 5)] = 255
-        return obs
+        return obs.astype(int)
         
 
     """
@@ -2080,7 +2080,7 @@ class Player:
                     current game round
     """
     # TODO Organize methods to be alphabetical so people can find what they are looking for in this file. This file only
-    def start_round(self, t_round):
+    def start_round(self, t_round, log=True):
         self.start_time = time.time_ns()
         self.round = t_round
         self.reward += self.num_units_in_play * self.minion_count_reward
@@ -2095,10 +2095,11 @@ class Player:
                 self.thieves_gloves(x[0], x[1])
         self.actions_taken_this_round = 0
         self.selection = None
-        self.printComp()
-        self.printBench()
-        self.printItemBench()
-        self.printShop(self.shop)
+        if log:
+            self.printComp()
+            self.printBench()
+            self.printItemBench()
+            self.printShop(self.shop)
 
     """
     Description - Returns true if there are no possible actions in the state

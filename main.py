@@ -32,7 +32,7 @@ if __name__ == '__main__':
     parser.add_argument('--save_video', action='store_true', default=True, help='save video in test.')
     parser.add_argument('--force', action='store_true', default=False,
                         help='Overrides past results (default: %(default)s)')
-    parser.add_argument('--cpu_actor', type=int, default=8, help='batch cpu actor')
+    parser.add_argument('--cpu_actor', type=int, default=6, help='batch cpu actor')
     # test works uses 0.125 GPU
     parser.add_argument('--gpu_actor', type=int, default=2, help='batch gpu actor (0.125)')
     parser.add_argument('--selfplay_actor', type=int, default=3, help='selfplay gpu actor (0.125)')
