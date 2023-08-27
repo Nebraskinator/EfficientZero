@@ -45,12 +45,15 @@ class GameHistory:
         """
         self.action_space = action_space
         self.max_length = max_length
-        self.config = config
 
-        self.stacked_observations = config.stacked_observations
-        self.discount = config.discount
-        self.action_space_size = config.action_space_size
-        self.zero_obs_shape = zero_obs_shape
+        self.stacked_observations = copy.deepcopy(config.stacked_observations)
+        self.discount = copy.deepcopy(config.discount)
+        self.action_space_size = copy.deepcopy(config.action_space_size)
+        self.zero_obs_shape = copy.deepcopy(zero_obs_shape)
+        self.num_unroll_steps = copy.deepcopy(config.num_unroll_steps)
+        self.td_steps = copy.deepcopy(config.td_steps)
+        self.cvt_string = copy.deepcopy(config.cvt_string)
+        self.gray_scale = copy.deepcopy(config.gray_scale)
 
         self.child_visits = []
         self.root_values = []
@@ -97,10 +100,10 @@ class GameHistory:
         next_block_child_visits: list
             root visit count distributions of MCTS from the next history block
         """
-        assert len(next_block_observations) <= self.config.num_unroll_steps
-        assert len(next_block_child_visits) <= self.config.num_unroll_steps
-        assert len(next_block_root_values) <= self.config.num_unroll_steps + self.config.td_steps
-        assert len(next_block_rewards) <= self.config.num_unroll_steps + self.config.td_steps - 1
+        assert len(next_block_observations) <= self.num_unroll_steps
+        assert len(next_block_child_visits) <= self.num_unroll_steps
+        assert len(next_block_root_values) <= self.num_unroll_steps + self.td_steps
+        assert len(next_block_rewards) <= self.num_unroll_steps + self.td_steps - 1
 
         # notice: next block observation should start from (stacked_observation - 1) in next trajectory
         for observation in next_block_observations:
@@ -139,14 +142,14 @@ class GameHistory:
         padding: bool
             True -> padding frames if (t + stack frames) are out of trajectory
         """
-        frames = ray.get(self.obs_history)[i:i + self.stacked_observations + extra_len]
+        frames = self.obs_history[i:i + self.stacked_observations + extra_len]
         if padding:
             pad_len = self.stacked_observations + extra_len - len(frames)
             if pad_len > 0:
                 pad_frames = [frames[-1] for _ in range(pad_len)]
                 frames = np.concatenate((frames, pad_frames))
-        if self.config.cvt_string:
-            frames = [str_to_arr(obs, self.config.gray_scale) for obs in frames]
+        if self.cvt_string:
+            frames = [str_to_arr(obs, self.gray_scale) for obs in frames]
         return frames
 
     def zero_obs(self):
@@ -157,8 +160,8 @@ class GameHistory:
         # return an observation of correct format for model inference
         index = len(self.rewards)
         frames = self.obs_history[index:index + self.stacked_observations]
-        if self.config.cvt_string:
-            frames = [str_to_arr(obs, self.config.gray_scale) for obs in frames]
+        if self.cvt_string:
+            frames = [str_to_arr(obs, self.gray_scale) for obs in frames]
         return frames
 
     def get_targets(self, i):
@@ -169,19 +172,20 @@ class GameHistory:
         # post processing the data when a history block is full
         # obs_history should be sent into the ray memory. Otherwise, it will cost large amounts of time in copying obs.
         self.rewards = np.array(self.rewards)
-        self.obs_history = ray.put(np.array(self.obs_history))
+        self.obs_history = np.array(self.obs_history)
         self.actions = np.array(self.actions)
         self.child_visits = np.array(self.child_visits)
         self.root_values = np.array(self.root_values)
+        return
 
     def store_search_stats(self, visit_counts, root_value, idx: int = None):
         # store the visit count distributions and value of the root node after MCTS
         sum_visits = sum(visit_counts)
         if idx is None:
-            self.child_visits.append([visit_count / sum_visits for visit_count in visit_counts])
+            self.child_visits.append(visit_counts / sum_visits)
             self.root_values.append(root_value)
         else:
-            self.child_visits[idx] = [visit_count / sum_visits for visit_count in visit_counts]
+            self.child_visits[idx] = visit_counts / sum_visits
             self.root_values[idx] = root_value
 
     def __len__(self):

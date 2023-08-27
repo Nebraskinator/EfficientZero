@@ -45,8 +45,9 @@ class TFT_Simulator(AECEnv):
         self.num_players = config.NUM_PLAYERS
         self.log = log
         self.previous_rewards = {"player_" + str(player_id): 0 for player_id in range(config.NUM_PLAYERS)}
-        self.image_channel = 195
-        self.obs_shape = (self.num_players, 7, 9, self.image_channel)
+        self.image_channel = 167
+        self.action_depth = 38
+        self.obs_shape = (self.num_players, 14, 4, self.image_channel)
         self.step_function = Step_Function(self.pool_obj)
         self.game_round = Game_Round(self.PLAYERS, self.pool_obj, self.step_function, self.log)
         self.actions_taken = 0
@@ -115,9 +116,9 @@ class TFT_Simulator(AECEnv):
 
     @functools.lru_cache(maxsize=None)
     def action_space(self, agent: str) -> gym.spaces.Space:
-        return 7*9*38
+        return 14*4*38
     def action_space_size(self):
-        return 7*9*38
+        return 14*4*38
     def check_dead(self):
         num_alive = 0
         for key, player in self.PLAYERS.items():
@@ -421,7 +422,7 @@ class TFT_Simulator(AECEnv):
         for p in list(self.PLAYERS.keys()):
             if p != player:
                 if self.PLAYERS[p].is_alive:
-                    obs[cnt] = self.public_observations[p]
+                    obs[cnt] = self.public_observations[p].copy()
                 cnt += 1
         return obs.astype(int)
 
@@ -439,6 +440,7 @@ class TFT_Simulator(AECEnv):
                 if self.PLAYERS[p].health <= 0:
                     self.PLAYERS[p].is_alive = False
                     self.live_agents.remove(p)
+                    self.PLAYERS[p].lost_game(len(self.live_agents))
                     self.PLAYERS[p].taking_actions = False
                     dones[p] = True
                 else:

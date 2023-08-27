@@ -35,6 +35,8 @@ class Player:
         self.exp = 0
         self.health = 100
         self.player_num = player_num
+        
+        self.ai = PlayerAI(self)
 
         self.win_streak = 0  # For purposes of gold generation at start of turn
         self.loss_streak = 0  # For purposes of gold generation at start of turn
@@ -126,9 +128,10 @@ class Player:
         self.mistake_reward = 0
         self.level_reward = 0
         self.item_reward = 0
-        self.won_game_reward = 100
+        self.won_game_reward = 1
         self.prev_rewards = 0
-        self.damage_reward = 1
+        self.damage_reward = 0
+        self.excess_gold_reward = 0
 
         # Everyone shares the pool object.
         # Required for buying champions to and from the pool
@@ -279,6 +282,13 @@ class Player:
     def pass_turn(self):
         self.taking_actions = False
         self.print("passing turn; no actions until next combat")
+        
+    """
+    Description - Used to flag player as passing turns until after next combat
+    """
+    # TODO: change self play to ignore passing players during MCTS
+    def pass_action(self):
+        self.print("no action")
 
     """
     Description - Single player step function to take actions
@@ -385,13 +395,13 @@ class Player:
                 num_buys = math.ceil(exp_to_level / self.exp_per_buy)
                 self.buy_exp(num_buys)
         elif action == 0:
-            self.pass_turn()
+            self.pass_action()
         self.actions_taken_this_round += 1
 
     def take_action_single(self, action):
-        x, y, z = action // 38 // 9, action // 38 % 9, action % 38
+        x, y, z = action // 38 // 4, action // 38 % 4, action % 38
         self.print("action: {}, x: {}, y: {}, z: {}".format(action, x, y, z))
-        if x < 7 and y < 4:
+        if x < 7:
             if self.board[x][y]:
                 if z < 28:
                     dest_x, dest_y = z // 4, z % 4
@@ -402,8 +412,8 @@ class Player:
                     self.move_board_to_bench(x, y, x_bench)
                 else:
                     self.sell_champion(self.board[x][y], field=True)
-        elif x <= 1 and 4 <= y < 9:
-            x_bench = 5*x + y - 4
+        elif 7 <= x <= 9 and (x-7) * 4 + y < 9:
+            x_bench = (x-7) * 4 + y
             if x_bench < len(self.bench) and self.bench[x_bench]:
                 if z < 28:
                     dest_x, dest_y = z // 4, z % 4
@@ -413,18 +423,9 @@ class Player:
                     if x_bench != dest_x:
                         self.move_bench_to_bench(x_bench, dest_x)
                 else:
-                    self.sell_from_bench(x_bench)            
-        elif 2 <= x <= 3 and 4 <= y < 9:
-            x_itembench = 5 * (x - 2) + y - 4
-            if self.item_bench[x_itembench]:
-                if z < 28:
-                    dest_x, dest_y = z // 4, z % 4
-                    self.move_item_to_board(x_itembench, dest_x, dest_y)
-                elif z < 37:
-                    dest_x = z - 28
-                    self.move_item_to_bench(x_itembench, dest_x)
-        elif x == 4 and 4 <= y < 9:
-            x_shop = y - 4
+                    self.sell_from_bench(x_bench)      
+        elif 9 <= x <= 10 and (x-9) * 4 + y - 1 < 5:
+            x_shop = (x-9) * 4 + y - 1
             success = False
             if not self.shop[x_shop]:
                 self.reward += self.mistake_reward
@@ -440,24 +441,36 @@ class Player:
                 self.print("champions in play: "+str(self.num_units_in_play))
             if success:
                 self.shop[x_shop] = None
-        elif x == 5 and y == 4 and self.round > 1:
+        elif 10 <= x <= 12:
+            x_itembench = (x-10) * 4 + y - 2
+            if self.item_bench[x_itembench]:
+                if z < 28:
+                    dest_x, dest_y = z // 4, z % 4
+                    self.move_item_to_board(x_itembench, dest_x, dest_y)
+                elif z < 37:
+                    dest_x = z - 28
+                    self.move_item_to_bench(x_itembench, dest_x)
+
+        elif x == 13 and y == 0 and self.round > 1:
             if self.refresh():
                 self.shop = self.pool_obj.sample(self, 5)
                 self.printShop(self.shop)
-        elif x == 5 and y == 5 and self.round > 1:
+        elif x == 13 and y == 1 and self.round > 1:
             self.buy_exp()
+
+        elif x == 13 and y == 3:
+            self.pass_action() 
+        '''
         elif x == 5 and y == 6 and self.round > 1:
             exp_to_level = 0
             if self.level < self.max_level:
                 exp_to_level = self.level_costs[self.level] - self.exp
                 num_buys = math.ceil(exp_to_level / self.exp_per_buy)
-                self.buy_exp(num_buys)        
-        elif x == 5 and y == 7:
-            self.pass_turn() 
-
+                self.buy_exp(num_buys) 
+        '''
             
     def generate_action_mask_single(self):
-        mask = np.zeros((7, 9, 38))
+        mask = np.zeros((14, 4, 38))
         for y in range(4):
             for x in range(7):
                 if self.board[x][y]:
@@ -465,7 +478,7 @@ class Player:
                     mask[x, y, x*4 + y] = 0
         for x_bench in range(len(self.bench)):
             if self.bench[x_bench]:
-                x, y = x_bench // 5, 4 + x_bench % 5
+                x, y = x_bench // 4 + 7, x_bench % 4
                 if self.num_units_in_play < self.max_units:
                     mask[x, y, :] = 1                    
                 else:
@@ -477,7 +490,7 @@ class Player:
                 mask[x, y, 28 + x_bench] = 0
         for x_itembench, item in enumerate(self.item_bench):
             if item:
-                x, y = x_itembench // 5 + 2, 4 + x_itembench % 5 
+                x, y = (x_itembench + 2) // 4 + 10, (x_itembench + 2) % 4 
                 for board_y in range(4):
                     for board_x in range(7):
                         if self.board[board_x][board_y] and len(self.board[board_x][board_y].items) < 3:
@@ -487,7 +500,7 @@ class Player:
                         mask[x, y, 28 + x_bench] = 1
         for x_shop in range(5):
             if self.shop[x_shop]:
-                x, y = 4, 4 + x_shop % 5
+                x, y = (x_shop + 1) // 4 + 9, (x_shop + 1) % 4
                 champ_name = self.shop[x_shop].split('_')[0]
                 level = 1
                 cost = COST[champ_name]
@@ -502,17 +515,19 @@ class Player:
                     else:
                         mask[x, y, 28] = 1
         if self.gold >= 4:
-            mask[5, 5, 0] = 1
+            mask[-1, 1, 0] = 1
         if self.gold >= 2:
-            mask[5, 4, 0] = 1
+            mask[-1, 0, 0] = 1
+        '''
         exp_to_level = 0
         if self.level < self.max_level:
             exp_to_level = self.level_costs[self.level] - self.exp
             num_buys = math.ceil(exp_to_level / self.exp_per_buy)
             if self.gold >= num_buys * self.exp_cost:
                 mask[5, 6, 0] = 1
-        mask[5, 7, 0] = 1
-        return np.reshape(mask, 7*9*38)
+        '''
+        mask[-1, 3, 0] = 1
+        return np.reshape(mask, 14*4*38)
         
 
     def generate_action_mask(self):
@@ -958,7 +973,7 @@ class Player:
             stat_emb[2] = np.clip(stat_emb[2], 0, 255)
             stat_emb[3] = np.clip(stat_emb[3], 0, 255)
             stat_emb[4] = np.clip(stat_emb[4] * 400, 0, 255)
-            stat_emb[5] = np.clip(stat_emb[5] * (255/6000), 0, 255)
+            stat_emb[5] = np.clip((stat_emb[5]**0.5) * (255/(6000**0.5)), 0, 255)
             stat_emb[6] = np.clip(stat_emb[6] * 51, 0, 255)
             stat_emb[7] = np.clip(stat_emb[7] * 128, 0, 255)
             
@@ -995,78 +1010,115 @@ class Player:
             stat_emb[2] = np.clip(stat_emb[2], 0, 255)
             stat_emb[3] = np.clip(stat_emb[3], 0, 255)
             stat_emb[4] = np.clip(stat_emb[4] * 400, 0, 255)
-            stat_emb[5] = np.clip(stat_emb[5] * (255/6000), 0, 255)
+            stat_emb[5] = np.clip((stat_emb[5]**0.5) * (255/(6000**0.5)), 0, 255)
             stat_emb[6] = np.clip(stat_emb[6] * 51, 0, 255)
             stat_emb[7] = np.clip(stat_emb[7] * 128, 0, 255)
             
             embedding[154:] = stat_emb
             return embedding
                 
-        obs = np.zeros((7, 9, 195))
+        obs = np.zeros((14, 4, 167))
         for y in range(0, 4):
             # IMPORTANT TO HAVE THE X INSIDE -- Silver is not sure why but ok.
             for x in range(0, 7):
                 # when using binary encoding (6 champ  + stars + chosen + 3 * 6 item) = 26
-                obs[x, y, 3] = 255
+                obs[x, y, 1] = 255
                 if self.board[x][y]:                    
                     curr_champ = self.board[x][y]                        
-                    obs[x, y, 7 : 169] = embed_champion(curr_champ)
-                    obs[x, y, 2] = 255
+                    obs[x, y, 5 : 167] = embed_champion(curr_champ)
+                    obs[x, y, 0] = 255
 
         for x_bench in range(len(self.bench)):
-            x, y = x_bench // 5, 4 + x_bench % 5
-            obs[x, y, 4] = 255
+            x, y = x_bench // 4 + 7, x_bench % 4
+            obs[x, y, 2] = 255
             if self.bench[x_bench]:
                 curr_champ = self.bench[x_bench]                        
-                obs[x, y, 7 : 169] = embed_champion(curr_champ)
-                obs[x, y, 2] = 255
+                obs[x, y, 5 : 167] = embed_champion(curr_champ)
+                obs[x, y, 0] = 255
         for ind, item in enumerate(self.item_bench):
-            x, y = ind // 5 + 2, 4 + ind % 5
-            obs[x, y, 5] = 255
+            x, y = (ind + 2) // 4 + 10, (ind + 2) % 4
+            #obs[x, y, 5] = 255
             if item and list(items).index(item):
-                obs[x, y, 7 : 169] = embed_item(item)
-                obs[x, y, 2] = 255
+                obs[x, y, 1 : 163] = embed_item(item)
+                obs[x, y, 0] = 255
         if private:
             for x_shop in range(len(self.shop)):
-                x, y = 4, 4 + x_shop % 5
-                obs[x, y, 6] = 255
+                x, y = (x_shop + 1) // 4 + 9, (x_shop + 1) % 4
+                obs[x, y, 3] = 255
                 if self.shop[x_shop]:
                     curr_champ = self.shop[x_shop]  
                     origin = False                      
                     if curr_champ.endswith('_c'):
                         curr_champ, origin = curr_champ.split('_')[:2]
                     curr_champ = champion.champion(curr_champ, chosen=origin)
-                    obs[x, y, 7 : 169] = embed_champion(curr_champ)     
-                    obs[x, y, 169 + COST[curr_champ.name]] = 255
-                    obs[x, y, 2] = 255
+                    obs[x, y, 5 : 167] = embed_champion(curr_champ)     
+                    obs[x, y, 94 + 5 + COST[curr_champ.name]] = 255
+                    obs[x, y, 0] = 255
 
-        for i, origin in enumerate(tiers):
-            d = i + 169
-            obs[:, :4, d] = self.team_tiers[origin] / 4 * 255
+        vector = np.zeros(0)
+        for origin in tiers:
+            temp = np.zeros(4)
+            temp2 = np.zeros(10)
+            temp[self.team_tiers[origin]] = 255
+            temp2[self.team_composition[origin]] = 255
+            vector = np.concatenate([vector, temp, temp2])
+            #obs[:, :4, d] = self.team_tiers[origin] / 4 * 255
             
-        obs[5, 5:7, 2 + self.level] = 255
-        obs[5, 5:7, 12 + self.max_units] = 255
-        obs[5, 5:7, 24 + self.max_units - self.num_units_in_play] = 255
-        obs[6, 4, 3 + self.round] = 255
+        level_v = np.zeros(9)
+        level_v[self.level - 1] = 255
+        #obs[5, 5:7, 2 + self.level] = 255
+        max_unit_v = np.zeros(11)
+        max_unit_v[self.max_units - 1] = 255
+        #obs[5, 5:7, 12 + self.max_units] = 255
+        unfilled_v = np.zeros(11)
+        unfilled_v[self.max_units - self.num_units_in_play] = 255
+        units_v = np.zeros(12)
+        units_v[self.num_units_in_play] = 255
+        #obs[5, 5:7, 24 + self.max_units - self.num_units_in_play] = 255
+        round_v = np.zeros(50)
+        round_v[self.round] = 255
+        #obs[6, 4, 3 + self.round] = 255
+        hp_v = np.zeros(22)
         hp, rem = self.health // 5, self.health % 5
-        obs[6, 5, 3 + hp] = 255 * (5 - rem) / 5
-        obs[6, 5, 3 + hp + 1] = 255 * rem / 5
-        obs[6, 6, 3 + np.clip(self.win_streak, 0, 10)] = 255
-        obs[6, 6, 12 + np.clip(self.loss_streak, 0, 10)] = 255
+        hp_v[hp] = 255 * (5 - rem) / 5
+        hp_v[hp+1] = 255 * rem / 5
+        #obs[6, 5, 3 + hp] = 255 * (5 - rem) / 5
+        #obs[6, 5, 3 + hp + 1] = 255 * rem / 5
+        win_v = np.zeros(11)
+        loss_v = np.zeros(11)
+        win_v[np.clip(self.win_streak, 0, 10)] = 255
+        loss_v[np.clip(self.loss_streak, 0, 10)] = 255
+        #obs[6, 6, 3 + np.clip(self.win_streak, 0, 10)] = 255
+        #obs[6, 6, 12 + np.clip(self.loss_streak, 0, 10)] = 255
 
+        gold_v = np.zeros(11)
+        xp_v = np.zeros(45)
+        actions_v = np.zeros(20)
         if private:
-            obs[:, :, 0] = 255
-            gold, rem = self.gold // 10, self.gold % 10
-            obs[5, 8, 3 + gold] = 255 * (10 - rem) / 10
-            obs[5, 8, 3 + gold + 1] = 255 * rem / 10
+            #obs[:, :, 0] = 255
+            gold, rem = np.clip(self.gold // 10, 0, 9), self.gold % 10
+            gold_v[gold] = 255 * (10 - rem) / 10
+            gold_v[gold+1] = 255 * rem / 10
+            #obs[5, 8, 3 + gold] = 255 * (10 - rem) / 10
+            #obs[5, 8, 3 + gold + 1] = 255 * rem / 10
             exp_to_level = 0
             if self.level < self.max_level:
                 exp_to_level = self.level_costs[self.level] - self.exp
-            obs[5, 5:7, 34 + exp_to_level // 2] = 255
-            obs[6, 7, 3 + self.actions_per_round - self.actions_taken_this_round ] = 255
+            xp_v[np.clip(exp_to_level // 2, 0, 44)] = 255
+            #obs[5, 5:7, 34 + exp_to_level // 2] = 255
+            actions_v[np.clip(self.actions_per_round - self.actions_taken_this_round, 0, 19)] = 255
+            #obs[6, 7, 3 + self.actions_per_round - self.actions_taken_this_round ] = 255
         else:
-            obs[:, :, 1] = 255
-            obs[6, 8, 3 + np.clip(self.gold // 10, 0, 5)] = 255
+            #obs[:, :, 1] = 255
+            #obs[6, 8, 3 + np.clip(self.gold // 10, 0, 5)] = 255
+            gold_v[np.clip(self.gold // 10, 0, 5)] = 255
+            
+        vector = np.concatenate([level_v, max_unit_v, unfilled_v, units_v, round_v,
+                                 hp_v, win_v, loss_v, gold_v, xp_v, actions_v])
+        # vector size is 576
+        for i in range(len(vector) // obs.shape[-1] + (1 if len(vector) % obs.shape[-1] else 0)):
+            temp = vector[i*obs.shape[-1] : (i+1)*obs.shape[-1]]
+            obs[-1, i, :len(temp)] = temp 
         return obs.astype(int)
         
 
@@ -2084,6 +2136,8 @@ class Player:
         self.start_time = time.time_ns()
         self.round = t_round
         self.reward += self.num_units_in_play * self.minion_count_reward
+        if self.gold > 70:
+            self.reward += self.excess_gold_reward
         self.gold_income(self.round)
         #self.generate_player_vector()
         if self.kayn_check():
@@ -2094,6 +2148,7 @@ class Player:
             if (x[1] != -1 and self.board[x[0]][x[1]]) or self.bench[x[0]]:
                 self.thieves_gloves(x[0], x[1])
         self.actions_taken_this_round = 0
+        self.ai.reset_phase()
         self.selection = None
         if log:
             self.printComp()
@@ -2291,6 +2346,11 @@ class Player:
     def won_game(self):
         self.reward += self.won_game_reward
         self.print("+0 reward for winning game")
+        
+    def lost_game(self, num_players):
+        if num_players >= 4:
+            self.reward -= self.won_game_reward
+        self.print("-0 reward for losing game")
 
     """
     Description - Same as loss_round but if the opponent was a ghost
@@ -2338,3 +2398,298 @@ class Player:
                     return
                 self.gold += math.ceil(fortune_returns[self.fortune_loss_streak])
                 self.fortune_loss_streak = 0
+
+
+class PlayerAI:
+    # Explanation - We may switch to a class config for the AI side later so separating the two now is highly useful.
+    def __init__(self, player):
+        self.player = player
+        self.phase = 0
+        self.save = False
+        self.comp = self.make_random_comp()
+        
+    def make_random_comp(self):
+        k = {c: [] for c in range(1, 6)}
+        for key, item in COST.items():
+            if item:
+                k[item].append(key)
+        comp = []
+        for i in range(1, 5):
+            comp += np.random.choice(k[i], 2).tolist()
+        comp.append(np.random.choice(k[5]))
+        return comp
+        
+    def next_phase(self):
+        if self.phase < 7:
+            self.phase += 1
+        
+    def reset_phase(self):
+        self.phase = 0
+        
+    def get_action(self):
+        # buy wanted champions
+        if self.phase == 0:
+            return self.phase_0()
+        # level up
+        elif self.phase == 1:
+            return self.phase_1()
+        # buy random champion if total num champions < max team size
+        elif self.phase == 2:
+            return self.phase_2()
+        # fill board with non-duplicate champions
+        elif self.phase == 3:
+            return self.phase_3()
+        # check if bench needs to be sold
+        elif self.phase == 4:
+            return self.phase_4()
+        # roll excess gold to search for wanted champions
+        elif self.phase == 5:
+            return self.phase_5()
+        # place items
+        elif self.phase == 6:
+            return self.phase_6()
+        # pass
+        else:
+            return self.phase_7()
+    
+    def phase_0(self):
+        for i, c in enumerate(self.player.shop):
+            if c:
+                champ_name = c.split('_')[0]
+                if champ_name in self.comp:   
+                    go = True
+                    for trip in self.player.triple_catalog:
+                        if trip['name'] == champ_name and trip['level'] == 3:
+                            go = False
+                            break
+                    if go:
+                        level = 1
+                        cost = COST[champ_name]
+                        if c.endswith('_c'):
+                            cost = cost_star_values[cost - 1][1]
+                            level = 2
+                        if cost <= self.player.gold:
+                            if self.player.bench_full():
+                                for trip in self.player.triple_catalog:
+                                    if trip['name'] == champ_name and trip['num'] == 2 and trip['level'] == level:
+                                        return self.buy(i)
+                            else:
+                                return self.buy(i)
+        
+        self.next_phase()
+        return self.get_action()
+        
+    def phase_1(self):
+        if self.player.round < 4:
+            self.next_phase()
+            return self.get_action()
+        elif self.player.level < 4:
+            if self.player.gold < self.player.exp_cost:
+                self.save = True
+                self.next_phase()
+                return self.get_action()
+            else:
+                self.save = False
+                return self.xp()
+        elif self.player.level < 5 and self.player.round > 6:
+            if self.player.gold < self.player.exp_cost:
+                self.save = True
+                self.next_phase()
+                return self.get_action()
+            else:
+                self.save = False
+                return self.xp()
+        elif self.player.level < 6 and self.player.round > 12:
+            if self.player.gold < self.player.exp_cost:
+                self.save = True
+                self.next_phase()
+                return self.get_action()
+            else:
+                self.save = False
+                return self.xp()
+        elif self.player.level < 7 and self.player.round > 16:
+            if self.player.gold < self.player.exp_cost:
+                self.save = True
+                self.next_phase()
+                return self.get_action()
+            else:
+                self.save = False
+                return self.xp()
+        elif self.player.level < 8 and self.player.round > 22:
+            if self.player.gold < self.player.exp_cost:
+                self.save = True
+                self.next_phase()
+                return self.get_action()
+            else:
+                self.save = False
+                return self.xp()
+        elif self.player.level < 9 and self.player.round > 28:
+            if self.player.gold < self.player.exp_cost:
+                self.save = True
+                self.next_phase()
+                return self.get_action()
+            else:
+                self.save = False
+                return self.xp()
+        else:
+            self.next_phase()
+            return self.get_action()
+    
+    def phase_2(self):
+        self.next_phase()
+        if self.player.bench_full():
+            return self.get_action()
+        champs = []
+        for row in self.player.board:
+            for c in row:
+                if c and c.name not in champs:
+                    champs.append(c.name)
+        for c in self.player.bench:
+            if c and c.name not in champs:
+                champs.append(c.name)
+        if len(champs) < self.player.max_units:
+            for i, c in enumerate(self.player.shop):
+                if c:
+                    champ_name = c.split('_')[0]
+                    if c not in champs:
+                        cost = COST[champ_name]
+                        if c.endswith('_c'):
+                            cost = cost_star_values[cost - 1][1]
+                        if cost <= self.player.gold:
+                            if not self.player.bench_full():
+                                return self.buy(i)
+        return self.get_action()
+        
+    def phase_3(self):
+        board_comp = []
+        board_other = []
+        for row in self.player.board:
+            for c in row:
+                if c:
+                    if c.name in self.comp:
+                        board_comp.append(c)
+                    else:
+                        board_other.append(c)
+        if self.player.num_units_in_play < self.player.max_units:
+            for i, c in enumerate(self.player.bench):
+                if c and c.name not in [ii.name for ii in board_comp + board_other]:
+                    return self.place(i, None, None)
+        elif board_other:
+            for i, c in enumerate(self.player.bench):
+                if c and c.name not in [ii.name for ii in board_comp + board_other] and c.name in self.comp:
+                    return self.place(i, board_other[0].x, board_other[0].y)
+        self.next_phase()
+        return self.get_action()
+    
+    def phase_4(self):
+        for i, c in enumerate(self.player.bench):
+            if c and c.name not in self.comp:
+                return self.sell(i)
+        self.next_phase()
+        return self.get_action()
+    
+    def phase_5(self):
+        if not self.save:
+            for i, c in enumerate(self.player.shop):
+                if c:
+                    champ_name = c.split('_')[0]
+                    if champ_name in self.comp:    
+                        go = True
+                        for trip in self.player.triple_catalog:
+                            if trip['name'] == champ_name and trip['level'] == 3:
+                                go = False
+                                break
+                        if go:
+                            level = 1
+                            cost = COST[champ_name]
+                            if c.endswith('_c'):
+                                cost = cost_star_values[cost - 1][1]
+                                level = 2
+                            if cost <= self.player.gold:
+                                if self.player.bench_full():
+                                    for trip in self.player.triple_catalog:
+                                        if trip['name'] == champ_name and trip['num'] == 2 and trip['level'] == level:
+                                            return self.buy(i)
+                                else:
+                                    return self.buy(i)            
+            if self.player.gold > max(12, min(self.player.round * 2, 42)):
+                return self.roll()
+            
+        self.next_phase()
+        return self.get_action()
+    
+    def phase_6(self):
+        for i, item in enumerate(self.player.item_bench):
+            if item:
+                return self.place_item(i)
+        self.next_phase()
+        return self.get_action()
+    
+    def phase_7(self):
+        return self.idle()
+    
+    def idle(self):
+        return 2090
+    
+    def place_item(self, item_slot):
+        self.next_phase()
+        x, y = (item_slot + 2) // 4 + 10, (item_slot + 2) % 4
+        slots = []
+        for board_y in range(4):
+            for board_x in range(7):
+                if self.player.board[board_x][board_y] and len(self.player.board[board_x][board_y].items) < 3:
+                    z = board_x*4 + board_y
+                    slots.append(z + 38*y + 38*4*x)
+        if slots:
+            return np.random.choice(slots)
+        else:
+            return self.idle()
+        
+    def roll(self):
+        return 38*4*14 - 38*4
+    
+    def buy(self, shop_slot):
+        x, y = (shop_slot + 1) // 4 + 9, (shop_slot + 1) % 4
+        z = 28
+        return z + 38*y + 38*4*x
+    
+    def sell(self, bench_slot):
+        x, y = bench_slot // 4 + 7, bench_slot % 4
+        z = 37
+        return z + 38*y + 38*4*x
+    
+    def place(self, bench_slot, x, y):
+        if x == None or y == None:
+            free = []
+            for x_0, row in enumerate(self.player.board):
+                for y_0, champ in enumerate(row):
+                    if not champ:
+                        free.append([x_0, y_0])
+            x, y = free[np.random.randint(len(free))]                
+        z = x*4 + y
+        x, y = bench_slot // 4 + 7, bench_slot % 4
+        
+        return z + 38*y + 38*4*x
+    
+    def xp(self):
+        return 38*4*14 - 38*3
+            
+            
+    
+            
+                
+            
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        

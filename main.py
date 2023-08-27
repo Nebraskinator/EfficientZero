@@ -32,10 +32,10 @@ if __name__ == '__main__':
     parser.add_argument('--save_video', action='store_true', default=True, help='save video in test.')
     parser.add_argument('--force', action='store_true', default=False,
                         help='Overrides past results (default: %(default)s)')
-    parser.add_argument('--cpu_actor', type=int, default=6, help='batch cpu actor')
+    parser.add_argument('--cpu_actor', type=int, default=7, help='batch cpu actor')
     # test works uses 0.125 GPU
-    parser.add_argument('--gpu_actor', type=int, default=2, help='batch gpu actor (0.125)')
-    parser.add_argument('--selfplay_actor', type=int, default=3, help='selfplay gpu actor (0.125)')
+    parser.add_argument('--gpu_actor', type=int, default=1, help='batch gpu actor (0.125)')
+    parser.add_argument('--selfplay_actor', type=int, default=2, help='selfplay gpu actor (0.125)')
     parser.add_argument('--p_mcts_num', type=int, default=4, help='number of parallel mcts')
     parser.add_argument('--seed', type=int, default=0, help='seed (default: %(default)s)')
     parser.add_argument('--num_gpus', type=int, default=1, help='gpus available')
@@ -56,14 +56,14 @@ if __name__ == '__main__':
     parser.add_argument('--info', type=str, default='none', help='debug string')
     parser.add_argument('--load_model', action='store_true', default=False, help='choose to load model')
     parser.add_argument('--model_path', type=str, default='./results/test_model.p', help='load model path')
-    parser.add_argument('--object_store_memory', type=int, default=105 * 1024 * 1024 * 1024, help='object store memory')
+    parser.add_argument('--object_store_memory', type=int, default=50 * 1024 * 1024 * 1024, help='object store memory')
 
     # Process arguments
     args = parser.parse_args()
     args.device = 'cuda' if (not args.no_cuda) and torch.cuda.is_available() else 'cpu'
     assert args.revisit_policy_search_rate is None or 0 <= args.revisit_policy_search_rate <= 1, \
         ' Revisit policy search rate should be in [0,1]'
-
+    os.environ["RAY_DEDUP_LOGS"] = "0"
     if args.opr == 'train':
         context = ray.init(num_gpus=args.num_gpus, num_cpus=args.num_cpus,
                  object_store_memory=args.object_store_memory)

@@ -5,6 +5,9 @@ import torch
 import numpy as np
 import core.ctree.cytree as cytree
 
+import copy
+import gc
+
 from torch.cuda.amp import autocast as autocast
 from core.mcts import MCTS
 from core.model import concat_output, concat_output_value
@@ -69,9 +72,10 @@ class BatchWorker_CPU(object):
             traj_len = len(game)
             traj_lens.append(traj_len)
             # off-policy correction: shorter horizon of td steps
-            delta_td = (total_transitions - idx) // config.auto_td_steps
-            td_steps = config.td_steps - delta_td
-            td_steps = np.clip(td_steps, 1, config.td_steps).astype(int)
+            #delta_td = (total_transitions - idx) // config.auto_td_steps
+            #td_steps = config.td_steps - delta_td
+            #td_steps = np.clip(td_steps, 1, config.td_steps).astype(int)
+            td_steps = config.td_steps
             # prepare the corresponding observations for bootstrapped values o_{t+k}
             game_obs = game.obs(state_index + td_steps, config.num_unroll_steps)
             rewards_lst.append(game.rewards)
@@ -88,7 +92,7 @@ class BatchWorker_CPU(object):
                     value_mask.append(0)
                     obs = zero_obs
                 value_obs_lst.append(np.concatenate(obs, 0))
-        #value_obs_lst = ray.put(value_obs_lst)
+        value_obs_lst = ray.put(value_obs_lst)
         reward_value_context = [value_obs_lst, value_mask, state_index_lst, rewards_lst, traj_lens, td_steps_lst]
         return reward_value_context
 
@@ -181,14 +185,11 @@ class BatchWorker_CPU(object):
         for i in range(batch_size):
             game = game_lst[i]
             game_pos = game_pos_lst[i]
-
             _actions = game.actions[game_pos:game_pos + self.config.num_unroll_steps].tolist()
             # add mask for invalid actions (out of trajectory)
             _mask = [1. for i in range(len(_actions))]
             _mask += [0. for _ in range(self.config.num_unroll_steps - len(_mask))]
-
             _actions += [np.random.randint(0, game.action_space_size) for _ in range(self.config.num_unroll_steps - len(_actions))]
-
             # obtain the input observations
             obs_lst.append(game_lst[i].obs(game_pos_lst[i], extra_len=self.config.num_unroll_steps, padding=True))
             action_lst.append(_actions)
@@ -203,9 +204,11 @@ class BatchWorker_CPU(object):
 
         total_transitions = ray.get(self.replay_buffers[self.current_model].get_total_len.remote())
         # obtain the context of value targets
+        
         reward_value_context = self._prepare_reward_value_context(indices_lst, game_lst, game_pos_lst, total_transitions)
         # 0:re_num -> reanalyzed policy, re_num:end -> non reanalyzed policy
         # reanalyzed policy
+        
         if re_num > 0:
             # obtain the context of reanalyzed policy targets
             policy_re_context = self._prepare_policy_re_context(indices_lst[:re_num], game_lst[:re_num], game_pos_lst[:re_num])
@@ -217,10 +220,11 @@ class BatchWorker_CPU(object):
             policy_non_re_context = self._prepare_policy_non_re_context(indices_lst[re_num:], game_lst[re_num:], game_pos_lst[re_num:])
         else:
             policy_non_re_context = None
-        context = self.current_model, reward_value_context, policy_re_context, policy_non_re_context, inputs_batch, weights
-        while self.mcts_storage.get_len() >= self.max_len:
+        context = [self.current_model, reward_value_context, policy_re_context, policy_non_re_context, inputs_batch, weights]
+        while self.mcts_storage.qsize() >= self.max_len:
             time.sleep(0.3)
-        self.mcts_storage.push(context, self.current_model)
+        self.mcts_storage.put(context)
+
 
     def run(self):
         # start making mcts contexts to feed the GPU batch maker
@@ -230,7 +234,7 @@ class BatchWorker_CPU(object):
                 self.current_model = ray.get(self.storage.get_current_model.remote())
                 # wait for starting
                 if not start:
-                    start = ray.get(self.storage.get_start_signal.remote())
+                    start = ray.get(self.storage.get_start_signal.remote(self.current_model))
                     time.sleep(1)
                     continue
     
@@ -242,6 +246,7 @@ class BatchWorker_CPU(object):
                 beta = self.beta_schedule.value(trained_steps)
                 # obtain the batch context from replay buffer
                 batch_context = ray.get(self.replay_buffers[self.current_model].prepare_batch_context.remote(self.config.batch_size, beta))
+                batch_context  = copy.deepcopy(batch_context)
                 # break
                 if trained_steps >= self.config.training_steps + self.config.last_steps:
                     time.sleep(30)
@@ -251,10 +256,9 @@ class BatchWorker_CPU(object):
                 if new_model_index > self.last_model_index:
                     self.last_model_index = new_model_index
                     target_weights = ray.get(self.storage.get_target_weights.remote(self.current_model))
-                    #self.last_model_index = new_model_index
                 else:
                     target_weights = None
-                if self.mcts_storage.get_len() < self.max_len:
+                if self.mcts_storage.qsize() < self.max_len:
                     # Observation will be deleted if replay buffer is full. (They are stored in the ray object store)
                     try:
                         self.make_batch(batch_context, self.config.revisit_policy_search_rate, weights=target_weights)
@@ -265,7 +269,7 @@ class BatchWorker_CPU(object):
                 print("error in batchworker cpu")
 
 
-@ray.remote(max_restarts=-1, max_task_retries=-1)
+@ray.remote(max_restarts=-1, max_task_retries=-1, num_gpus=0.125)
 class BatchWorker_GPU(object):
     def __init__(self, worker_id, replay_buffers, storage, batch_storage, mcts_storage, config):
         """GPU Batch Worker for reanalyzing targets, see Appendix.
@@ -291,7 +295,7 @@ class BatchWorker_GPU(object):
         self.model.to(config.device)
         self.model.eval()
         
-        self.current_model = config.num_models - 1
+        self.current_model = 0
         
         self.mcts_storage = mcts_storage
         self.storage = storage
@@ -304,12 +308,12 @@ class BatchWorker_GPU(object):
         """prepare reward and value targets from the context of rewards and values
         """
         value_obs_lst, value_mask, state_index_lst, rewards_lst, traj_lens, td_steps_lst = reward_value_context        
-        #value_obs_lst = ray.get(value_obs_lst)
+        value_obs_lst = ray.get(value_obs_lst)
         device = self.config.device
         batch_size = len(value_obs_lst)
         batch_values, batch_value_prefixs = [], []
         with torch.no_grad():
-            value_obs_lst = np.moveaxis(np.array(value_obs_lst), -1, -3).astype(float) / 255
+            value_obs_lst = np.moveaxis(np.array(value_obs_lst), -1, -3).astype(float) / 255.
             #value_obs_lst = prepare_observation_lst(value_obs_lst)
             #value_obs_lst = np.squeeze(value_obs_lst, 1)
             # split a full batch into slices of mini_infer_size: to save the GPU memory for more GPU actors
@@ -382,7 +386,6 @@ class BatchWorker_GPU(object):
 
                 batch_value_prefixs.append(target_value_prefixs)
                 batch_values.append(target_values)
-        del value_obs_lst
         batch_value_prefixs = np.asarray(batch_value_prefixs)
         batch_values = np.asarray(batch_values)
         return batch_value_prefixs, batch_values
@@ -479,13 +482,17 @@ class BatchWorker_GPU(object):
         return batch_policies_non_re
 
     def _prepare_target_gpu(self):
-        input_context = self.mcts_storage.pop()
+        if self.mcts_storage.qsize() > 0:
+            input_context = self.mcts_storage.get()
         #print((self.mcts_storage.get_len(), self.mcts_storage.threshold, self.batch_storage.get_len(), self.max_len))
-        if input_context is None: 
+        else:#if input_context is None: 
             time.sleep(1)
-        elif input_context[0] != ray.get(self.storage.get_current_model.remote()):
+            return
+        if input_context[0] != ray.get(self.storage.get_current_model.remote()):
+            del input_context
             return
         else:
+
             curr_model, reward_value_context, policy_re_context, policy_non_re_context, inputs_batch, target_weights = input_context
             if target_weights is not None:
                 self.model.load_state_dict(target_weights)
@@ -502,19 +509,22 @@ class BatchWorker_GPU(object):
                 batch_policies_non_re = np.zeros((0, *batch_policies_re.shape[1:]))
             batch_policies = np.concatenate([batch_policies_re, batch_policies_non_re])
             targets_batch = [batch_value_prefixs, batch_values, batch_policies]
+            batch = [curr_model, inputs_batch, targets_batch]
             # a batch contains the inputs and the targets; inputs is prepared in CPU workers
-            while self.batch_storage.get_len() >= self.max_len:
+            while self.batch_storage.qsize() >= self.max_len:
                 time.sleep(0.3)
-            self.batch_storage.push([curr_model, inputs_batch, targets_batch], curr_model)
+            self.batch_storage.put(batch)
+            #print((self.mcts_storage.qsize(),self.batch_storage.qsize()))
 
 
     def run(self):
         start = False
         while True:
             try:
+                self.current_model = ray.get(self.storage.get_current_model.remote())
                 # waiting for start signal
                 if not start:
-                    start = ray.get(self.storage.get_start_signal.remote())
+                    start = ray.get(self.storage.get_start_signal.remote(self.current_model))
                     time.sleep(0.1)
                     continue
     

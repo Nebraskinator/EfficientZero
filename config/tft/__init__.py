@@ -20,12 +20,12 @@ class TFTConfig(BaseConfig):
             target_model_interval=200,
             save_ckpt_interval=5000,
             max_moves=1000,
-            test_max_moves=1000,
+            test_max_moves=2000,
             history_length=800,
             discount=0.997,
             dirichlet_alpha=0.3,
             value_delta_max=0.01,
-            num_simulations=40,
+            num_simulations=75,
             batch_size=32,
             td_steps=10,
             num_actors=1,
@@ -43,9 +43,9 @@ class TFTConfig(BaseConfig):
             lr_decay_steps=100000,
             auto_td_steps_ratio=0.3,
             # replay window
-            start_transitions=40000,
-            total_transitions=10000 * 1000,
-            transition_num=45000,
+            start_transitions=55000,
+            total_transitions=100 * 1000,
+            transition_num=110000,
             # frame skip & stack observation
             gray_scale=False,
             frame_skip=1,
@@ -56,7 +56,7 @@ class TFTConfig(BaseConfig):
             policy_loss_coeff=1,
             consistency_coeff=2,
             # reward sum
-            lstm_hidden_size=1024,
+            lstm_hidden_size=256,
             lstm_horizon_len=5,
             # siamese
             proj_hid=1024,
@@ -67,8 +67,9 @@ class TFTConfig(BaseConfig):
         self.max_moves //= self.frame_skip
         self.test_max_moves //= self.frame_skip
         self.num_models = 1
-        self.model_switch_interval = 5000
-        self.num_random_actors = 2
+        self.freeze_models = [1, 2]
+        self.model_switch_interval = 5000000
+        self.num_random_actors = 1
         self.num_prev_models = 0
         self.prev_model_update_interval = 15000
 
@@ -76,24 +77,26 @@ class TFTConfig(BaseConfig):
         self.start_transitions = max(1, self.start_transitions)
         self.easy_mode = False
         self.bn_mt = 0.1
-        self.blocks = 3  # Number of blocks in the ResNet
-        self.channels = 128  # Number of channels in the ResNet
+        self.blocks = 6  # Number of blocks in the ResNet
+        self.channels = 256  # Number of channels in the ResNet
         if self.gray_scale:
             self.channels = 32
-        self.reduced_channels_reward = 64  # x36 Number of channels in reward head
-        self.reduced_channels_value = 64  # x36 Number of channels in value head
-        self.reduced_channels_policy = 64  # x36 Number of channels in policy head
-        self.resnet_fc_reward_layers = [128]  # Define the hidden layers in the reward head of the dynamic network
-        self.resnet_fc_value_layers = [128]  # Define the hidden layers in the value head of the prediction network
+        self.board_embed_size = 1024  # x36 Number of channels in reward head
+        self.state_embed_size = 2048  # x36 Number of channels in value head
+        self.vec_embed_size = 128  # x36 Number of channels in policy head
+        self.resnet_fc_reward_layers = [1024]  # Define the hidden layers in the reward head of the dynamic network
+        self.resnet_fc_value_layers = [1024]  # Define the hidden layers in the value head of the prediction network
         self.resnet_policy_layers = 38  # Define the depth in the 3D policy head of the prediction network
         self.downsample = False  # Downsample observations before representation network (See paper appendix Network Architecture)
 
     def visit_softmax_temperature_fn(self, num_moves, trained_steps):
         if self.change_temperature:
-            if trained_steps < 0.5 * (self.training_steps):
-                return 1.0
-            elif trained_steps < 0.75 * (self.training_steps):
-                return 0.5
+            if trained_steps < 25000: #0.25 * (self.training_steps):
+                return 0.25
+            elif trained_steps < 50000: #0.5 * (self.training_steps):
+                return 0.25
+            #elif trained_steps < 0.75 * (self.training_steps):
+            #   return 0.25
             else:
                 return 0.25
         else:
@@ -108,6 +111,15 @@ class TFTConfig(BaseConfig):
         self.obs_shape = (self.num_players * self.stacked_observations, self.image_channel, obs_shape[-2], obs_shape[-1])        
         self.action_space_size = game.action_space_size()
 
+    def record_best_actions(self, actions, dists, env):
+        if env.log:
+            for player, dist in dists.items():
+                action = actions[player]
+                best_action = np.argmax(dist)
+                val = dist[best_action]
+                a_val = dist[action]
+                env.PLAYERS[player].print("chosen action: {} / {}, best action: {} / {}".format(action, round(a_val), best_action, round(val)))
+
     def get_uniform_network(self):
         return EfficientZeroNet(
             self.obs_shape,
@@ -115,9 +127,9 @@ class TFTConfig(BaseConfig):
             self.action_space_size,
             self.blocks,
             self.channels,
-            self.reduced_channels_reward,
-            self.reduced_channels_value,
-            self.reduced_channels_policy,
+            self.board_embed_size,
+            self.state_embed_size,
+            self.vec_embed_size,
             self.resnet_fc_reward_layers,
             self.resnet_fc_value_layers,
             self.resnet_policy_layers,
@@ -164,17 +176,15 @@ class TFTConfig(BaseConfig):
         
         obs_batch shape is (batch_size, channel * (unroll_steps + 1), obs height, obs width)
         '''   
+        #obs_batch = obs_batch.copy()
         if self.num_players > 2:
-            ret = obs_batch.copy()  
-            for b in range(ret.shape[0]):
-                for to_swap in np.random.choice(np.arange(1, self.num_players), size=(3,2), replace=False):
-                    temp = ret[b, :, to_swap[0], :, :, :]
-                    ret[b, :, to_swap[0], :, :, :] = \
-                        ret[b, :, to_swap[1], :, :, :]                        
-                    ret[b, :, to_swap[1], :, :, :] = temp            
-            return ret
-        else:
-            return obs_batch
+            for b in range(obs_batch.shape[0]):
+                for to_swap in np.random.choice(np.arange(1, self.num_players), size=(np.random.randint(4),2), replace=False):
+                    temp = obs_batch[b, :, to_swap[0], :, :, :]
+                    obs_batch[b, :, to_swap[0], :, :, :] = \
+                        obs_batch[b, :, to_swap[1], :, :, :]                        
+                    obs_batch[b, :, to_swap[1], :, :, :] = temp            
+        return obs_batch
 
     def transform(self, images):
         return self.transforms.transform(images)

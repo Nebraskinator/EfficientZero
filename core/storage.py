@@ -1,5 +1,6 @@
 import ray
-
+import gc
+import copy
 from ray.util.queue import Queue
 
 
@@ -61,25 +62,33 @@ class SharedStorage(object):
         self.visit_entropies_log = []
         self.priority_self_play_log = []
         self.distributions_log = {}
-        self.start = False
+        self.starts = [False for _ in range(len(models))]
 
-    def set_start_signal(self):
-        self.start = True
+    def set_start_signal(self, curr_model):
+        self.starts[curr_model] = True
 
-    def get_start_signal(self):
-        return self.start
+    def get_start_signal(self, curr_model):
+        return self.starts[curr_model]
 
     def get_weights(self, curr_model):
         return self.models[curr_model].get_weights()
 
     def set_weights(self, weights, curr_model):
-        return self.models[curr_model].set_weights(weights)
+        weights_copy = copy.deepcopy(weights)
+        self.models[curr_model].set_weights(weights_copy)
+        del weights
+        del weights_copy
+        gc.collect()
 
     def get_target_weights(self, curr_model):
         return self.target_models[curr_model].get_weights()
 
     def set_target_weights(self, weights, curr_model):
-        return self.target_models[curr_model].set_weights(weights)
+        weights_copy = copy.deepcopy(weights)
+        self.target_models[curr_model].set_weights(weights_copy)
+        del weights
+        del weights_copy
+        gc.collect()
 
     def update_previous_models(self, curr_model):
         if self.prev_models:

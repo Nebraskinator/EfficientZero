@@ -1,10 +1,13 @@
 import ray
 import time
+import copy
 
 import numpy as np
+from core.game import GameHistory
 
+import gc
 
-@ray.remote
+@ray.remote(num_cpus=7)
 class ReplayBuffer(object):
     """Reference : DISTRIBUTED PRIORITIZED EXPERIENCE REPLAY
     Algo. 1 and Algo. 2 in Page-3 of (https://arxiv.org/pdf/1803.00933.pdf
@@ -33,8 +36,29 @@ class ReplayBuffer(object):
             # Only append end game
             # if end_tag:
             if len(game) > 0:
-                self.save_game(game, True, gap_step, priorities)
-
+                self.save_game(self.reconstruct_game(game, self.config), True, int(gap_step), copy.deepcopy(priorities))
+        #self.remove_to_fit()
+        #print((self.get_total_len(), len(self.buffer)))
+        
+        
+    def reconstruct_game(self, game_to_copy, config):
+        
+        game = GameHistory(int(game_to_copy.action_space), 
+                           tuple([copy.deepcopy(i) for i in game_to_copy.zero_obs_shape]), 
+                           max_length=int(game_to_copy.max_length), 
+                           config=config)
+        
+        game.child_visits = game_to_copy.child_visits.copy()
+        game.root_values = game_to_copy.root_values.copy()
+        game.actions = game_to_copy.actions.copy()
+        game.obs_history = game_to_copy.obs_history.copy()
+        game.rewards = game_to_copy.rewards.copy()
+        game.target_values = []
+        game.target_rewards = []
+        game.target_policies = []
+        
+        return game
+    
     def save_game(self, game, end_tag, gap_steps, priorities=None):
         """Save a game history block
         Parameters
@@ -110,6 +134,7 @@ class ReplayBuffer(object):
         for idx in indices_lst:
             game_id, game_pos = self.game_look_up[idx]
             game_id -= self.base_idx
+            #game = self.reconstruct_game(self.buffer[game_id], self.config)
             game = self.buffer[game_id]
 
             game_lst.append(game)
@@ -117,7 +142,7 @@ class ReplayBuffer(object):
 
         make_time = [time.time() for _ in range(len(indices_lst))]
 
-        context = (game_lst, game_pos_lst, indices_lst, weights_lst, make_time)
+        context = [game_lst, game_pos_lst, indices_lst, weights_lst, make_time]
         return context
 
     def update_priorities(self, batch_indices, batch_priorities, make_time):
@@ -149,11 +174,11 @@ class ReplayBuffer(object):
         self.priorities = self.priorities[excess_games_steps:]
         del self.game_look_up[:excess_games_steps]
         self.base_idx += num_excess_games
-
         self.clear_time = time.time()
 
     def clear_buffer(self):
         del self.buffer[:]
+        gc.collect()
 
     def size(self):
         # number of games

@@ -71,8 +71,8 @@ class BaseConfig(object):
                  proj_out: int = 256,
                  pred_hid: int = 64,
                  pred_out: int = 256,
-                 value_support: DiscreteSupport = DiscreteSupport(-300, 300, delta=1),
-                 reward_support: DiscreteSupport = DiscreteSupport(-300, 300, delta=1)):
+                 value_support: DiscreteSupport = DiscreteSupport(-10, 10, delta=1),
+                 reward_support: DiscreteSupport = DiscreteSupport(-10, 10, delta=1)):
         """Base Config for EfficietnZero
         Parameters
         ----------
@@ -289,6 +289,9 @@ class BaseConfig(object):
         raise NotImplementedError
 
     def set_game(self, env_name):
+        raise NotImplementedError
+        
+    def record_best_actions(self, actions, dists, env):
         raise NotImplementedError
 
     def new_game(self, seed=None, save_video=False, save_path=None, video_callable=None, uid=None, test=False) -> Game:

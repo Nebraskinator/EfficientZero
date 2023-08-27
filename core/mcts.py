@@ -44,7 +44,7 @@ class MCTS(object):
             if training_start:
                 iters = self.config.num_simulations
             else:
-                iters = 2
+                iters = 1
             for index_simulation in range(iters):
                 hidden_states = []
                 hidden_states_c_reward = []

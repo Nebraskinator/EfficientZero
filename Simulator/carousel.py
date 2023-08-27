@@ -19,6 +19,7 @@ def carousel(players, r, pool_obj):
                 alive.insert(0, player)
 
     champions = generateChampions(r, pool_obj)
+    #print(champions)
     items = generateHeldItems(r)
 
     # give all champions on the carousel an item
@@ -69,14 +70,14 @@ def generateChampions(r , pool_obj):
         for _ in range(9):
             carouselChamps.append(champion(oneCosts.pop(random.randint(0, len(oneCosts) - 1))[0]))
     # second carousel - 1 one cost, 4 two costs, 4 three costs
-    elif r == 6:
+    elif 1 <= r <= 10:
         carouselChamps.append(champion(oneCosts.pop(random.randint(0, len(oneCosts) - 1))[0]))
         for _ in range(4):
             carouselChamps.append(champion(twoCosts.pop(random.randint(0, len(twoCosts) - 1))[0]))
         for _ in range(4):
             carouselChamps.append(champion(threeCosts.pop(random.randint(0, len(threeCosts) - 1))[0]))
     # third carousel - 1 one cost, 2 two costs, 3 three costs, 3 four costs
-    elif r == 12:
+    elif 11 <= r <= 16:
         carouselChamps.append(champion(oneCosts.pop(random.randint(0, len(oneCosts) - 1))[0]))
         for _ in range(2):
             carouselChamps.append(champion(twoCosts.pop(random.randint(0, len(twoCosts) - 1))[0]))
@@ -85,7 +86,7 @@ def generateChampions(r , pool_obj):
         for _ in range(3):
             carouselChamps.append(champion(fourCosts.pop(random.randint(0, len(fourCosts) - 1))[0]))
     # fourth carousel and beyond - 1 one cost, 2 two costs, 2 three costs, 2 four costs, 2 five costs
-    elif r >= 18:
+    elif 17 <= r:
         carouselChamps.append(champion(oneCosts.pop(random.randint(0, len(oneCosts) - 1))[0]))
         for _ in range(2):
             carouselChamps.append(champion(twoCosts.pop(random.randint(0, len(twoCosts) - 1))[0]))
@@ -114,14 +115,14 @@ def generateHeldItems(r):
             return generateAllSpats()
         else:
             return generateFONs()
-    elif r == 6:
+    elif 1 <= r <= 10:
         if roll < 0.80:
             return generateAllComponents()
         elif roll < 0.95:
             return generateAllComponentsSpat()
         else:
             return generateThreeSpatsRandComponents()
-    elif r == 12:
+    elif 11 <= r <= 16:
         if roll < 0.50:
             return generateAllRandomComponents()
         elif roll < 0.80:
@@ -130,14 +131,14 @@ def generateHeldItems(r):
             return generateAllComponentsSpat()
         else:
             return generateThreeSpatsRandComponents()
-    elif r == 18:
+    elif 17 <= r <= 22:
         if roll < 0.80:
             return generateAllComponents()
         elif roll < 0.95:
             return generateAllComponentsSpat()
         else:
             return generateThreeSpatsRandComponents()
-    elif r == 24:
+    elif 23 <= r <= 29:
         if roll < 0.50:
             return generateComponentItems(starting_items[random.randint(0, len(starting_items) - 1)])
         elif roll < 0.754:
