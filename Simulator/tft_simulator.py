@@ -45,7 +45,7 @@ class TFT_Simulator(AECEnv):
         self.num_players = config.NUM_PLAYERS
         self.log = log
         self.previous_rewards = {"player_" + str(player_id): 0 for player_id in range(config.NUM_PLAYERS)}
-        self.image_channel = 167
+        self.image_channel = 52
         self.action_depth = 38
         self.obs_shape = (self.num_players, 14, 4, self.image_channel)
         self.step_function = Step_Function(self.pool_obj)
@@ -416,7 +416,7 @@ class TFT_Simulator(AECEnv):
 
 
     def make_observation(self, player):
-        obs = np.zeros(self.obs_shape)
+        obs = np.zeros(self.obs_shape).astype('uint8')
         obs[0] = self.PLAYERS[player].observation(True)
         cnt = 1
         for p in list(self.PLAYERS.keys()):
@@ -424,7 +424,7 @@ class TFT_Simulator(AECEnv):
                 if self.PLAYERS[p].is_alive:
                     obs[cnt] = self.public_observations[p].copy()
                 cnt += 1
-        return obs.astype(int)
+        return obs
 
     def step(self, action):
         for player in list(action.keys()):

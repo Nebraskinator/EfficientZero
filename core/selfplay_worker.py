@@ -181,7 +181,11 @@ class DataWorker(object):
         # max transition to collect for this data worker
         max_transitions = self.config.total_transitions // self.config.num_actors
         mcts = MCTS(self.config)
+        learned_agent_actions_start = 15000
+        value_training_start = 15000
         #snap_0 = tracemalloc.take_snapshot()
+        if self.log:
+            print(ray.get(self.replay_buffers[0].size.remote()))
         with torch.no_grad():
             for _ in range(2):
                 gc.collect()
@@ -205,14 +209,21 @@ class DataWorker(object):
                 init_obses, taking_actions, action_masks = env.reset()
                              
                 num_actors = len(env.live_agents)
+                if all([s >= learned_agent_actions_start for s in trained_steps]):
+                    num_random_actors = self.config.num_random_actors
+                else:
+                    num_random_actors = 0
+                #num_random_actors = 1
                 #live_actors = env.live_agents[:-self.config.num_random_actors - self.config.num_prev_models]
-                if self.config.num_random_actors:
-                    live_actors = env.live_agents[:-self.config.num_random_actors]
+                if num_random_actors:
+                    live_actors = env.live_agents[:-num_random_actors]
+                    random_actors = env.live_agents[-num_random_actors:]
                 else:
                     live_actors = list(env.live_agents)
+                    random_actors = []
                 dead_actors = []
                 #prev_actors = env.live_agents[-self.config.num_random_actors - self.config.num_prev_models : -self.config.num_random_actors]
-                random_actors = env.live_agents[-self.config.num_random_actors:]
+                
                 rewards = {p: [] for p in live_actors}
                 actor_model_dict = {i: [] for i in range(self.config.num_models)}
                 for i, actor in enumerate(live_actors):
@@ -339,8 +350,8 @@ class DataWorker(object):
                                 [self.config.visit_softmax_temperature_fn(num_moves=0, trained_steps=trained_steps[curr_model]) for player in
                                  model_acting_agents])
                             stack_obs = np.array([np.concatenate(game_histories[p].step_obs(), 0) for p in model_acting_agents])
-                            stack_obs = np.moveaxis(stack_obs, -1, -3).astype(float) / 255.
-                            stack_obs = torch.from_numpy(stack_obs).to(self.device).float()
+                            #stack_obs = np.moveaxis(stack_obs, -1, -3).astype(float) / 255.
+                            stack_obs = torch.from_numpy(stack_obs).float().to(self.device)
                             if self.config.amp_type == 'torch_amp':
                                 with autocast():
                                     network_output = model.initial_inference(stack_obs.float())
@@ -352,7 +363,7 @@ class DataWorker(object):
                             #policy_logits_pool = np.array([np.exp(x - np.max(x)) / np.exp(x - np.max(x)).sum() for x in network_output.policy_logits])
                             #policy_logits_pool = (network_output.policy_logits * np.array([action_masks[p] for p in model_acting_agents])).astype(np.float32).tolist()
                             #policy_logits_pool = (network_output.policy_logits * np.array([action_masks[p] for p in model_acting_agents])).astype(np.float32).tolist()
-                            roots = cytree.Roots(len(model_acting_agents), self.config.action_space_size, self.config.num_simulations if (start_training[curr_model] or self.config.load_model) else 1)
+                            roots = cytree.Roots(len(model_acting_agents), self.config.action_space_size, self.config.num_simulations if ((start_training[curr_model] or self.config.resume_training) and all([s >= value_training_start for s in trained_steps])) else 1)
                             policy_logits_pool = []
                             noises = []
                             for i, p in enumerate(model_acting_agents):
@@ -365,7 +376,7 @@ class DataWorker(object):
                             #print((noises, policy_logits_pool))
                             roots.prepare(self.config.root_exploration_fraction, noises, value_prefix_pool, policy_logits_pool)
                             # do MCTS for a policy
-                            mcts.search(roots, model, hidden_state_roots, reward_hidden_roots, training_start=(start_training[curr_model] or self.config.load_model))
+                            mcts.search(roots, model, hidden_state_roots, reward_hidden_roots, training_start=((start_training[curr_model] or self.config.resume_training) and all([s >= value_training_start for s in trained_steps])))
         
                             roots_distributions = roots.get_distributions()
                             roots_values = roots.get_values()
@@ -376,7 +387,7 @@ class DataWorker(object):
                                     search_values_lst[p].append(roots_values[i])
                                     #search_values_lst[p].append(0)
                                 deterministic = False                                
-                                if (start_training[curr_model] or self.config.resume_training) and all([s >= 50000 for s in trained_steps]):
+                                if (start_training[curr_model] or self.config.resume_training) and all([s >= learned_agent_actions_start for s in trained_steps]):
                                     search_stats, value, temperature = roots_distributions[i], float(roots_values[i]), float(_temperature[i])
                                     #distributions, value, temperature = np.ones(self.config.action_space_size), 0., 0.3
                                     distributions = np.zeros(self.config.action_space_size)
@@ -385,15 +396,16 @@ class DataWorker(object):
                                     action[p], visit_entropy[p] = select_action(distributions, temperature=temperature, deterministic=deterministic)
                                 else:
                                     # before starting training, use random policy
-                                    #value, temperature = float(roots_values[i]), float(_temperature[i])
-                                    value, temperature = 0., 0.3
-                                    distributions = np.zeros(self.config.action_space_size).astype(float)
+                                    if (start_training[curr_model] or self.config.resume_training) and all([s >= value_training_start for s in trained_steps]):
+                                        value, temperature = float(roots_values[i]), float(_temperature[i])
+                                    else:
+                                        value, temperature = 0., 0.3
+                                    distributions = action_masks[p].copy()
                                     #distributions = np.ones(self.config.action_space_size).astype(float)
                                     #distributions *= action_masks[p]
                                     a = env.PLAYERS[p].ai.get_action()
-                                    distributions[a] = 1
-                                    action[p] = a
-                                    _, visit_entropy[p] = select_action(distributions, temperature=temperature, deterministic=deterministic)
+                                    distributions[a] = 10                            
+                                    action[p], visit_entropy[p] = select_action(distributions, temperature=temperature, deterministic=deterministic)
                                 #if np.sum(distributions) == 0:
                                 #    distributions[1976] = 1 
                                 dists[p] = distributions
@@ -454,7 +466,7 @@ class DataWorker(object):
                     '''
                     for p in live_actors:
                         if p not in step_acting_agents:
-                            action[p] = 1976
+                            action[p] = 2090
                     
                     self.config.record_best_actions(action, dists, env)
                     

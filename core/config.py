@@ -71,8 +71,8 @@ class BaseConfig(object):
                  proj_out: int = 256,
                  pred_hid: int = 64,
                  pred_out: int = 256,
-                 value_support: DiscreteSupport = DiscreteSupport(-10, 10, delta=1),
-                 reward_support: DiscreteSupport = DiscreteSupport(-10, 10, delta=1)):
+                 value_support: DiscreteSupport = DiscreteSupport(-200, 200, delta=1),
+                 reward_support: DiscreteSupport = DiscreteSupport(-200, 200, delta=1)):
         """Base Config for EfficietnZero
         Parameters
         ----------

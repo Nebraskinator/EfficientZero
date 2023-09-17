@@ -13,6 +13,8 @@ from core.mcts import MCTS
 from core.model import concat_output, concat_output_value
 from core.utils import prepare_observation_lst, LinearSchedule
 
+import traceback
+
 
 @ray.remote(max_restarts=-1, max_task_retries=-1)
 class BatchWorker_CPU(object):
@@ -313,8 +315,8 @@ class BatchWorker_GPU(object):
         batch_size = len(value_obs_lst)
         batch_values, batch_value_prefixs = [], []
         with torch.no_grad():
-            value_obs_lst = np.moveaxis(np.array(value_obs_lst), -1, -3).astype(float) / 255.
-            #value_obs_lst = prepare_observation_lst(value_obs_lst)
+            #value_obs_lst = np.moveaxis(np.array(value_obs_lst), -1, -3).astype(float) / 255.
+            value_obs_lst = prepare_observation_lst(value_obs_lst)
             #value_obs_lst = np.squeeze(value_obs_lst, 1)
             # split a full batch into slices of mini_infer_size: to save the GPU memory for more GPU actors
             m_batch = self.config.mini_infer_size
@@ -323,7 +325,7 @@ class BatchWorker_GPU(object):
             for i in range(slices):
                 beg_index = m_batch * i
                 end_index = m_batch * (i + 1)
-                m_obs = torch.from_numpy(value_obs_lst[beg_index:end_index]).to(device).float()
+                m_obs = torch.from_numpy(value_obs_lst[beg_index:end_index]).float().to(device)
                 if self.config.amp_type == 'torch_amp':
                     with autocast():
                         m_output = self.model.initial_inference(m_obs)
@@ -411,7 +413,7 @@ class BatchWorker_GPU(object):
                 beg_index = m_batch * i
                 end_index = m_batch * (i + 1)
 
-                m_obs = torch.from_numpy(policy_obs_lst[beg_index:end_index]).to(device).float()
+                m_obs = torch.from_numpy(policy_obs_lst[beg_index:end_index]).float().to(device)
                 if self.config.amp_type == 'torch_amp':
                     with autocast():
                         m_output = self.model.initial_inference(m_obs)
@@ -533,5 +535,7 @@ class BatchWorker_GPU(object):
                     time.sleep(30)
                     break
                 self._prepare_target_gpu()
-            except:
-                ("error in batch worker gpu")
+            except Exception as error:
+                print("error in batch worker gpu")
+                print(error)
+                traceback.print_exc()

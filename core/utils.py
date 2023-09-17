@@ -309,7 +309,7 @@ def prepare_observation_lst(observation_lst):
     [B, S, W, H, C] -> [B, S x C, W, H]
     batch, stack num, width, height, channel
     """
-    
+    return np.array(observation_lst)
     observation_lst = np.array(observation_lst)
     # B, S, W, H, C
     if len(observation_lst.shape) == 5:

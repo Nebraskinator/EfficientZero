@@ -13,6 +13,7 @@ from Simulator.pool_stats import cost_star_values
 from Simulator.origin_class_stats import tiers, fortune_returns
 from Simulator.origin_class_stats import origin_class as origin_dict
 from math import floor
+from itertools import permutations
 
 DEBUG = False
 
@@ -128,9 +129,9 @@ class Player:
         self.mistake_reward = 0
         self.level_reward = 0
         self.item_reward = 0
-        self.won_game_reward = 1
+        self.won_game_reward = 10
         self.prev_rewards = 0
-        self.damage_reward = 0
+        self.damage_reward = 0.4
         self.excess_gold_reward = 0
 
         # Everyone shares the pool object.
@@ -922,204 +923,225 @@ class Player:
     def observation(self, private=False):
         
         # 161 length 
-        def embed_champion(champ):
-            embedding = np.zeros(162)                        
+        item_encoding_size = 10
+        champ_encoding_size = 22
+        def encode_item(item):
+            encoding = np.zeros(10).astype('uint8')
+            encoding[0] = list(items).index(item) + 1
+            
+            mods = {'AD':0,
+                    'crit_chance':0,
+                    'armor':0,
+                    'MR':0,
+                    'dodge':0,
+                    'health':0,
+                    'mana':0,
+                    'AS':0,
+                    'SP':0}
+                        
+            for key, value in items[item].items():
+                if key == 'AD':
+                    encoding[1] = np.clip(value / 2, 0, 255)
+                    mods[key] += value
+                elif key == 'crit_chance':
+                    encoding[2] = np.clip(value * 255, 0, 255)
+                    mods[key] += value
+                elif key == 'armor':
+                    encoding[3] = np.clip(value, 0, 255)
+                    mods[key] += value
+                elif key == 'MR':
+                    encoding[4] = np.clip(value, 0, 255)
+                    mods[key] += value
+                elif key == 'dodge':
+                    encoding[5] = np.clip(value * 400, 0, 255)
+                    mods[key] += value
+                elif key == 'health':
+                    encoding[6] = np.clip((value**0.5) * 3, 0, 255)
+                    mods[key] += value
+                elif key == 'mana':
+                    encoding[7] = np.clip(value * 2.5, 0, 255)
+                    mods[key] += value
+                elif key == 'AS':
+                    encoding[8] = np.clip((value-1) * 2.5, 0, 255)
+                    mods[key] += value - 1
+                elif key == 'SP':
+                    encoding[9] = np.clip(value * 3, 0, 255)
+                    mods[key] += value
+                           
+            return encoding, mods
+        
+        def encode_champion(champ, locationID):
+            # items are 0:30, then champ stats
+            es = item_encoding_size * 3
+            encoding = np.zeros(es+champ_encoding_size).astype('uint8')         
+            
+            origins = []
+            mods = []
+            for i, item in enumerate(champ.items):
+                if i >= 3:
+                    break
+                s = i*item_encoding_size
+                e, m = encode_item(item)
+                encoding[s:s+item_encoding_size] = e
+                mods.append(m)
+                if item in trait_items.values():
+                    for o, t in trait_items.items():
+                        if t == item:
+                            origins.append(o)
+                            break
+            e_idx = es
+            if champ.chosen:
+                origins.append(champ.chosen)
+            
             try:
                 c_index = list(COST.keys()).index(champ.name)
             except:
                 c_index = 0
-            embedding[c_index] = 255
-            embedding[63 + champ.stars] = 255
-            if champ.chosen:
-                embedding[67] = 255
-                embedding[68 + list(tiers).index(champ.chosen)] += 127
-            for ind, item in enumerate(champ.items):
-                embedding[94 + list(items).index(item)] += 84        
-            if champ.target_dummy:
-                embedding[153] = 255 
-            for origin in champ.origin:
-                embedding[68 + list(tiers).index(origin)] += 127
-            
-            lookup = {'AD' : [False, 0],
-                      'crit_chance' : [False, 1],
-                      'armor' : [False, 2],
-                      'MR' : [False, 3],
-                      'dodge' : [False, 4],
-                      'health' : [False, 5],
-                      'AS' : [True, 6],
-                      'SP' : [True, 7],
-                      }
-            
-            stat_emb = np.zeros(8)
-            stat_emb[0] = champ.AD
-            stat_emb[1] = champ.crit_chance
-            stat_emb[2] = champ.armor
-            stat_emb[3] = champ.MR
-            stat_emb[4] = champ.dodge
-            stat_emb[5] = champ.health
-            stat_emb[6] = champ.AS
-            stat_emb[7] = champ.SP
-            
-            for item in champ.items:
-                for key, value in items[item].items():
-                    if key in lookup:
-                        if lookup[key][0]:
-                            stat_emb[lookup[key][1]] *= value
-                        else:
-                            stat_emb[lookup[key][1]] += value
-            
-            stat_emb[0] = np.clip(stat_emb[0] / 2, 0, 255)
-            stat_emb[1] = np.clip(stat_emb[1] * 255, 0, 255)
-            stat_emb[2] = np.clip(stat_emb[2], 0, 255)
-            stat_emb[3] = np.clip(stat_emb[3], 0, 255)
-            stat_emb[4] = np.clip(stat_emb[4] * 400, 0, 255)
-            stat_emb[5] = np.clip((stat_emb[5]**0.5) * (255/(6000**0.5)), 0, 255)
-            stat_emb[6] = np.clip(stat_emb[6] * 51, 0, 255)
-            stat_emb[7] = np.clip(stat_emb[7] * 128, 0, 255)
-            
-            embedding[154:] = stat_emb
-            
-            return embedding
-        
-        def embed_item(item):
-            embedding = np.zeros(162)
-            embedding[94 + list(items).index(item)] += 84
-            lookup = {'AD' : [False, 0],
-                      'crit_chance' : [False, 1],
-                      'armor' : [False, 2],
-                      'MR' : [False, 3],
-                      'dodge' : [False, 4],
-                      'health' : [False, 5],
-                      'AS' : [True, 6],
-                      'SP' : [True, 7],
-                      }
-            
-            stat_emb = np.zeros(8)
-            stat_emb[-2:] = 1
-                        
-            for key, value in items[item].items():
-                if key in lookup:
-                    if lookup[key][0]:
-                        stat_emb[lookup[key][1]] *= value
-                    else:
-                        stat_emb[lookup[key][1]] += value
-            
-            
-            stat_emb[0] = np.clip(stat_emb[0] / 2, 0, 255)
-            stat_emb[1] = np.clip(stat_emb[1] * 255, 0, 255)
-            stat_emb[2] = np.clip(stat_emb[2], 0, 255)
-            stat_emb[3] = np.clip(stat_emb[3], 0, 255)
-            stat_emb[4] = np.clip(stat_emb[4] * 400, 0, 255)
-            stat_emb[5] = np.clip((stat_emb[5]**0.5) * (255/(6000**0.5)), 0, 255)
-            stat_emb[6] = np.clip(stat_emb[6] * 51, 0, 255)
-            stat_emb[7] = np.clip(stat_emb[7] * 128, 0, 255)
-            
-            embedding[154:] = stat_emb
-            return embedding
                 
-        obs = np.zeros((14, 4, 167))
+            encoding[e_idx] = c_index
+            e_idx += 1
+            # max of 7 
+            for i, origin in enumerate(champ.origin + origins):
+                encoding[e_idx+i] = list(tiers).index(origin) + 1
+            e_idx += 7
+            
+            encoding[e_idx] = champ.stars - 1
+            e_idx += 1
+            encoding[e_idx] = COST[champ.name]   
+            e_idx += 1
+            encoding[e_idx] = locationID
+            e_idx += 1
+            
+            AD = champ.AD
+            crit_chance = champ.crit_chance
+            armor = champ.armor
+            MR = champ.MR
+            dodge = champ.dodge
+            health = champ.health
+            mana = champ.mana
+            AS = 1
+            SP = 1
+            
+            for mod in mods:
+                AD += mod['AD']
+                crit_chance += mod['crit_chance']
+                armor += mod['armor']
+                MR += mod['MR']
+                dodge += mod['dodge']
+                health += mod['health']
+                mana += mod['mana']
+                AS += mod['AS']
+                SP += mod['SP']
+                
+            maxmana = champ.maxmana
+            encoding[e_idx] = np.clip(AD / 2, 0, 255)
+            e_idx += 1
+            encoding[e_idx] = np.clip(crit_chance * 255, 0, 255)
+            e_idx += 1
+            encoding[e_idx] = np.clip(armor, 0, 255)
+            e_idx += 1
+            encoding[e_idx] = np.clip(MR, 0, 255)
+            e_idx += 1
+            encoding[e_idx] = np.clip(dodge * 255, 0, 255)
+            e_idx += 1
+            encoding[e_idx] = np.clip((health**0.5) * 3, 0, 255)
+            e_idx += 1
+            if maxmana:
+                encoding[e_idx] = np.clip(mana / maxmana * 255, 0, 255)
+            else:
+                encoding[e_idx] = 0
+            e_idx += 1
+            encoding[e_idx] = np.clip(maxmana * 1.45, 0, 255)
+            e_idx += 1
+            encoding[e_idx] = np.clip(champ.AS * AS * 100, 0, 255)
+            e_idx += 1
+            encoding[e_idx] = np.clip(SP * 100, 0, 255)
+            e_idx += 1
+            encoding[e_idx] = np.clip(champ.range * 32, 0, 255)
+            e_idx += 1
+            
+            return encoding
+                        
+        obs = np.zeros((14, 4, item_encoding_size*3 + champ_encoding_size)).astype('uint8')
         for y in range(0, 4):
             # IMPORTANT TO HAVE THE X INSIDE -- Silver is not sure why but ok.
             for x in range(0, 7):
-                # when using binary encoding (6 champ  + stars + chosen + 3 * 6 item) = 26
-                obs[x, y, 1] = 255
                 if self.board[x][y]:                    
                     curr_champ = self.board[x][y]                        
-                    obs[x, y, 5 : 167] = embed_champion(curr_champ)
-                    obs[x, y, 0] = 255
+                    obs[x, y, :] = encode_champion(curr_champ, 1)
 
         for x_bench in range(len(self.bench)):
             x, y = x_bench // 4 + 7, x_bench % 4
-            obs[x, y, 2] = 255
             if self.bench[x_bench]:
                 curr_champ = self.bench[x_bench]                        
-                obs[x, y, 5 : 167] = embed_champion(curr_champ)
-                obs[x, y, 0] = 255
+                obs[x, y, :] = encode_champion(curr_champ, 2)
+
         for ind, item in enumerate(self.item_bench):
             x, y = (ind + 2) // 4 + 10, (ind + 2) % 4
-            #obs[x, y, 5] = 255
             if item and list(items).index(item):
-                obs[x, y, 1 : 163] = embed_item(item)
-                obs[x, y, 0] = 255
+                temp, _ = encode_item(item)
+                obs[x, y, :len(temp)] = temp
         if private:
             for x_shop in range(len(self.shop)):
                 x, y = (x_shop + 1) // 4 + 9, (x_shop + 1) % 4
-                obs[x, y, 3] = 255
                 if self.shop[x_shop]:
                     curr_champ = self.shop[x_shop]  
                     origin = False                      
                     if curr_champ.endswith('_c'):
                         curr_champ, origin = curr_champ.split('_')[:2]
                     curr_champ = champion.champion(curr_champ, chosen=origin)
-                    obs[x, y, 5 : 167] = embed_champion(curr_champ)     
-                    obs[x, y, 94 + 5 + COST[curr_champ.name]] = 255
-                    obs[x, y, 0] = 255
-
-        vector = np.zeros(0)
-        for origin in tiers:
-            temp = np.zeros(4)
-            temp2 = np.zeros(10)
-            temp[self.team_tiers[origin]] = 255
-            temp2[self.team_composition[origin]] = 255
-            vector = np.concatenate([vector, temp, temp2])
-            #obs[:, :4, d] = self.team_tiers[origin] / 4 * 255
-            
-        level_v = np.zeros(9)
-        level_v[self.level - 1] = 255
-        #obs[5, 5:7, 2 + self.level] = 255
-        max_unit_v = np.zeros(11)
-        max_unit_v[self.max_units - 1] = 255
-        #obs[5, 5:7, 12 + self.max_units] = 255
-        unfilled_v = np.zeros(11)
-        unfilled_v[self.max_units - self.num_units_in_play] = 255
-        units_v = np.zeros(12)
-        units_v[self.num_units_in_play] = 255
-        #obs[5, 5:7, 24 + self.max_units - self.num_units_in_play] = 255
-        round_v = np.zeros(50)
-        round_v[self.round] = 255
-        #obs[6, 4, 3 + self.round] = 255
-        hp_v = np.zeros(22)
-        hp, rem = self.health // 5, self.health % 5
-        hp_v[hp] = 255 * (5 - rem) / 5
-        hp_v[hp+1] = 255 * rem / 5
-        #obs[6, 5, 3 + hp] = 255 * (5 - rem) / 5
-        #obs[6, 5, 3 + hp + 1] = 255 * rem / 5
-        win_v = np.zeros(11)
-        loss_v = np.zeros(11)
-        win_v[np.clip(self.win_streak, 0, 10)] = 255
-        loss_v[np.clip(self.loss_streak, 0, 10)] = 255
-        #obs[6, 6, 3 + np.clip(self.win_streak, 0, 10)] = 255
-        #obs[6, 6, 12 + np.clip(self.loss_streak, 0, 10)] = 255
-
-        gold_v = np.zeros(11)
-        xp_v = np.zeros(45)
-        actions_v = np.zeros(20)
+                    obs[x, y, :] = encode_champion(curr_champ, 3)     
+        
+        v_idx = 0
+        max_o = 10
+        vector = np.zeros(31).astype('uint8')
+        for i, origin in enumerate(tiers):
+            if self.team_tiers[origin]:
+                vector[v_idx] = list(tiers).index(origin) + 1
+                vector[v_idx + 1] = self.team_tiers[origin]
+                v_idx += 2
+        
+        v_idx = max_o*2
+        
+        vector[v_idx] = np.clip(self.level - 1 / 8 * 255, 0, 255)
+        v_idx += 1
+        vector[v_idx] = np.clip(self.max_units - 1 / 9 * 255, 0, 255)
+        v_idx += 1
+        vector[v_idx] = np.clip(self.max_units - self.num_units_in_play / 10 * 255, 0, 255)
+        v_idx += 1
+        vector[v_idx] = np.clip(self.num_units_in_play / 10 * 255, 0, 255)
+        v_idx += 1
+        vector[v_idx] = np.clip(self.round * 5, 0, 255)
+        v_idx += 1
+        vector[v_idx] = np.clip(self.health * 2.1, 0, 255)
+        v_idx += 1
+        vector[v_idx] = np.clip(self.win_streak * 10, 0, 255)
+        v_idx += 1
+        vector[v_idx] = np.clip(self.loss_streak * 10, 0, 255)
+        v_idx += 1
         if private:
-            #obs[:, :, 0] = 255
-            gold, rem = np.clip(self.gold // 10, 0, 9), self.gold % 10
-            gold_v[gold] = 255 * (10 - rem) / 10
-            gold_v[gold+1] = 255 * rem / 10
-            #obs[5, 8, 3 + gold] = 255 * (10 - rem) / 10
-            #obs[5, 8, 3 + gold + 1] = 255 * rem / 10
+            vector[v_idx] = np.clip(self.gold * 3, 0, 255)
+            v_idx += 1
             exp_to_level = 0
             if self.level < self.max_level:
                 exp_to_level = self.level_costs[self.level] - self.exp
-            xp_v[np.clip(exp_to_level // 2, 0, 44)] = 255
-            #obs[5, 5:7, 34 + exp_to_level // 2] = 255
-            actions_v[np.clip(self.actions_per_round - self.actions_taken_this_round, 0, 19)] = 255
-            #obs[6, 7, 3 + self.actions_per_round - self.actions_taken_this_round ] = 255
+            vector[v_idx] = np.clip(exp_to_level * 4, 0, 255)
+            v_idx += 1
         else:
-            #obs[:, :, 1] = 255
-            #obs[6, 8, 3 + np.clip(self.gold // 10, 0, 5)] = 255
-            gold_v[np.clip(self.gold // 10, 0, 5)] = 255
-            
-        vector = np.concatenate([level_v, max_unit_v, unfilled_v, units_v, round_v,
-                                 hp_v, win_v, loss_v, gold_v, xp_v, actions_v])
+            gold = np.clip(self.gold // 10, 0, 5) * 10
+            vector[v_idx] = np.clip(gold * 3, 0, 255)
+            v_idx += 1
+            vector[v_idx] = 0
+            v_idx += 1
+        vector[v_idx] = np.clip((self.actions_per_round - self.actions_taken_this_round) / self.actions_per_round * 255, 0, 255)
+        v_idx += 1
+
+
         # vector size is 576
         for i in range(len(vector) // obs.shape[-1] + (1 if len(vector) % obs.shape[-1] else 0)):
             temp = vector[i*obs.shape[-1] : (i+1)*obs.shape[-1]]
             obs[-1, i, :len(temp)] = temp 
-        return obs.astype(int)
+        return obs
         
 
     """
@@ -2399,14 +2421,44 @@ class Player:
                 self.gold += math.ceil(fortune_returns[self.fortune_loss_streak])
                 self.fortune_loss_streak = 0
 
-
+class Comp:
+    def __init__(self, champions, positions, item_components, chosen, 
+                 mirror=False):
+        self.champions = champions
+        if mirror:
+            self.positions = {champ: (6-pos[0], pos[1]) for champ, pos in zip(champions, positions)}
+        else:
+            self.positions = {champ: pos for champ, pos in zip(champions, positions)}
+        self.champ_items = {champ: item for champ, item in zip(champions, item_components)}
+        self.items = [a for i in item_components for a in i ]
+        self.crafted_items = []
+        self.chosen = chosen
+    def in_comp(self, champ):
+        return champ in self.champions
+    def champion_position(self, champ):
+        if self.in_comp(champ):
+            return self.positions[champ]
+        return None
+    def place_item(self, item):
+        return None
+    def craft_items(self, item_components):
+        permut = permutations(item_components, 2)
+        for item in self.items:
+            if item not in self.crafted_items:
+                components = item_builds[item]
+                for item_pair in permut:
+                    if item_pair[0] in components and item_pair[1] in components:
+                        pass
+        return None
+            
+five_cost = [c for c, co in COST.items() if co == 5]
 class PlayerAI:
     # Explanation - We may switch to a class config for the AI side later so separating the two now is highly useful.
     def __init__(self, player):
         self.player = player
         self.phase = 0
         self.save = False
-        self.comp = self.make_random_comp()
+        self.comp = self.make_meta_comp()
         
     def make_random_comp(self):
         k = {c: [] for c in range(1, 6)}
@@ -2418,6 +2470,316 @@ class PlayerAI:
             comp += np.random.choice(k[i], 2).tolist()
         comp.append(np.random.choice(k[5]))
         return comp
+    
+    def make_meta_comp(self):
+        roll = np.random.randint(0, 12)
+
+        if roll == 0:
+            champs = ['zed',
+                    'akali',
+                    'evelynn',
+                    'kennen',
+                    'pyke',
+                    'elise',
+                    'shen',
+                    ]
+            added = list(np.random.choice([i for i in five_cost if i not in champs], 10 - len(champs)))
+            positions = [(0, 0),
+                         (1, 0),
+                         (2, 0),
+                         (3, 0),
+                         (4, 0),
+                         (3, 1),
+                         (4, 1),
+                         (5, 0),
+                         (6, 0),
+                         (0, 1)]
+            return Comp(champs + added, positions, [], 'shade',
+                             mirror=np.random.rand() < 0.4)
+        elif roll == 1:
+            champs = ['irelia',
+                    'jax',
+                    'warwick',
+                    'leesin',
+                    'shen',
+                    'ezreal',
+                    'lux',
+                    'yone'
+                    ]
+            added = list(np.random.choice([i for i in five_cost if i not in champs], 10 - len(champs)))
+            positions = [(1, 3),
+                         (2, 3),
+                         (3, 3),
+                         (4, 3),
+                         (5, 3),
+                         (0, 0),
+                         (6, 0),
+                         (6, 2),
+                         (1, 0),
+                         (2, 0)]
+            return Comp(champs + added, positions, [], 'divine',
+                             mirror=np.random.rand() < 0.4)
+        
+        elif roll == 2:
+            champs = ['vayne',
+                    'thresh',
+                    'lillia',
+                    'jhin',
+                    'zilean',
+                    'aatrox',
+                    'riven',
+                    'cassiopeia'
+                    ]
+            added = list(np.random.choice([i for i in five_cost if i not in champs], 10 - len(champs)))
+            positions = [(0, 0),
+                         (4, 0),
+                         (5, 0),
+                         (6, 0),
+                         (6, 1),
+                         (2, 3),
+                         (3, 3),
+                         (4, 3),
+                         (1, 0),
+                         (2, 0)]
+            return Comp(champs + added, positions, [], 'dusk',
+                             mirror=np.random.rand() < 0.4)
+        elif roll == 3:
+            champs = ['katarina',
+                    'akali',
+                    'talon',
+                    'lissandra',
+                    'morgana',
+                    'diana',
+                    'pyke',
+                    ]
+            added = list(np.random.choice([i for i in five_cost if i not in champs], 10 - len(champs)))
+            positions = [(0, 0),
+                         (1, 0),
+                         (2, 0),
+                         (3, 0),
+                         (4, 0),
+                         (5, 0),
+                         (6, 0),
+                         (0, 1),
+                         (1, 1),
+                         (2, 1)]
+            return Comp(champs + added, positions, [], 'moonlight',
+                             mirror=np.random.rand() < 0.4)
+        
+        elif roll == 13:
+            champs = ['xinzhao',
+                    'jarviniv',
+                    'garen',
+                    'katarina',
+                    'azir',
+                    ]
+            added = list(np.random.choice([i for i in five_cost if i not in champs], 10 - len(champs)))
+            positions = [(4, 3),
+                         (5, 3),
+                         (6, 3),
+                         (4, 2),
+                         (6, 0),
+                         (0, 0),
+                         (1, 0),
+                         (2, 0),
+                         (3, 0),
+                         (4, 0)]
+            return Comp(champs + added, positions, [], 'warlord',
+                             mirror=np.random.rand() < 0.4)
+        
+        elif roll == 5:
+            champs = ['jax',
+                    'fiora',
+                    'yone',
+                    'yasuo',
+                    'leesin',
+                    'lux',
+                    'irelia',
+                    'ezreal'
+                    ]
+            added = list(np.random.choice([i for i in five_cost if i not in champs], 10 - len(champs)))
+            positions = [(3, 3),
+                         (5, 3),
+                         (0, 2),
+                         (6, 2),
+                         (2, 1),
+                         (0, 0),
+                         (4, 0),
+                         (6, 0),
+                         (5, 0),
+                         (3, 0)]
+            return Comp(champs + added, positions, [], 'duelist',
+                             mirror=np.random.rand() < 0.4)
+        
+        elif roll == 6:
+            champs = ['sejuani',
+                    'yuumi',
+                    'shen',
+                    'jhin',
+                    'teemo',
+                    'jinx',
+                    'nidalee',
+                    'vayne'
+                    ]
+            added = list(np.random.choice([i for i in five_cost if i not in champs], 10 - len(champs)))
+            positions = [(3, 3),
+                         (3, 1),
+                         (4, 1),
+                         (0, 0),
+                         (1, 0),
+                         (2, 0),
+                         (3, 0),
+                         (6, 0),
+                         (5, 0),
+                         (4, 0)]
+            return Comp(champs + added, positions, [], 'sharpshooter',
+                             mirror=np.random.rand() < 0.4)
+        
+        elif roll == 7:
+            champs = ['irelia',
+                    'yone',
+                    'shen',
+                    'yuumi',
+                    'warwick',
+                    'ashe',
+                    'kindred',
+                    'aphelios'
+                    ]
+            added = list(np.random.choice([i for i in five_cost if i not in champs], 10 - len(champs)))
+            positions = [(1, 3),
+                         (3, 3),
+                         (5, 3),
+                         (6, 3),
+                         (2, 1),
+                         (0, 0),
+                         (1, 0),
+                         (2, 0),
+                         (5, 0),
+                         (6, 0)]
+            return Comp(champs + added, positions, [], 'hunter',
+                             mirror=np.random.rand() < 0.4)
+        
+        elif roll == 8:
+            champs = ['shen',
+                    'yone',
+                    'irelia',
+                    'pyke',
+                    'lux',
+                    'talon',
+                    'morgana',
+                    'janna'
+                    ]
+            added = list(np.random.choice([i for i in five_cost if i not in champs], 10 - len(champs)))
+            positions = [(1, 3),
+                         (3, 3),
+                         (5, 3),
+                         (6, 2),
+                         (0, 0),
+                         (4, 0),
+                         (5, 0),
+                         (6, 0),
+                         (3, 0),
+                         (2, 0)]
+            return Comp(champs + added, positions, [], 'enlightened',
+                             mirror=np.random.rand() < 0.4)
+        
+        elif roll == 9:
+            champs = ['cassiopeia',
+                    'aatrox',
+                    'sejuani',
+                    'thresh',
+                    'zilean',
+                    'yuumi',
+                    'janna',
+                    'ahri'
+                    ]
+            added = list(np.random.choice([i for i in five_cost if i not in champs], 10 - len(champs)))
+            positions = [(0, 3),
+                         (2, 3),
+                         (4, 3),
+                         (6, 3),
+                         (6, 1),
+                         (0, 0),
+                         (5, 0),
+                         (6, 0),
+                         (3, 0),
+                         (2, 0)]
+            return Comp(champs + added, positions, [], 'vanguard',
+                             mirror=np.random.rand() < 0.4)
+        
+        elif roll == 10:
+            champs = ['elise',
+                    'aatrox',
+                    'pyke',
+                    'kalista',
+                    'evelynn',
+                    'zilean',
+                    'twistedfate',
+                    'jhin'
+                    ]
+            added = list(np.random.choice([i for i in five_cost if i not in champs], 10 - len(champs)))
+            positions = [(3, 2),
+                         (5, 2),
+                         (0, 1),
+                         (6, 1),
+                         (3, 0),
+                         (4, 0),
+                         (5, 0),
+                         (6, 0),
+                         (2, 0),
+                         (1, 0)]
+            return Comp(champs + added, positions, [], 'cultist',
+                             mirror=np.random.rand() < 0.4)
+        
+        elif roll == 11:
+            champs = ['sett',
+                    'maokai',
+                    'warwick',
+                    'nunu',
+                    'lulu',
+                    'kindred',
+                    'ezreal',
+                    'ashe'
+                    ]
+            added = list(np.random.choice([i for i in five_cost if i not in champs], 10 - len(champs)))
+            positions = [(3, 3),
+                         (5, 3),
+                         (4, 1),
+                         (6, 1),
+                         (0, 0),
+                         (4, 0),
+                         (5, 0),
+                         (6, 0),
+                         (2, 0),
+                         (1, 0)]
+            return Comp(champs + added, positions, [], 'elderwood',
+                             mirror=np.random.rand() < 0.4)
+        
+        elif roll == 4:
+            champs = ['irelia',
+                    'shen',
+                    'annie',
+                    'fiora',
+                    'talon',
+                    'morgana',
+                    'janna',
+                    'nami'
+                    ]
+            added = list(np.random.choice([i for i in five_cost if i not in champs], 10 - len(champs)))
+            positions = [(1, 3),
+                         (3, 3),
+                         (5, 3),
+                         (6, 1),
+                         (1, 0),
+                         (4, 0),
+                         (5, 0),
+                         (6, 0),
+                         (2, 0),
+                         (3, 0)]
+            return Comp(champs + added, positions, [], 'mage',
+                             mirror=np.random.rand() < 0.4)
+            
+        
         
     def next_phase(self):
         if self.phase < 7:
@@ -2456,7 +2818,7 @@ class PlayerAI:
         for i, c in enumerate(self.player.shop):
             if c:
                 champ_name = c.split('_')[0]
-                if champ_name in self.comp:   
+                if champ_name in self.comp.champions:   
                     go = True
                     for trip in self.player.triple_catalog:
                         if trip['name'] == champ_name and trip['level'] == 3:
@@ -2466,6 +2828,8 @@ class PlayerAI:
                         level = 1
                         cost = COST[champ_name]
                         if c.endswith('_c'):
+                            if c.split('_')[1] != self.comp.chosen:
+                                continue
                             cost = cost_star_values[cost - 1][1]
                             level = 2
                         if cost <= self.player.gold:
@@ -2553,8 +2917,9 @@ class PlayerAI:
                     champ_name = c.split('_')[0]
                     if c not in champs:
                         cost = COST[champ_name]
-                        if c.endswith('_c'):
-                            cost = cost_star_values[cost - 1][1]
+                        if c.endswith('_c') and champ_name not in self.comp.champions:
+                            continue
+                            #cost = cost_star_values[cost - 1][1]
                         if cost <= self.player.gold:
                             if not self.player.bench_full():
                                 return self.buy(i)
@@ -2566,24 +2931,46 @@ class PlayerAI:
         for row in self.player.board:
             for c in row:
                 if c:
-                    if c.name in self.comp:
+                    if c.name in self.comp.champions:
                         board_comp.append(c)
                     else:
                         board_other.append(c)
         if self.player.num_units_in_play < self.player.max_units:
+            bench_comp = []
+            bench_other = []
             for i, c in enumerate(self.player.bench):
-                if c and c.name not in [ii.name for ii in board_comp + board_other]:
-                    return self.place(i, None, None)
+                if c and (c.name not in [ii.name for ii in board_comp + board_other] or c.chosen):
+                    if c.name in self.comp.champions:
+                        bench_comp.append([c, i])
+                    else:
+                        bench_other.append([c, i])
+            c = None
+            if bench_comp:
+                c = bench_comp[np.random.randint(len(bench_comp))]
+            elif bench_other:
+                c = bench_other[np.random.choice(len(bench_other))]
+            if c:
+                place = self.comp.champion_position(c[0].name)
+                if place:
+                    return self.place(c[1], place[0], place[1])
+                else:
+                    for place in self.comp.positions.values():
+                        if self.player.board[place[0]][place[1]]:
+                            continue
+                        else:
+                            self.player.print('placing non comp')
+                            return self.place(c[1], place[0], place[1])
         elif board_other:
             for i, c in enumerate(self.player.bench):
-                if c and c.name not in [ii.name for ii in board_comp + board_other] and c.name in self.comp:
-                    return self.place(i, board_other[0].x, board_other[0].y)
+                if c and c.name not in [ii.name for ii in board_comp + board_other] and c.name in self.comp.champions:
+                    self.player.print('removing')
+                    return self.remove(board_other[0].x, board_other[0].y)
         self.next_phase()
         return self.get_action()
     
     def phase_4(self):
         for i, c in enumerate(self.player.bench):
-            if c and c.name not in self.comp:
+            if c and c.name not in self.comp.champions:
                 return self.sell(i)
         self.next_phase()
         return self.get_action()
@@ -2593,7 +2980,7 @@ class PlayerAI:
             for i, c in enumerate(self.player.shop):
                 if c:
                     champ_name = c.split('_')[0]
-                    if champ_name in self.comp:    
+                    if champ_name in self.comp.champions:    
                         go = True
                         for trip in self.player.triple_catalog:
                             if trip['name'] == champ_name and trip['level'] == 3:
@@ -2603,6 +2990,8 @@ class PlayerAI:
                             level = 1
                             cost = COST[champ_name]
                             if c.endswith('_c'):
+                                if c.split('_')[1] != self.comp.chosen:
+                                    continue
                                 cost = cost_star_values[cost - 1][1]
                                 level = 2
                             if cost <= self.player.gold:
@@ -2657,6 +3046,12 @@ class PlayerAI:
         x, y = bench_slot // 4 + 7, bench_slot % 4
         z = 37
         return z + 38*y + 38*4*x
+    
+    def remove(self, x, y):            
+        for i, c in enumerate(self.player.bench):
+            if not c:
+                return 28+i + 38*y + 38*4*x
+        return 37 + 38*y + 38*4*x
     
     def place(self, bench_slot, x, y):
         if x == None or y == None:

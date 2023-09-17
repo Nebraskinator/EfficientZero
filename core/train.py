@@ -388,7 +388,7 @@ def _train(models, target_models, replay_buffers, shared_storage, mcts_storage, 
         if step_counts[curr_model] == counter_init:
             shared_storage.set_start_signal.remote(curr_model)
         
-        if step_counts[curr_model] % 100 == 0:          
+        if step_counts[curr_model] % 40 == 0:          
             [replay_buffer.remove_to_fit.remote() for replay_buffer in replay_buffers if replay_buffer]
 
         # obtain a batch

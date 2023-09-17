@@ -26,7 +26,7 @@ class TFTConfig(BaseConfig):
             dirichlet_alpha=0.3,
             value_delta_max=0.01,
             num_simulations=75,
-            batch_size=32,
+            batch_size=128,
             td_steps=10,
             num_actors=1,
             # network initialization/ & normalization
@@ -43,9 +43,9 @@ class TFTConfig(BaseConfig):
             lr_decay_steps=100000,
             auto_td_steps_ratio=0.3,
             # replay window
-            start_transitions=55000,
+            start_transitions=9e5,
             total_transitions=100 * 1000,
-            transition_num=110000,
+            transition_num=9.5e5,
             # frame skip & stack observation
             gray_scale=False,
             frame_skip=1,
@@ -78,7 +78,7 @@ class TFTConfig(BaseConfig):
         self.easy_mode = False
         self.bn_mt = 0.1
         self.blocks = 6  # Number of blocks in the ResNet
-        self.channels = 256  # Number of channels in the ResNet
+        self.channels = 64  # Number of channels in the ResNet
         if self.gray_scale:
             self.channels = 32
         self.board_embed_size = 1024  # x36 Number of channels in reward head
@@ -92,9 +92,9 @@ class TFTConfig(BaseConfig):
     def visit_softmax_temperature_fn(self, num_moves, trained_steps):
         if self.change_temperature:
             if trained_steps < 25000: #0.25 * (self.training_steps):
-                return 0.25
+                return 1
             elif trained_steps < 50000: #0.5 * (self.training_steps):
-                return 0.25
+                return 0.5
             #elif trained_steps < 0.75 * (self.training_steps):
             #   return 0.25
             else:

@@ -170,6 +170,71 @@ class ResidualBlock(nn.Module):
         out = nn.functional.leaky_relu(out)
         return out
 
+class ItemNetwork(nn.Module):
+    def __init__(self, item_embedding_layer, output_size):
+        super().__init__()
+        self.item_embedding = item_embedding_layer
+        self.linear = nn.Linear(9, output_size, bias=False)
+               
+    def forward(self, x):
+        embed = x[:, :, :, 0].long()
+        embed = [self.item_embedding(embed)]
+        embed.append(self.linear(torch.div(x[:, :, :, 1:], 255.)))
+        embed = torch.concat(embed, dim=-1)
+        return embed
+
+class UnitNetwork(nn.Module):
+    def __init__(self, item_network, unit_embedding_layer, origin_embedding_layer, output_size):
+        super().__init__()
+        self.item_network = item_network
+        self.unit_embedding_layer = unit_embedding_layer
+        self.origin_embedding_layer = origin_embedding_layer
+        self.linear = nn.Linear(25, output_size, bias=False)
+               
+    def forward(self, x):
+        layers = []
+        item_layers = []
+        for i in range(3):
+            item_layers.append(self.item_network(x[:,:,:,i*10:(i+1)*10].long()).unsqueeze(-2))
+        item_layers = torch.concat(item_layers, dim=-2)
+        item_layers = torch.sum(item_layers, dim=-2)
+        layers.append(item_layers)
+        layers.append(self.unit_embedding_layer(x[:,:,:,30].long()))
+        origin_layers = []
+        for i in range(31, 38):
+            origin_layers.append(self.origin_embedding_layer(x[:,:,:,i].long()).unsqueeze(-2))
+        origin_layers = torch.concat(origin_layers, dim=-2)
+        origin_layers = torch.sum(origin_layers, dim=-2)
+        layers.append(origin_layers)
+        lin_layers = []
+        for i in range(38, 41):
+            n = 4
+            if i % 2:
+                n += 2
+            lin_layers.append(nn.functional.one_hot(x[:, :, :, i].long(), num_classes=n))        
+        lin_layers.append(torch.div(x[:, :, :, 41:], 255.))
+        lin_layers = torch.concat(lin_layers, dim=-1)
+        layers.append(self.linear(lin_layers))
+        layers = torch.concat(layers, dim=-1)
+        return layers
+
+class VectorNetwork(nn.Module):
+    def __init__(self, origin_embedding_layer, output_size):
+        super().__init__()
+        self.origin_embedding_layer = origin_embedding_layer
+        self.linear = nn.Linear(11, output_size, bias=False)
+               
+    def forward(self, x):
+        layers = []
+        origin_layers = []
+        for i in range(10):
+            origin_layers.append(torch.mul(self.origin_embedding_layer(x[:,i*2].long()), x[:, i*2+1].unsqueeze(-1)).unsqueeze(-2))
+        origin_layers = torch.concat(origin_layers, dim=-2)
+        origin_layers = torch.sum(origin_layers, dim=-2)
+        layers.append(origin_layers)
+        layers.append(self.linear(torch.div(x[:,20:31], 255.)))
+        layers = torch.concat(layers, dim=-1)
+        return layers
 
 # Encode the observations into hidden states
 class RepresentationNetwork(nn.Module):
@@ -203,23 +268,29 @@ class RepresentationNetwork(nn.Module):
             True -> do downsampling for observations. (For board games, do not need)
         """
         super().__init__()
-
+        
+        self.item_embedding = nn.Embedding(60, 16, padding_idx=0)
+        self.champ_embedding = nn.Embedding(72, 32, padding_idx=0)
+        self.origin_embedding = nn.Embedding(27, 16, padding_idx=0)
+        
+        self.item_network = ItemNetwork(self.item_embedding, 16)
+        self.champ_network = UnitNetwork(self.item_network, 
+                                         self.champ_embedding, 
+                                         self.origin_embedding, 
+                                         32)
+        self.vec_network = VectorNetwork(self.origin_embedding, 128)
+        
         self.vec_channels = vec_channels
         self.observation_shape = observation_shape
         self.vis_embed_channels = vis_embed_channels
         
-        
-        self.champ_embed = conv1x1(
-            observation_shape[1],
-            champ_embed_channels,
-        )
         
         board_prevector_block_list = []
         for i in range(vis_blocks_board_prevector):
             if i:
                 board_prevector_block_list.append(ResidualBlock(vis_hidden_channels, vis_hidden_channels, k=3, momentum=momentum))
             else:
-                board_prevector_block_list.append(ResidualBlock(champ_embed_channels, vis_hidden_channels, k=3, momentum=momentum))
+                board_prevector_block_list.append(ResidualBlock(112, vis_hidden_channels, k=3, momentum=momentum))
 
         self.board_prevector_blocks = nn.ModuleList(board_prevector_block_list)
         
@@ -229,8 +300,8 @@ class RepresentationNetwork(nn.Module):
         
         self.board_premerge_padding = nn.ZeroPad2d((0,0,0,1))
         
-        self.vec_concat_size = observation_shape[1] * observation_shape[-1] + \
-            champ_embed_channels * 4 + observation_shape[-1] * (observation_shape[-2] - 1) * vis_embed_channels
+        self.vec_concat_size = 144 + \
+            112 * 4 + observation_shape[-1] * (observation_shape[-2] - 1) * vis_embed_channels
         
         vec_block_list = []
         for i in range(vec_blocks+1):
@@ -283,8 +354,9 @@ class RepresentationNetwork(nn.Module):
         opponents = []
         for i in range(self.num_boards):
             obs = x[:, i, :, :, :]
-            board = obs[:, :, :-1, :]
-            board = self.champ_embed(board)
+            board = obs[:, :-1, :, :]
+            board = self.champ_network(board)
+            board = torch.moveaxis(board, -1, -3)            
             board_vec = torch.flatten(board, start_dim=-2)
             board_sum = torch.sum(board_vec[:, :, :28], dim=-1)
             bench_sum = torch.sum(board_vec[:, :, 28:28+9], dim=-1)
@@ -295,8 +367,9 @@ class RepresentationNetwork(nn.Module):
                 
             vis_vec = self.board_vector_embed_conv(board)  
             vis_vec = torch.reshape(vis_vec, (-1, self.vis_embed_channels * (self.observation_shape[-2] - 1) * self.observation_shape[-1]))
-            vec = obs[:, :, -1, :]
-            vec = torch.reshape(vec, (-1, self.observation_shape[1] * self.observation_shape[-1]))
+            vec = obs[:, -1, :, :]
+            vec = torch.reshape(vec, (-1, self.observation_shape[-3] * self.observation_shape[-1]))
+            vec = self.vec_network(vec)
             vec = torch.concat([vec, board_sum, bench_sum, shop_sum, ibench_sum, vis_vec], dim=-1)
             for block in self.vec_blocks:
                 vec = block(vec)
@@ -595,17 +668,17 @@ class EfficientZeroNet(BaseNet):
         self.representation_network = RepresentationNetwork(
             observation_shape,
             num_players,
-            vis_blocks_board_prevector=4,
-            vis_blocks_board_premerge=4,
-            vis_blocks_board_postmerge=4,
-            vis_blocks_opponents=4,
-            vis_blocks_state=16,
-            champ_embed_channels=256,
+            vis_blocks_board_prevector=8,
+            vis_blocks_board_premerge=8,
+            vis_blocks_board_postmerge=8,
+            vis_blocks_opponents=8,
+            vis_blocks_state=8,
+            champ_embed_channels=num_channels,
             vis_hidden_channels=num_channels,
-            vis_embed_channels=32,
+            vis_embed_channels=16,
             vec_blocks=12,
-            vec_channels=32,
-            state_channels=256,
+            vec_channels=16,
+            state_channels=num_channels,
             )
 
         self.dynamics_network = DynamicsNetwork(
@@ -613,7 +686,7 @@ class EfficientZeroNet(BaseNet):
             num_dynamics_blocks=16,
             dynamics_channels=num_channels,
             num_reward_blocks=4,
-            reward_channels=32,
+            reward_channels=16,
             action_space_layers=2,
             fc_reward_layers=fc_reward_layers,
             full_support_size=reward_support_size,
@@ -625,9 +698,9 @@ class EfficientZeroNet(BaseNet):
         self.prediction_network = PredictionNetwork(
             observation_shape,
             action_space_size,
-            4,
+            8,
             num_channels,
-            32,
+            16,
             38,
             fc_value_layers,
             fc_reward_layers,
