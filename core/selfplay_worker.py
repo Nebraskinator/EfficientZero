@@ -92,6 +92,7 @@ class DataWorker(object):
         if curr_model not in self.config.freeze_models and self.len_pool(curr_model) >= self.pool_size: 
             #print('saving for model '+str(curr_model))
             self.replay_buffers[curr_model].save_pools.remote(self.trajectory_pools[curr_model], self.gap_step)
+            #print('saving memory: '+str(ray.get(self.replay_buffers[curr_model].size.remote())))
         del self.trajectory_pools[curr_model][:]
 
     def put_last_trajectory(self, player, last_game_histories, last_game_priorities, game_histories, curr_model):
@@ -182,10 +183,8 @@ class DataWorker(object):
         max_transitions = self.config.total_transitions // self.config.num_actors
         mcts = MCTS(self.config)
         learned_agent_actions_start = 15000
-        value_training_start = 15000
+        value_training_start = learned_agent_actions_start
         #snap_0 = tracemalloc.take_snapshot()
-        if self.log:
-            print(ray.get(self.replay_buffers[0].size.remote()))
         with torch.no_grad():
             for _ in range(2):
                 gc.collect()
@@ -213,7 +212,7 @@ class DataWorker(object):
                     num_random_actors = self.config.num_random_actors
                 else:
                     num_random_actors = 0
-                #num_random_actors = 1
+                    #num_random_actors = 1
                 #live_actors = env.live_agents[:-self.config.num_random_actors - self.config.num_prev_models]
                 if num_random_actors:
                     live_actors = env.live_agents[:-num_random_actors]
@@ -400,12 +399,13 @@ class DataWorker(object):
                                         value, temperature = float(roots_values[i]), float(_temperature[i])
                                     else:
                                         value, temperature = 0., 0.3
-                                    distributions = action_masks[p].copy()
-                                    #distributions = np.ones(self.config.action_space_size).astype(float)
+                                    distributions_select = action_masks[p].copy()
+                                    distributions = np.zeros(self.config.action_space_size).astype(float)
                                     #distributions *= action_masks[p]
                                     a = env.PLAYERS[p].ai.get_action()
-                                    distributions[a] = 10                            
-                                    action[p], visit_entropy[p] = select_action(distributions, temperature=temperature, deterministic=deterministic)
+                                    distributions[a] = 1    
+                                    distributions_select[a] = 10                        
+                                    action[p], visit_entropy[p] = select_action(distributions_select, temperature=temperature, deterministic=deterministic)
                                 #if np.sum(distributions) == 0:
                                 #    distributions[1976] = 1 
                                 dists[p] = distributions
@@ -554,7 +554,7 @@ class DataWorker(object):
                             # pad over last block trajectory
                             if last_game_histories[player] is not None:
                                 self.put_last_trajectory(player, last_game_histories, last_game_priorities, game_histories, curr_model)
-
+                                
                             # store current block trajectory
                             priorities = self.get_priorities(player, pred_values_lst, search_values_lst)
                                                   

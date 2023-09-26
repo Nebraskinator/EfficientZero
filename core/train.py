@@ -64,8 +64,9 @@ def update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_r
     obs_batch_ori, action_batch, mask_batch, indices, weights_lst, make_time = inputs_batch
     target_value_prefix, target_value, target_policy = targets_batch
 
-    if config.use_augmentation and config.augmentation[0] == 'tft':
-        obs_batch_ori = config.tft_augmentation(obs_batch_ori)
+    # no augmentation needed when using cross-attention
+    #if config.use_augmentation and config.augmentation[0] == 'tft': 
+    #    obs_batch_ori = config.tft_augmentation(obs_batch_ori)
     # [:, 0: config.stacked_observations * 3,:,:]
     # obs_batch_ori is the original observations in a batch
     # obs_batch is the observation for hat s_t (predicted hidden states from dynamics function)

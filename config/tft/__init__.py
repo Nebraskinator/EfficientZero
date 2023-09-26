@@ -43,9 +43,9 @@ class TFTConfig(BaseConfig):
             lr_decay_steps=100000,
             auto_td_steps_ratio=0.3,
             # replay window
-            start_transitions=9e5,
+            start_transitions=9.5e5,
             total_transitions=100 * 1000,
-            transition_num=9.5e5,
+            transition_num=1e6,
             # frame skip & stack observation
             gray_scale=False,
             frame_skip=1,
@@ -78,7 +78,7 @@ class TFTConfig(BaseConfig):
         self.easy_mode = False
         self.bn_mt = 0.1
         self.blocks = 6  # Number of blocks in the ResNet
-        self.channels = 64  # Number of channels in the ResNet
+        self.channels = 96  # Number of channels in the ResNet
         if self.gray_scale:
             self.channels = 32
         self.board_embed_size = 1024  # x36 Number of channels in reward head

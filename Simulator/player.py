@@ -2473,7 +2473,8 @@ class PlayerAI:
     
     def make_meta_comp(self):
         roll = np.random.randint(0, 12)
-
+        #if self.player.player_num == 0:
+        #    roll = 0
         if roll == 0:
             champs = ['zed',
                     'akali',
