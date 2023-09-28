@@ -43,7 +43,7 @@ class TFTConfig(BaseConfig):
             lr_decay_steps=100000,
             auto_td_steps_ratio=0.3,
             # replay window
-            start_transitions=9.5e5,
+            start_transitions=7e5,
             total_transitions=100 * 1000,
             transition_num=1e6,
             # frame skip & stack observation
@@ -78,7 +78,7 @@ class TFTConfig(BaseConfig):
         self.easy_mode = False
         self.bn_mt = 0.1
         self.blocks = 6  # Number of blocks in the ResNet
-        self.channels = 96  # Number of channels in the ResNet
+        self.channels = 64  # Number of channels in the ResNet
         if self.gray_scale:
             self.channels = 32
         self.board_embed_size = 1024  # x36 Number of channels in reward head
@@ -122,30 +122,31 @@ class TFTConfig(BaseConfig):
 
     def get_uniform_network(self):
         return EfficientZeroNet(
-            self.obs_shape,
-            self.num_players,
-            self.action_space_size,
-            self.blocks,
-            self.channels,
-            self.board_embed_size,
-            self.state_embed_size,
-            self.vec_embed_size,
-            self.resnet_fc_reward_layers,
-            self.resnet_fc_value_layers,
-            self.resnet_policy_layers,
-            self.reward_support.size,
-            self.value_support.size,
-            self.downsample,
-            self.inverse_value_transform,
-            self.inverse_reward_transform,
-            self.lstm_hidden_size,
+            observation_shape=self.obs_shape,
+            num_players=self.num_players,
+            action_space_size=self.action_space_size,
+            num_blocks=self.blocks,
+            num_channels=self.channels,
+            board_embed_size=self.board_embed_size,
+            state_embed_size=self.state_embed_size,
+            vec_embed_size=self.vec_embed_size,
+            fc_reward_layers=self.resnet_fc_reward_layers,
+            fc_value_layers=self.resnet_fc_value_layers,
+            policy_layers=self.resnet_policy_layers,
+            reward_support_size=self.reward_support.size,
+            value_support_size=self.value_support.size,
+            downsample=self.downsample,
+            inverse_value_transform=self.inverse_value_transform,
+            inverse_reward_transform=self.inverse_reward_transform,
+            lstm_hidden_size=self.lstm_hidden_size,
             bn_mt=self.bn_mt,
             proj_hid=self.proj_hid,
             proj_out=self.proj_out,
             pred_hid=self.pred_hid,
             pred_out=self.pred_out,
             init_zero=self.init_zero,
-            state_norm=self.state_norm)
+            state_norm=self.state_norm
+            )
 
     def new_game(self, log=True, seed=None, save_video=False, save_path=None, video_callable=None, uid=None, test=False, final_test=False):
         if test:

@@ -29,8 +29,11 @@ Inputs      - pool_pointer: Pool object pointer
 
 class Player:
     # Explanation - We may switch to a class config for the AI side later so separating the two now is highly useful.
-    def __init__(self, pool_pointer, player_num):
+    def __init__(self, pool_pointer, player_num, simulator):
 
+        self.simulator = simulator
+        self.opponent_public_obs = {}
+                
         self.gold = 0
         self.level = 1
         self.exp = 0
@@ -289,7 +292,8 @@ class Player:
     """
     # TODO: change self play to ignore passing players during MCTS
     def pass_action(self):
-        self.print("no action")
+        self.update_opponent_observations()
+        self.print("no action, updating opponent observations")
 
     """
     Description - Single player step function to take actions
@@ -920,6 +924,11 @@ class Player:
     Inputs      - private: bool
                     indicates if the observation is public or private                    
     """
+    
+    
+    def update_opponent_observations(self):
+        self.opponent_public_obs = self.simulator.get_opponent_observations(self)
+    
     def observation(self, private=False):
         
         # 161 length 
@@ -2790,6 +2799,8 @@ class PlayerAI:
         self.phase = 0
         
     def get_action(self):
+        if self.player.actions_taken_this_round == 4:
+            return self.idle()
         # buy wanted champions
         if self.phase == 0:
             return self.phase_0()
@@ -2933,7 +2944,16 @@ class PlayerAI:
             for c in row:
                 if c:
                     if c.name in self.comp.champions:
-                        board_comp.append(c)
+                        if c.name in [i.name for i in board_comp]:
+                            dup = [i for i in board_comp if i.name == c.name][0]
+                            if dup.stars < c.stars:
+                                board_comp.remove(dup)
+                                board_other.append(dup)
+                                board_comp.append(c)
+                            else:
+                                board_other.append(c)
+                        else:
+                            board_comp.append(c)
                     else:
                         board_other.append(c)
         if self.player.num_units_in_play < self.player.max_units:

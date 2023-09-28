@@ -36,7 +36,7 @@ class TFT_Simulator(AECEnv):
 
     def __init__(self, env_config, log=True):
         self.pool_obj = pool.pool()
-        self.PLAYERS = {"player_" + str(player_id): player_class(self.pool_obj, player_id)
+        self.PLAYERS = {"player_" + str(player_id): player_class(self.pool_obj, player_id, self)
                         for player_id in range(config.NUM_PLAYERS)}
         #self.game_observations = {"player_" + str(player_id): Observation() for player_id in range(config.NUM_PLAYERS)}
         self.render_mode = None
@@ -366,7 +366,7 @@ class TFT_Simulator(AECEnv):
 
     def reset(self, seed=None, options=None):
         self.pool_obj = pool.pool()
-        self.PLAYERS = {"player_" + str(player_id): player_class(self.pool_obj, player_id)
+        self.PLAYERS = {"player_" + str(player_id): player_class(self.pool_obj, player_id, self)
                         for player_id in range(config.NUM_PLAYERS)}
         #self.game_observations = {"player_" + str(player_id): Observation() for player_id in range(config.NUM_PLAYERS)}
         self.live_agents = list(self.PLAYERS.keys())
@@ -400,7 +400,7 @@ class TFT_Simulator(AECEnv):
         self.agent_selection = self._agent_selector.next()
 
         super().__init__()
-        
+        [p.update_opponent_observations() for p in list(self.PLAYERS.values())]
         self.public_observations = {player: self.PLAYERS[player].observation() for player in list(self.PLAYERS.keys())}
         obs_dict = {player: self.make_observation(player) for player in list(self.PLAYERS.keys()) if self.PLAYERS[player].is_alive}
         taking_actions_dict = {player: self.PLAYERS[player].taking_actions for player in list(self.PLAYERS.keys())}
@@ -414,6 +414,15 @@ class TFT_Simulator(AECEnv):
     def close(self):
         self.reset()
 
+    def get_opponent_observations(self, player):
+        ret = {}
+        for p in list(self.PLAYERS.keys()):
+            if self.PLAYERS[p] != player:
+                if self.PLAYERS[p].is_alive:
+                    ret[p] = self.PLAYERS[p].observation(False)
+                else:
+                    ret[p] = self.PLAYERS[player].empty_observation()
+        return ret            
 
     def make_observation(self, player):
         obs = np.zeros(self.obs_shape).astype('uint8')
@@ -422,7 +431,7 @@ class TFT_Simulator(AECEnv):
         for p in list(self.PLAYERS.keys()):
             if p != player:
                 if self.PLAYERS[p].is_alive:
-                    obs[cnt] = self.public_observations[p].copy()
+                    obs[cnt] = self.PLAYERS[player].opponent_public_obs[p].copy()
                 cnt += 1
         return obs
 
@@ -445,6 +454,7 @@ class TFT_Simulator(AECEnv):
                     dones[p] = True
                 else:
                     self.PLAYERS[p].taking_actions = True
+                    self.PLAYERS[p].update_opponent_observations()
             if any(dones.values()):
                 self.game_round.update_players({p: agent for p, agent in self.PLAYERS.items() if p in self.live_agents})
             self.game_round.start_round()
