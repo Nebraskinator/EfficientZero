@@ -121,9 +121,9 @@ def update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_r
 
     if config.amp_type == 'torch_amp':
         with autocast():
-            value, _, policy_logits, hidden_state, reward_hidden = model.initial_inference(obs_batch)
+            value, _, policy_logits, hidden_state, reward_hidden, _, _ = model.initial_inference(obs_batch)
     else:
-        value, _, policy_logits, hidden_state, reward_hidden = model.initial_inference(obs_batch)
+        value, _, policy_logits, hidden_state, reward_hidden, _, _ = model.initial_inference(obs_batch)
     scaled_value = config.inverse_value_transform(value)
 
     if vis_result:
@@ -143,6 +143,8 @@ def update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_r
     policy_loss = -(torch.log_softmax(policy_logits, dim=1) * target_policy[:, 0]).sum(1)
     value_prefix_loss = torch.zeros(batch_size, device=config.device)
     consistency_loss = torch.zeros(batch_size, device=config.device)
+    commitment_loss = torch.zeros(batch_size, device=config.device)
+    chance_loss = torch.zeros(batch_size, device=config.device)
 
     target_value_prefix_cpu = target_value_prefix.detach().cpu()
     gradient_scale = 1 / config.num_unroll_steps
@@ -151,27 +153,37 @@ def update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_r
         # use torch amp
         with autocast():
             for step_i in range(config.num_unroll_steps):
-                # unroll with the dynamics function
-                value, value_prefix, policy_logits, hidden_state, reward_hidden = model.recurrent_inference(hidden_state, reward_hidden, action_batch[:, step_i])
+                # unroll with the dynamics functions
+                
+                # predict the afterstate
+                afterstate_value, afterstate_value_prefix, chance_token_logits, hidden_afterstate, reward_hidden, _, _ = model.recurrent_afterstate_inference(hidden_state, reward_hidden, action_batch[:, step_i])
 
                 #beg_index = config.image_channel * step_i
                 #end_index = config.image_channel * (step_i + config.stacked_observations)
 
-                # consistency loss
-                if config.consistency_coeff > 0:
-                    # obtain the oracle hidden states from representation function
-                    _, _, _, presentation_state, _ = model.initial_inference(torch.reshape(obs_batch_ori[:, i:i+config.stacked_observations, :, :, :, :], (obs_batch_ori.shape[0],config.stacked_observations*obs_batch_ori.shape[2], *obs_batch_ori.shape[3:])))
-                    # no grad for the presentation_state branch
-                    dynamic_proj = model.project(hidden_state, with_grad=True)
-                    observation_proj = model.project(presentation_state, with_grad=False)
-                    temp_loss = consist_loss_func(dynamic_proj, observation_proj) * mask_batch[:, step_i]
+                # obtain the oracle hidden states and chance outcomes from representation function
+                _, _, _, presentation_state, _, chance_token_onehot, chance_token_softmax = model.initial_inference(torch.reshape(obs_batch_ori[:, i:i+config.stacked_observations, :, :, :, :], (obs_batch_ori.shape[0],config.stacked_observations*obs_batch_ori.shape[2], *obs_batch_ori.shape[3:])))
+                
+                # predict the state
+                state_value, state_value_prefix, policy_logits, hidden_state, reward_hidden, _, _ = model.recurrent_state_inference(hidden_afterstate, reward_hidden, chance_token_onehot)              
+                
+                print((hidden_state[0], presentation_state[0]))
+                # no grad for the presentation_state branch
+                dynamic_proj = model.project(hidden_state, with_grad=True)
+                observation_proj = model.project(presentation_state, with_grad=False)
+                temp_loss = consist_loss_func(dynamic_proj, observation_proj) * mask_batch[:, step_i]
 
-                    other_loss['consist_' + str(step_i + 1)] = temp_loss.mean().item()
-                    consistency_loss += temp_loss
-
+                other_loss['consist_' + str(step_i + 1)] = temp_loss.mean().item()
+                consistency_loss += temp_loss
+                
                 policy_loss += -(torch.log_softmax(policy_logits, dim=1) * target_policy[:, step_i + 1]).sum(1) * mask_batch[:, step_i]
-                value_loss += config.scalar_value_loss(value, target_value_phi[:, step_i + 1]) * mask_batch[:, step_i]
-                value_prefix_loss += config.scalar_reward_loss(value_prefix, target_value_prefix_phi[:, step_i]) * mask_batch[:, step_i]
+                chance_loss += -(torch.log_softmax(chance_token_logits, dim=1) * (chance_token_onehot)).sum(1) * mask_batch[:, step_i]
+                value_loss += config.scalar_value_loss(afterstate_value, target_value_phi[:, step_i + 1]) * mask_batch[:, step_i]
+                value_loss += config.scalar_value_loss(state_value, target_value_phi[:, step_i + 1]) * mask_batch[:, step_i]
+                value_prefix_loss += config.scalar_reward_loss(afterstate_value_prefix, target_value_prefix_phi[:, step_i]) * mask_batch[:, step_i]
+                value_prefix_loss += config.scalar_reward_loss(state_value_prefix, target_value_prefix_phi[:, step_i]) * mask_batch[:, step_i]
+                
+                commitment_loss += ((chance_token_onehot + 1e9)*(torch.log(chance_token_onehot + 1e9)-torch.log(chance_token_softmax + 1e9))).sum(1)
                 # Follow MuZero, set half gradient
                 hidden_state.register_hook(lambda grad: grad * 0.5)
 
@@ -181,7 +193,7 @@ def update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_r
                                      torch.zeros(1, config.batch_size, config.lstm_hidden_size).to(config.device))
 
                 if vis_result:
-                    scaled_value_prefixs = config.inverse_reward_transform(value_prefix.detach())
+                    scaled_value_prefixs = config.inverse_reward_transform(state_value_prefix.detach())
                     scaled_value_prefixs_cpu = scaled_value_prefixs.detach().cpu()
 
                     predicted_values = torch.cat((predicted_values, config.inverse_value_transform(value).detach().cpu()))
@@ -204,6 +216,8 @@ def update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_r
                         other_loss[key + '_-1'] = metric_loss(scaled_value_prefixs_cpu[value_prefix_indices_n1], target_value_prefix_base[value_prefix_indices_n1])
                     if value_prefix_indices_0.any():
                         other_loss[key + '_0'] = metric_loss(scaled_value_prefixs_cpu[value_prefix_indices_0], target_value_prefix_base[value_prefix_indices_0])
+    
+
     else:
         for step_i in range(config.num_unroll_steps):
             # unroll with the dynamics function
@@ -215,7 +229,7 @@ def update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_r
             # consistency loss
             if config.consistency_coeff > 0:
                 # obtain the oracle hidden states from representation function
-                _, _, _, presentation_state, _ = model.initial_inference(obs_target_batch[:, i, :, :, :])
+                _, _, _, presentation_state, _, chance_token_onehot, chance_token_softmax = model.initial_inference(obs_target_batch[:, i, :, :, :])
                 # no grad for the presentation_state branch
                 dynamic_proj = model.project(hidden_state, with_grad=True)
                 observation_proj = model.project(presentation_state, with_grad=False)
@@ -260,9 +274,13 @@ def update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_r
                 if value_prefix_indices_0.any():
                     other_loss[key + '_0'] = metric_loss(scaled_value_prefixs_cpu[value_prefix_indices_0], target_value_prefix_base[value_prefix_indices_0])
     # ----------------------------------------------------------------------------------
+   
+    print((policy_loss, chance_loss, value_loss, value_prefix_loss, consistency_loss, commitment_loss))
+
     # weighted loss with masks (some invalid states which are out of trajectory.)
     loss = (config.consistency_coeff * consistency_loss + config.policy_loss_coeff * policy_loss +
-            config.value_loss_coeff * value_loss + config.reward_loss_coeff * value_prefix_loss)
+            config.value_loss_coeff * value_loss + config.reward_loss_coeff * value_prefix_loss + 
+            config.commitment_loss_coeff * commitment_loss + config.chance_loss_coeff * chance_loss)
     weighted_loss = (weights * loss).mean()
 
     # backward

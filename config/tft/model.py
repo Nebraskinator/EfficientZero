@@ -256,7 +256,7 @@ class UnitEncoding(nn.Module):
         assert output_size > unit_embedding_size + item_encoded_size + origin_embedding_size
         self.unit_embedding_layer = nn.Embedding(72, unit_embedding_size, padding_idx=0)
         self.origin_embedding_layer = origin_embedding_layer
-        self.linear = nn.Linear(25, 
+        self.linear = nn.Linear(27, 
                                 output_size - unit_embedding_size - item_encoded_size - origin_embedding_size, 
                                 bias=False)
                
@@ -294,7 +294,7 @@ class VectorEncoding(nn.Module):
                  output_size):
         super().__init__()
         self.origin_embedding_layer = origin_embedding_layer
-        self.linear = nn.Linear(11, output_size - origin_embedding_size, bias=False)
+        self.linear = nn.Linear(54*4 - 20, output_size - origin_embedding_size, bias=False)
                
     def forward(self, x):
         layers = []
@@ -304,7 +304,7 @@ class VectorEncoding(nn.Module):
         origin_layers = torch.concat(origin_layers, dim=-2)
         origin_layers = torch.sum(origin_layers, dim=-2)
         layers.append(origin_layers)
-        layers.append(self.linear(torch.div(x[:,20:31], 255.)))
+        layers.append(self.linear(torch.div(x[:,20:], 255.)))
         layers = torch.concat(layers, dim=-1)
         return layers
     
@@ -357,7 +357,7 @@ class BoardComparisonResNet(nn.Module):
         self.length = length
 
         pre_cnn_resblocks = []
-        for i in range(num_pre_attn_resblocks):
+        for i in range(num_pre_cnn_resblocks):
             pre_cnn_resblocks.append(LinearResidualBlock(embedding_size, embedding_size, (length, embedding_size)))
         self.pre_cnn_resblocks = nn.ModuleList(pre_cnn_resblocks)
         
@@ -414,10 +414,59 @@ class BoardComparisonResNet(nn.Module):
         crosses = torch.concat(crosses, dim=-2)
         crosses = torch.mean(crosses, dim=-2)
         return crosses
-            
-        
 
-# Encode the observations into hidden states
+class HistoryCrossAttention(nn.Module):
+    def __init__(self, 
+                 embedding_size, 
+                 num_pre_attn_resblocks,
+                 num_attn_resblocks,
+                 num_attn_heads,
+                 num_post_attn_resblocks,
+                 length
+                 ):
+        super().__init__()
+        
+        self.embedding_size = embedding_size
+        self.length = length
+       
+        pre_attn_resblocks = []
+        for i in range(num_pre_attn_resblocks):
+            pre_attn_resblocks.append(LinearResidualBlock(embedding_size, embedding_size, (length, embedding_size)))
+        self.pre_attn_resblocks = nn.ModuleList(pre_attn_resblocks)
+        attn_resblocks = []
+        for i in range(num_attn_resblocks):
+            attn_resblocks.append(CrossAttentionResBlock(embedding_size, num_attn_heads, (length, embedding_size)))
+        self.attn_resblocks = nn.ModuleList(attn_resblocks)
+        post_attn_resblocks = []
+        for i in range(num_post_attn_resblocks):
+            post_attn_resblocks.append(LinearResidualBlock(embedding_size, embedding_size, (length, embedding_size)))
+        self.post_attn_resblocks = nn.ModuleList(post_attn_resblocks)
+               
+    def forward(self, x, cross_list):
+
+        for c in cross_list:           
+            for block in self.pre_attn_resblocks:
+                c = block(c)
+            for block in self.attn_resblocks:
+                c = block(x, c, c)
+            for block in self.post_attn_resblocks:
+                c = block(c)
+            x = x + c
+        return x
+            
+#straight-through estimator is used during the backward to allow the gradients to flow only to the encoder during the backpropagation.
+class Onehot_argmax(torch.autograd.Function):
+    #more information at : https://pytorch.org/tutorials/beginner/examples_autograd/two_layer_net_custom_function.html
+    @staticmethod
+    def forward(ctx, input):
+        #since the codebook is constant ,we can just use a transformation. no need to create a codebook and matmul c_e_t and codebook for argmax
+        return torch.zeros_like(input).scatter_(-1, torch.argmax(input, dim=-1,keepdim=True), 1.)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        return grad_output        
+
+# Encode the observations into hidden states and chance outcome tokens
 class RepresentationNetwork(nn.Module):
     def __init__(
         self,
@@ -428,6 +477,9 @@ class RepresentationNetwork(nn.Module):
         vec_blocks,
         vec_channels,
         state_channels,
+        reduced_channels_chance,
+        fc_chance_layers, 
+        num_chance_tokens,
     ):
         """Representation network
         Parameters
@@ -566,113 +618,162 @@ class RepresentationNetwork(nn.Module):
                                             num_attn_heads=2, 
                                             num_post_attn_resblocks=2, 
                                             length=self.state_length)
+        
+        # apply cross attention to compare player boards
+        self.post_cross_attention_network = HistoryCrossAttention(embedding_size=unit_embed_channels, 
+                                                            num_pre_attn_resblocks=2,
+                                                            num_attn_resblocks=3,
+                                                            num_attn_heads=2,
+                                                            num_post_attn_resblocks=2,
+                                                            length=self.state_length)
                                                      
         self.num_boards = observation_shape[0]
         
         self.num_players = num_players
+        
+        self.chance_conv = nn.Sequential(nn.LayerNorm((self.state_length,
+                                                    unit_embed_channels,
+                                                    )),
+                                      nn.LeakyReLU(),
+                                      nn.Linear(unit_embed_channels, 
+                                                reduced_channels_chance, 
+                                                bias=False
+                                                ))
+        
+        self.block_output_size_chance = self.state_length * reduced_channels_chance
+
+        self.fc_chance = mlp(self.block_output_size_chance, 
+                            fc_chance_layers, 
+                            num_chance_tokens, 
+                            )
 
     def forward(self, x):
-               
-        opponents = []
-        for i in range(self.num_boards):
-            
-            # get the player state from the observation stack
-            obs = x[:, i, :, :, :]
-            
-            # separate out the units in the board, benches and shops
-            units = obs[:, :-1, :, :]
-            
-            # reshape for the unit encoding step
-            units = units.view(-1, self.state_length - self.observation_shape[-1], self.observation_shape[-3])            
-            
-            # encode each unit
-            units = self.unit_encoding(units)
-            
-            # apply SA to the board
-            board = units[:, :28, :]
-            board = self.board_sa(board)
-            
-            # reshape the board for CNN
-            board = torch.moveaxis(board, -1, -2)
-            board = torch.reshape(board, (-1, self.unit_embed_channels, 7, self.observation_shape[-1]))
-            
-            # CNN resnet for board
-            for block in self.board_cnn_blocks:
-                board = block(board)
-            
-            # reshape the board for SA
-            board = torch.moveaxis(board, -3, -1)
-            board = torch.reshape(board, (-1, 28, self.unit_embed_channels))
-            
-            # concatenate the board with the benches/shops for SA
-            units = torch.concat([board, units[:, 28:, :]], dim=-2)
-            
-            # pad the units tensor to match the input dimensions
-            #units = nn.functional.pad(units, (0, 0, 0, self.observation_shape[-1]))
-            
-            # apply SA to the units
-            units = self.units_sa(units)
-            
-            # sum unit embeddings for concatenation with the linear state vector
-            board_sum = torch.sum(units[:, :28, :], dim=-2)
-            bench_sum = torch.sum(units[:, 28:28+9, :], dim=-2)
-            shop_sum = torch.sum(units[:, 28+9:28+9+5, :], dim=-2)
-            ibench_sum = torch.sum(units[:, 28+9+5:28+9+5+10, :], dim=-2)
-            
-            # vector component of the player state
-            vec = obs[:, -1, :, :]
-            
-            # flatten the player state vector
-            vec = torch.reshape(vec, (-1, self.observation_shape[-3] * self.observation_shape[-1]))
-            
-            # encode the player state vector
-            vec = self.vec_encoding(vec)
-            
-            # make a linear embedding of the units
-            lin_units = torch.reshape(units, (-1, (self.state_length - self.observation_shape[-1]) * self.unit_embed_channels))
-            lin_units = self.lin_units_embedding(lin_units)
-            
-            # concatenate the player state vector with the visual embedding and the board region unit embedding sums
-            vec = torch.concat([vec, board_sum, bench_sum, shop_sum, ibench_sum, lin_units], dim=-1)
-            
-            # linear resnet for the full state vector
-            for block in self.vec_resblocks:
-                vec = block(vec)
-                
-            # fill out the units tensor with a vector embedding
-            vec_fill = self.vec_fill(vec)
-            vec_fill = torch.reshape(vec_fill, (-1, self.observation_shape[-1], self.unit_embed_channels))
-            
-            units = torch.concat([units, vec_fill], dim=-2)
-                
-            # reshape the linear vector for concatenation with the units tensor
-            vec = vec.view(-1, self.observation_shape[-2] * self.observation_shape[-1], self.vec_channels)
-            
-            # concatenate units tensor with the reshaped state vector along channels axis
-            player_state = torch.concat([units, vec], dim=-1)
-            
-            # reduce the channels in the state by passing it through a Linear layer
-            player_state = self.post_merge_lin(player_state)
-            
-            # apply SA to the player state
-            player_state = self.postmerge_sa(player_state)
-            
-            # append board to player or opponent list
-            if i % self.num_players:
-                opponents.append(player_state)
-            else:
-                player = player_state
         
-        # apply cross-attention to boards
-        cross = self.cross_attention_network(player, opponents)
-        
-        # add the cross attention output to the player state
-        state = player + cross
-        
-        # apply SA to the state
-        state = self.postcross_sa(state)
+        states = []
+        for i in range(self.num_boards // self.num_players):
+            
+            opponents = []
+            for i in range(self.num_players):
                 
-        return state
+                # get the player state from the observation stack
+                obs = x[:, i, :, :, :]
+                
+                # separate out the units in the board, benches and shops
+                units = obs[:, :-1, :, :]
+                
+                # reshape for the unit encoding step
+                units = units.view(-1, self.state_length - self.observation_shape[-1], self.observation_shape[-3])            
+                
+                # encode each unit
+                units = self.unit_encoding(units)
+                
+                # apply SA to the board
+                board = units[:, :28, :]
+                board = self.board_sa(board)
+                
+                # reshape the board for CNN
+                board = torch.moveaxis(board, -1, -2)
+                board = torch.reshape(board, (-1, self.unit_embed_channels, 7, self.observation_shape[-1]))
+                
+                # CNN resnet for board
+                for block in self.board_cnn_blocks:
+                    board = block(board)
+                
+                # reshape the board for SA
+                board = torch.moveaxis(board, -3, -1)
+                board = torch.reshape(board, (-1, 28, self.unit_embed_channels))
+                
+                # concatenate the board with the benches/shops for SA
+                units_concat = torch.concat([board, units[:, 28:, :]], dim=-2)
+                
+                units = units + units_concat
+                
+                # pad the units tensor to match the input dimensions
+                #units = nn.functional.pad(units, (0, 0, 0, self.observation_shape[-1]))
+                
+                # apply SA to the units
+                units_sa = self.units_sa(units)
+                
+                # skip connection
+                units = units + units_sa
+                
+                # sum unit embeddings for concatenation with the linear state vector
+                board_sum = torch.sum(units[:, :28, :], dim=-2)
+                bench_sum = torch.sum(units[:, 28:28+9, :], dim=-2)
+                shop_sum = torch.sum(units[:, 28+9:28+9+5, :], dim=-2)
+                ibench_sum = torch.sum(units[:, 28+9+5:28+9+5+10, :], dim=-2)
+                
+                # vector component of the player state
+                vec = obs[:, -1, :, :]
+                
+                # flatten the player state vector
+                vec = torch.reshape(vec, (-1, self.observation_shape[-3] * self.observation_shape[-1]))
+                
+                # encode the player state vector
+                vec = self.vec_encoding(vec)
+                
+                # make a linear embedding of the units
+                lin_units = torch.reshape(units, (-1, (self.state_length - self.observation_shape[-1]) * self.unit_embed_channels))
+                lin_units = self.lin_units_embedding(lin_units)
+                
+                # concatenate the player state vector with the visual embedding and the board region unit embedding sums
+                vec = torch.concat([vec, board_sum, bench_sum, shop_sum, ibench_sum, lin_units], dim=-1)
+                
+                # linear resnet for the full state vector
+                for block in self.vec_resblocks:
+                    vec = block(vec)
+                    
+                # fill out the units tensor with a vector embedding
+                vec_fill = self.vec_fill(vec)
+                vec_fill = torch.reshape(vec_fill, (-1, self.observation_shape[-1], self.unit_embed_channels))
+                
+                units = torch.concat([units, vec_fill], dim=-2)
+                    
+                # reshape the linear vector for concatenation with the units tensor
+                vec = vec.view(-1, self.observation_shape[-2] * self.observation_shape[-1], self.vec_channels)
+                
+                # concatenate units tensor with the reshaped state vector along channels axis
+                player_state = torch.concat([units, vec], dim=-1)
+                
+                # reduce the channels in the state by passing it through a Linear layer
+                player_state = self.post_merge_lin(player_state)
+                
+                
+                # apply SA to the player state
+                player_state_sa = self.postmerge_sa(player_state)
+                
+                player_state = player_state_sa + units
+                
+                # append board to player or opponent list
+                if i % self.num_players:
+                    opponents.append(player_state)
+                else:
+                    player = player_state
+            
+            # apply cross-attention to boards
+            cross = self.cross_attention_network(player, opponents)
+            
+            # add the cross attention output to the player state
+            state = player + cross
+            
+            state_sa = self.postcross_sa(state)
+            
+            state = state + state_sa
+            
+            states.append(state)
+
+        state = states[-1]
+        if len(states) > 1:
+            history_cross = self.post_cross_attention_network(state, states[::-1])
+        state = state + history_cross
+                            
+        chance = self.chance_conv(state)
+        chance = chance.view(-1, self.block_output_size_chance)
+        chance = self.fc_chance(chance)
+        c_e_t = torch.nn.Softmax(-1)(chance)
+        c_t = Onehot_argmax.apply(c_e_t)
+        
+        return state, c_t, c_e_t
 
     def get_param_mean(self):
         mean = []
@@ -682,8 +783,127 @@ class RepresentationNetwork(nn.Module):
         return mean
 
 
-# Predict next hidden states given current states and actions
-class DynamicsNetwork(nn.Module):
+# Predict States given current afterstates and chance tokens
+class StateDynamicsNetwork(nn.Module):
+    def __init__(
+        self,
+        observation_shape,
+        channels,
+        reward_channels,
+        outcome_space_layers,
+        fc_reward_layers,
+        full_support_size,
+        lstm_hidden_size=64,
+        init_zero=False,
+    ):
+        """Dynamics network
+        Parameters
+        ----------
+        num_blocks: int
+            number of res blocks
+        num_channels: int
+            channels of hidden states
+        fc_reward_layers: list
+            hidden layers of the reward prediction head (MLP head)
+        full_support_size: int
+            dim of reward output
+        block_output_size_reward: int
+            dim of flatten hidden states
+        lstm_hidden_size: int
+            dim of lstm hidden
+        init_zero: bool
+            True -> zero initialization for the last layer of reward mlp
+        """
+        super().__init__()
+        
+        self.outcome_space_layers = outcome_space_layers
+        
+        length = observation_shape[-1] * observation_shape[-2]
+        
+        self.action_sa = SelfAttentionResNet(embedding_size=channels+outcome_space_layers, 
+                                             num_pre_attn_resblocks=2, 
+                                             num_attn_resblocks=3, 
+                                             num_attn_heads=2, 
+                                             num_post_attn_resblocks=2, 
+                                             length=length)
+    
+        self.act_conv = nn.Sequential(nn.LayerNorm((length,
+                                                    channels + outcome_space_layers,
+                                                    )),
+                                      nn.LeakyReLU(),
+                                      nn.Linear(channels+outcome_space_layers, 
+                                                channels, 
+                                                bias=False
+                                                ))
+        
+        self.dynamics_sa = SelfAttentionResNet(embedding_size=channels, 
+                                             num_pre_attn_resblocks=2, 
+                                             num_attn_resblocks=3, 
+                                             num_attn_heads=2, 
+                                             num_post_attn_resblocks=2, 
+                                             length=length)
+        
+      
+        self.reward_conv = nn.Sequential(nn.LayerNorm((length,
+                                                    channels,
+                                                    )),
+                                      nn.LeakyReLU(),
+                                      nn.Linear(channels, 
+                                                reward_channels, 
+                                                bias=False
+                                                ))
+        
+        self.block_output_size_reward = length * reward_channels
+        self.lstm = nn.LSTM(input_size=self.block_output_size_reward, 
+                            hidden_size=lstm_hidden_size)
+        
+        self.fc = mlp(lstm_hidden_size, 
+                        fc_reward_layers, 
+                        full_support_size, 
+                        init_zero=init_zero, 
+                        )
+
+    def forward(self, x, reward_hidden):
+        
+        state = x[:, :, :-self.outcome_space_layers]
+        
+        x = self.action_sa(x)
+        x = self.act_conv(x)
+    
+        x = state + x
+    
+        state = self.dynamics_sa(x)
+    
+        x = self.reward_conv(state)
+    
+        x = x.view(-1, self.block_output_size_reward).unsqueeze(0)
+        value_prefix, reward_hidden = self.lstm(x, reward_hidden)
+        value_prefix = value_prefix.squeeze(0)
+        value_prefix = self.fc(value_prefix)
+    
+        return state, reward_hidden, value_prefix
+
+    def get_dynamic_mean(self):
+        dynamic_mean = np.abs(self.conv.weight.detach().cpu().numpy().reshape(-1)).tolist()
+
+        for block in self.resblocks:
+            for name, param in block.named_parameters():
+                dynamic_mean += np.abs(param.detach().cpu().numpy().reshape(-1)).tolist()
+        dynamic_mean = sum(dynamic_mean) / len(dynamic_mean)
+        return dynamic_mean
+
+    def get_reward_mean(self):
+        reward_w_dist = self.conv1x1_reward.weight.detach().cpu().numpy().reshape(-1)
+
+        for name, param in self.fc.named_parameters():
+            temp_weights = param.detach().cpu().numpy().reshape(-1)
+            reward_w_dist = np.concatenate((reward_w_dist, temp_weights))
+        reward_mean = np.abs(reward_w_dist).mean()
+        return reward_w_dist, reward_mean
+
+
+# Predict afterstates given current states and actions
+class AfterstateDynamicsNetwork(nn.Module):
     def __init__(
         self,
         observation_shape,
@@ -727,7 +947,7 @@ class DynamicsNetwork(nn.Module):
                                              length=length)
     
         self.act_conv = nn.Sequential(nn.LayerNorm((length,
-                                                    channels + action_space_layers,
+                                                    channels+action_space_layers,
                                                     )),
                                       nn.LeakyReLU(),
                                       nn.Linear(channels+action_space_layers, 
@@ -798,17 +1018,110 @@ class DynamicsNetwork(nn.Module):
             reward_w_dist = np.concatenate((reward_w_dist, temp_weights))
         reward_mean = np.abs(reward_w_dist).mean()
         return reward_w_dist, reward_mean
+    
+    
+# predict the value and chance probabilities given afterstates
+class AfterstatePredictionNetwork(nn.Module):
+    def __init__(
+        self,
+        observation_shape,
+        num_chance_tokens,
+        num_channels,
+        reduced_channels_value,
+        reduced_channels_chance,
+        fc_value_layers,
+        fc_chance_layers,
+        full_support_size,
+        init_zero=False,
+    ):
+        """Prediction network
+        Parameters
+        ----------
+        action_space_size: int
+            action space
+        num_blocks: int
+            number of res blocks
+        num_channels: int
+            channels of hidden states
+        reduced_channels_value: int
+            channels of value head
+        reduced_channels_policy: int
+            channels of policy head
+        fc_value_layers: list
+            hidden layers of the value prediction head (MLP head)
+        fc_policy_layers: list
+            hidden layers of the policy prediction head (MLP head)
+        full_support_size: int
+            dim of value output
+        block_output_size_value: int
+            dim of flatten hidden states
+        block_output_size_policy: int
+            dim of flatten hidden states
+        init_zero: bool
+            True -> zero initialization for the last layer of value/policy mlp
+        """
+        super().__init__()
+        
+        length = observation_shape[-1] * observation_shape[-2]
+        
+        self.sa = SelfAttentionResNet(embedding_size=num_channels, 
+                                             num_pre_attn_resblocks=2, 
+                                             num_attn_resblocks=3, 
+                                             num_attn_heads=2, 
+                                             num_post_attn_resblocks=2, 
+                                             length=length)
+
+        self.value_conv = nn.Sequential(nn.LayerNorm((length,
+                                                    num_channels,
+                                                    )),
+                                      nn.LeakyReLU(),
+                                      nn.Linear(num_channels, 
+                                                reduced_channels_value, 
+                                                bias=False
+                                                ))
+        
+        self.policy_conv = nn.Sequential(nn.LayerNorm((length,
+                                                    num_channels,
+                                                    )),
+                                      nn.LeakyReLU(),
+                                      nn.Linear(num_channels, 
+                                                reduced_channels_chance, 
+                                                bias=False
+                                                ))
+        
+        self.block_output_size_value = length * reduced_channels_value
+        self.block_output_size_policy = length * reduced_channels_chance
+        self.fc_value = mlp(self.block_output_size_value, 
+                            fc_value_layers, 
+                            full_support_size, 
+                            init_zero=init_zero, 
+                            )
+        self.fc_policy = mlp(self.block_output_size_policy, 
+                             fc_chance_layers, 
+                             num_chance_tokens, 
+                             init_zero=init_zero, 
+                            )
+
+    def forward(self, x):
+        x = self.sa(x)
+        value = self.value_conv(x)
+        policy = self.policy_conv(x)
+        value = value.view(-1, self.block_output_size_value)
+        policy = policy.view(-1, self.block_output_size_policy)
+        value = self.fc_value(value)
+        policy = self.fc_policy(policy)
+        return policy, value
 
 
-# predict the value and policy given hidden states
-class PredictionNetwork(nn.Module):
+# predict the values and action probabilities given states
+class StatePredictionNetwork(nn.Module):
     def __init__(
         self,
         observation_shape,
         action_space_size,
         num_channels,
         reduced_channels_value,
-        reduced_channels_policy,
+        reduced_channels_policy,       
         fc_value_layers,
         fc_policy_layers,
         full_support_size,
@@ -869,6 +1182,7 @@ class PredictionNetwork(nn.Module):
                                                 bias=False
                                                 ))
         
+        
         self.block_output_size_value = length * reduced_channels_value
         self.block_output_size_policy = length * reduced_channels_policy
         self.fc_value = mlp(self.block_output_size_value, 
@@ -883,6 +1197,7 @@ class PredictionNetwork(nn.Module):
         #                     momentum=momentum
         #                    )
 
+
     def forward(self, x):
         x = self.sa(x)
         value = self.value_conv(x)
@@ -891,8 +1206,8 @@ class PredictionNetwork(nn.Module):
         policy = policy.view(-1, self.block_output_size_policy)
         value = self.fc_value(value)
         #policy = self.fc_policy(policy)
+        
         return policy, value
-
 
 class EfficientZeroNet(BaseNet):
     def __init__(
@@ -900,6 +1215,7 @@ class EfficientZeroNet(BaseNet):
         observation_shape,
         num_players,
         action_space_size,
+        num_chance_tokens,
         num_blocks,
         num_channels,
         board_embed_size,
@@ -907,6 +1223,7 @@ class EfficientZeroNet(BaseNet):
         vec_embed_size,
         fc_reward_layers,
         fc_value_layers,
+        fc_chance_layers,
         policy_layers,
         reward_support_size,
         value_support_size,
@@ -981,9 +1298,10 @@ class EfficientZeroNet(BaseNet):
         self.state_norm = state_norm
 
         self.action_space_size = action_space_size
+        self.num_chance_tokens = num_chance_tokens
 
 
-        self.representation_network = RepresentationNetwork(
+        self.representation_network = RepresentationNetwork(            
             observation_shape=observation_shape,
             num_players=num_players,
             num_board_cnn_resblocks=8,
@@ -991,9 +1309,12 @@ class EfficientZeroNet(BaseNet):
             vec_blocks=8,
             vec_channels=16,
             state_channels=num_channels,
+            reduced_channels_chance=16,
+            fc_chance_layers=fc_chance_layers, 
+            num_chance_tokens=num_chance_tokens,
             )
 
-        self.dynamics_network = DynamicsNetwork(
+        self.afterstate_dynamics_network = AfterstateDynamicsNetwork(
             observation_shape=observation_shape,
             channels=num_channels,
             reward_channels=16,
@@ -1001,11 +1322,30 @@ class EfficientZeroNet(BaseNet):
             fc_reward_layers=fc_reward_layers,
             full_support_size=reward_support_size,
             lstm_hidden_size=lstm_hidden_size,
-            init_zero=self.init_zero,
+            )
+        
+        self.state_dynamics_network = StateDynamicsNetwork(
+            observation_shape=observation_shape,
+            channels=num_channels,
+            reward_channels=16,
+            outcome_space_layers=num_chance_tokens,
+            fc_reward_layers=fc_reward_layers,
+            full_support_size=reward_support_size,
+            lstm_hidden_size=lstm_hidden_size,
+            )
 
-        )
-
-        self.prediction_network = PredictionNetwork(
+        self.afterstate_prediction_network = AfterstatePredictionNetwork(
+            observation_shape=observation_shape,
+            num_chance_tokens=num_chance_tokens,
+            num_channels=num_channels,
+            reduced_channels_value=16,
+            reduced_channels_chance=16,
+            fc_value_layers=fc_value_layers,
+            fc_chance_layers=fc_chance_layers,
+            full_support_size=value_support_size,
+            )
+        
+        self.state_prediction_network = StatePredictionNetwork(
             observation_shape=observation_shape,
             action_space_size=action_space_size,
             num_channels=num_channels,
@@ -1014,8 +1354,7 @@ class EfficientZeroNet(BaseNet):
             fc_value_layers=fc_value_layers,
             fc_policy_layers=None,
             full_support_size=value_support_size,
-            init_zero=self.init_zero,
-        )
+            )
 
         # projection
         if downsample:
@@ -1025,34 +1364,39 @@ class EfficientZeroNet(BaseNet):
         self.porjection_in_dim = in_dim
         self.projection = nn.Sequential(
             nn.Linear(self.porjection_in_dim, self.proj_hid, bias=False),
-            nn.BatchNorm1d(self.proj_hid),
+            nn.LayerNorm(self.proj_hid),
             nn.LeakyReLU(),
             nn.Linear(self.proj_hid, self.proj_hid, bias=False),
-            nn.BatchNorm1d(self.proj_hid),
+            nn.LayerNorm(self.proj_hid),
             nn.LeakyReLU(),
             nn.Linear(self.proj_hid, self.proj_out, bias=False),
-            nn.BatchNorm1d(self.proj_out)
+            nn.LayerNorm(self.proj_out)
         )
         self.projection_head = nn.Sequential(
             nn.Linear(self.proj_out, self.pred_hid, bias=False),
-            nn.BatchNorm1d(self.pred_hid),
+            nn.LayerNorm(self.pred_hid),
             nn.LeakyReLU(),
             nn.Linear(self.pred_hid, self.pred_out, bias=False),
         )
 
-    def prediction(self, encoded_state):     
-        policy, value = self.prediction_network(encoded_state)
+    def afterstate_prediction(self, encoded_state):     
+        chance_token_logit, value = self.afterstate_prediction_network(encoded_state)
+        return chance_token_logit, value
+    
+    def state_prediction(self, encoded_state):     
+        policy, value = self.state_prediction_network(encoded_state)
         return policy, value
 
     def representation(self, observation):
-        encoded_state = self.representation_network(observation)
+        encoded_state, token_onehot, token_softmax  = self.representation_network(observation)
         if not self.state_norm:
-            return encoded_state
+            return encoded_state, token_onehot, token_softmax
         else:
             encoded_state_normalized = renormalize(encoded_state)
-            return encoded_state_normalized
+            return encoded_state_normalized, token_onehot, token_softmax
 
-    def dynamics(self, encoded_state, reward_hidden, action):
+    # state + action -> afterstate
+    def afterstate_dynamics(self, encoded_state, reward_hidden, action):
         # Stack encoded_state with a game specific one hot encoded action
         
         
@@ -1093,13 +1437,48 @@ class EfficientZeroNet(BaseNet):
         '''
         #onehot = torch.nn.functional.one_hot(torch.squeeze(action), self.action_space_size)
         x = torch.cat((encoded_state, action_one_hot), dim=-1)
-        next_encoded_state, reward_hidden, value_prefix = self.dynamics_network(x, reward_hidden)
+        next_encoded_state, reward_hidden, value_prefix = self.afterstate_dynamics_network(x, reward_hidden)
 
         if not self.state_norm:
             return next_encoded_state, reward_hidden, value_prefix
         else:
             next_encoded_state_normalized = renormalize(next_encoded_state)
             return next_encoded_state_normalized, reward_hidden, value_prefix
+
+    # afterstate + chance token -> state
+    def state_dynamics(self, encoded_state, reward_hidden, chance_token_onehot):
+        # Stack encoded_state with a game specific one hot encoded token
+        
+        
+        action_one_hot = (
+            torch.ones(
+                (
+                    encoded_state.shape[0],
+                    encoded_state.shape[1],
+                    self.num_chance_tokens,
+                )
+            )
+            .to(chance_token_onehot.device)
+            .float()
+        )
+        
+        chance_token_onehot = torch.unsqueeze(chance_token_onehot, -2)
+        action_one_hot = action_one_hot * chance_token_onehot
+            
+        '''
+        action_one_hot = (
+            action[:, :, None, None] * action_one_hot / self.action_space_size
+        )
+        '''
+        #onehot = torch.nn.functional.one_hot(torch.squeeze(action), self.action_space_size)
+        x = torch.cat((encoded_state, action_one_hot), dim=-1)
+        next_encoded_state, reward_hidden, value_prefix = self.state_dynamics_network(x, reward_hidden)
+
+        if not self.state_norm:
+            return next_encoded_state, reward_hidden, value_prefix
+        else:
+            next_encoded_state_normalized = renormalize(next_encoded_state)
+            return next_encoded_state_normalized, reward_hidden, value_prefix    
 
     def get_params_mean(self):
         representation_mean = self.representation_network.get_param_mean()

@@ -43,21 +43,23 @@ class TFTConfig(BaseConfig):
             lr_decay_steps=100000,
             auto_td_steps_ratio=0.3,
             # replay window
-            start_transitions=7e5,
+            start_transitions=1e5,
             total_transitions=100 * 1000,
             transition_num=1e6,
             # frame skip & stack observation
             gray_scale=False,
             frame_skip=1,
-            stacked_observations=1,
+            stacked_observations=2,
             # coefficient
             reward_loss_coeff=1,
             value_loss_coeff=0.25,
             policy_loss_coeff=1,
             consistency_coeff=2,
+            commitment_loss_coeff=0.25,
+            chance_loss_coeff=1,
             # reward sum
             lstm_hidden_size=256,
-            lstm_horizon_len=5,
+            lstm_horizon_len=10,
             # siamese
             proj_hid=1024,
             proj_out=1024,
@@ -72,6 +74,8 @@ class TFTConfig(BaseConfig):
         self.num_random_actors = 1
         self.num_prev_models = 0
         self.prev_model_update_interval = 15000
+        
+        self.num_chance_tokens = 64
 
         self.start_transitions = self.start_transitions // self.frame_skip
         self.start_transitions = max(1, self.start_transitions)
@@ -85,7 +89,8 @@ class TFTConfig(BaseConfig):
         self.state_embed_size = 2048  # x36 Number of channels in value head
         self.vec_embed_size = 128  # x36 Number of channels in policy head
         self.resnet_fc_reward_layers = [1024]  # Define the hidden layers in the reward head of the dynamic network
-        self.resnet_fc_value_layers = [1024]  # Define the hidden layers in the value head of the prediction network
+        self.resnet_fc_value_layers = [1024]
+        self.resnet_fc_chance_layers = [1024] # Define the hidden layers in the value head of the prediction network
         self.resnet_policy_layers = 38  # Define the depth in the 3D policy head of the prediction network
         self.downsample = False  # Downsample observations before representation network (See paper appendix Network Architecture)
 
@@ -116,15 +121,17 @@ class TFTConfig(BaseConfig):
             for player, dist in dists.items():
                 action = actions[player]
                 best_action = np.argmax(dist)
-                val = dist[best_action]
-                a_val = dist[action]
-                env.PLAYERS[player].print("chosen action: {} / {}, best action: {} / {}".format(action, round(a_val), best_action, round(val)))
+                s = np.sum(dist)
+                val = dist[best_action] / s
+                a_val = dist[action] / s
+                env.PLAYERS[player].print("chosen action: {} / {}, best action: {} / {}".format(action, round(a_val, 2), best_action, round(val, 2)))
 
     def get_uniform_network(self):
         return EfficientZeroNet(
             observation_shape=self.obs_shape,
             num_players=self.num_players,
             action_space_size=self.action_space_size,
+            num_chance_tokens=self.num_chance_tokens,
             num_blocks=self.blocks,
             num_channels=self.channels,
             board_embed_size=self.board_embed_size,
@@ -132,6 +139,7 @@ class TFTConfig(BaseConfig):
             vec_embed_size=self.vec_embed_size,
             fc_reward_layers=self.resnet_fc_reward_layers,
             fc_value_layers=self.resnet_fc_value_layers,
+            fc_chance_layers=self.resnet_fc_chance_layers,
             policy_layers=self.resnet_policy_layers,
             reward_support_size=self.reward_support.size,
             value_support_size=self.value_support.size,

@@ -70,6 +70,8 @@ class Player:
         self.chosen = False  # Does this player have a chosen unit already
         self.log = []
 
+        self.action_history = []
+
         # I need to comment how this works.
         self.triple_catalog = []
         self.num_units_in_play = 0
@@ -404,6 +406,7 @@ class Player:
         self.actions_taken_this_round += 1
 
     def take_action_single(self, action):
+        self.action_history.append(action)
         x, y, z = action // 38 // 4, action // 38 % 4, action % 38
         self.print("action: {}, x: {}, y: {}, z: {}".format(action, x, y, z))
         if x < 7:
@@ -465,6 +468,7 @@ class Player:
 
         elif x == 13 and y == 3:
             self.pass_action() 
+        self.actions_taken_this_round += 1
         '''
         elif x == 5 and y == 6 and self.round > 1:
             exp_to_level = 0
@@ -1150,6 +1154,27 @@ class Player:
         for i in range(len(vector) // obs.shape[-1] + (1 if len(vector) % obs.shape[-1] else 0)):
             temp = vector[i*obs.shape[-1] : (i+1)*obs.shape[-1]]
             obs[-1, i, :len(temp)] = temp 
+        
+        action_obs = np.zeros((14*4, 2)).astype('uint8')
+        if private and self.action_history:
+            a = self.action_history[-1]
+            x, y, z = a // 38 // 4, a // 38 % 4, a % 38
+            action_obs[x*4 + y, 0] = 255
+            if x >= 4 and y >= 4:
+                dest_x, dest_y = x, y
+            else:
+                if z < 28:
+                    dest_x, dest_y = z // 4, z % 4
+                elif z < 37:
+                    x_bench = z - 28
+                    dest_x, dest_y = x_bench // 4 + 7, x_bench % 4                   
+                else:
+                    dest_x, dest_y = -1, 2
+            action_obs[dest_x*4 + dest_y, 1] = 255
+        action_obs = np.reshape(action_obs, (14, 4, 2))
+            
+        obs = np.concatenate([obs, action_obs], axis=-1)
+        
         return obs
         
 

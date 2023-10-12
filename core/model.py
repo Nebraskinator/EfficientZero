@@ -14,6 +14,8 @@ class NetworkOutput(typing.NamedTuple):
     policy_logits: List[float]
     hidden_state: List[float]
     reward_hidden: object
+    chance_token_onehot: object
+    chance_token_softmax: object
 
 
 def concat_output_value(output_lst):
@@ -80,8 +82,8 @@ class BaseNet(nn.Module):
 
     def initial_inference(self, obs) -> NetworkOutput:
         num = obs.size(0)
-        state = self.representation(obs)
-        actor_logit, value = self.prediction(state)
+        state, chance_token_onehot, chance_token_softmax = self.representation(obs)
+        actor_logit, value = self.state_prediction(state)
         if not self.training:
             # if not in training, obtain the scalars of the value/reward
             value = self.inverse_value_transform(value).detach().cpu().numpy()
@@ -94,11 +96,27 @@ class BaseNet(nn.Module):
             # zero initialization for reward (value prefix) hidden states
             reward_hidden = (torch.zeros(1, num, self.lstm_hidden_size).to('cuda'), torch.zeros(1, num, self.lstm_hidden_size).to('cuda'))
 
-        return NetworkOutput(value, [0. for _ in range(num)], actor_logit, state, reward_hidden)
+        return NetworkOutput(value, [0. for _ in range(num)], actor_logit, state, reward_hidden, chance_token_onehot, chance_token_softmax)
 
-    def recurrent_inference(self, hidden_state, reward_hidden, action) -> NetworkOutput:
-        state, reward_hidden, value_prefix = self.dynamics(hidden_state, reward_hidden, action)
-        actor_logit, value = self.prediction(state)
+    # state + action -> afterstate and chance logits
+    def recurrent_afterstate_inference(self, hidden_state, reward_hidden, action) -> NetworkOutput:
+        afterstate, reward_hidden, value_prefix = self.afterstate_dynamics(hidden_state, reward_hidden, action)
+        chance_token_logit, value = self.afterstate_prediction(afterstate)
+
+        if not self.training:
+            # if not in training, obtain the scalars of the value/reward
+            value = self.inverse_value_transform(value).detach().cpu().numpy()
+            value_prefix = self.inverse_reward_transform(value_prefix).detach().cpu().numpy()
+            afterstate = afterstate.detach().cpu().numpy()
+            reward_hidden = (reward_hidden[0].detach().cpu().numpy(), reward_hidden[1].detach().cpu().numpy())
+            chance_token_logit = chance_token_logit.detach().cpu().numpy()
+
+        return NetworkOutput(value, value_prefix, chance_token_logit, afterstate, reward_hidden, None, None)
+
+    # afterstate + chance token -> state and policy logits
+    def recurrent_state_inference(self, hidden_state, reward_hidden, chance_token) -> NetworkOutput:
+        state, reward_hidden, value_prefix = self.state_dynamics(hidden_state, reward_hidden, chance_token)
+        actor_logit, value = self.state_prediction(state)
 
         if not self.training:
             # if not in training, obtain the scalars of the value/reward
@@ -108,7 +126,7 @@ class BaseNet(nn.Module):
             reward_hidden = (reward_hidden[0].detach().cpu().numpy(), reward_hidden[1].detach().cpu().numpy())
             actor_logit = actor_logit.detach().cpu().numpy()
 
-        return NetworkOutput(value, value_prefix, actor_logit, state, reward_hidden)
+        return NetworkOutput(value, value_prefix, actor_logit, state, reward_hidden, None, None)
 
     def get_weights(self):
         return {k: v.cpu() for k, v in self.state_dict().items()}

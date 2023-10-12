@@ -13,6 +13,9 @@ import core.ctree.cytree as cytree
 import gc
 import copy
 
+import os
+import shutil
+
 from torch.nn import L1Loss
 from torch.cuda.amp import autocast as autocast
 from core.mcts import MCTS
@@ -362,7 +365,11 @@ class DataWorker(object):
                             #policy_logits_pool = np.array([np.exp(x - np.max(x)) / np.exp(x - np.max(x)).sum() for x in network_output.policy_logits])
                             #policy_logits_pool = (network_output.policy_logits * np.array([action_masks[p] for p in model_acting_agents])).astype(np.float32).tolist()
                             #policy_logits_pool = (network_output.policy_logits * np.array([action_masks[p] for p in model_acting_agents])).astype(np.float32).tolist()
-                            roots = cytree.Roots(len(model_acting_agents), self.config.action_space_size, self.config.num_simulations if ((start_training[curr_model] or self.config.resume_training) and all([s >= value_training_start for s in trained_steps])) else 1)
+                            tree_nodes = 1
+                            if ((start_training[curr_model] or self.config.resume_training) and all([s >= value_training_start for s in trained_steps])):
+                                tree_nodes = self.config.num_simulations
+                            pool_size = self.config.action_space_size * (tree_nodes + 2)
+                            roots = cytree.Roots(len(model_acting_agents), pool_size)
                             policy_logits_pool = []
                             noises = []
                             for i, p in enumerate(model_acting_agents):
@@ -580,7 +587,14 @@ class DataWorker(object):
                         print_rewards = print_rewards + "model {}: {}, ".format(m_num, np.mean(res))
                         
                     print("rank: {}, ".format(self.rank)+print_rewards)
-                
+                if env.log and (start_training[curr_model] or self.config.resume_training) and all([s >= value_training_start for s in trained_steps]) and os.path.isfile("log.txt"):
+                    subdir = "./logs"
+                    prev = [int(i.split(".")[0]) for i in os.listdir(subdir) if i.endswith("txt")]
+                    idx = 0
+                    if prev:
+                        idx = max(prev) + 1
+                    idx = str(idx).zfill(6)
+                    shutil.copy("log.txt", "./logs/{}.txt".format(idx))
 
                 '''
                             # reset the finished env and new a env

@@ -45,7 +45,7 @@ class TFT_Simulator(AECEnv):
         self.num_players = config.NUM_PLAYERS
         self.log = log
         self.previous_rewards = {"player_" + str(player_id): 0 for player_id in range(config.NUM_PLAYERS)}
-        self.image_channel = 52
+        self.image_channel = 54
         self.action_depth = 38
         self.obs_shape = (self.num_players, 14, 4, self.image_channel)
         self.step_function = Step_Function(self.pool_obj)

@@ -67,6 +67,8 @@ class BaseConfig(object):
                  value_loss_coeff: float = 1,
                  policy_loss_coeff: float = 1,
                  consistency_coeff: float = 1,
+                 commitment_loss_coeff: float = 1,
+                 chance_loss_coeff: float = 1,
                  proj_hid: int = 256,
                  proj_out: int = 256,
                  pred_hid: int = 64,
@@ -252,6 +254,8 @@ class BaseConfig(object):
         self.value_loss_coeff = value_loss_coeff
         self.policy_loss_coeff = policy_loss_coeff
         self.consistency_coeff = consistency_coeff
+        self.commitment_loss_coeff = commitment_loss_coeff
+        self.chance_loss_coeff = chance_loss_coeff
         self.device = 'cuda'
         self.exp_path = None  # experiment path
         self.debug = False
@@ -406,7 +410,7 @@ class BaseConfig(object):
             self.auto_td_steps = self.auto_td_steps_ratio * self.training_steps
 
         assert 0 <= self.lr_warm_up <= 0.1
-        assert 1 <= self.lstm_horizon_len <= self.num_unroll_steps
+        assert 1 <= self.lstm_horizon_len <= self.num_unroll_steps * 2
         assert self.start_transitions >= self.batch_size
 
         # augmentation
