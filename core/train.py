@@ -21,7 +21,6 @@ from core.storage import SharedStorage#, QueueStorage
 from core.selfplay_worker import DataWorkerSpawner
 from core.reanalyze_worker import BatchWorker_GPU, BatchWorker_CPU
 
-
 def consist_loss_func(f1, f2):
     """Consistency loss function: similarity loss
     Parameters
@@ -44,6 +43,12 @@ def adjust_lr(config, optimizer, step_count):
 
     return lr
 
+def check_tensor(tensor, name):
+    if torch.isnan(tensor).any():
+        print(f"{name} contains nan")
+    if torch.isinf(tensor).any():
+        print(f"{name} contains inf")
+                
 
 def update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_result=False):
     """update models given a batch data
@@ -60,6 +65,7 @@ def update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_r
     vis_result: bool
         True -> log some visualization data in tensorboard (some distributions, values, etc)
     """
+    
     curr_model, inputs_batch, targets_batch = batch
     obs_batch_ori, action_batch, mask_batch, indices, weights_lst, make_time = inputs_batch
     target_value_prefix, target_value, target_policy = targets_batch
@@ -129,6 +135,12 @@ def update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_r
     if vis_result:
         state_lst = hidden_state.detach().cpu().numpy()
 
+    # Check for nan or inf in inputs
+    check_tensor(value, "value initial")
+    check_tensor(policy_logits, "policy initial")
+    check_tensor(hidden_state, "hidden state initial")
+    #check_tensor(reward_hidden, "reward hidden initial")
+
     predicted_value_prefixs = []
     # Note: Following line is just for logging.
     if vis_result:
@@ -140,7 +152,9 @@ def update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_r
 
     # loss of the first step
     value_loss = config.scalar_value_loss(value, target_value_phi[:, 0])
+    #config.scalar_value_loss(value, target_value_phi[:, 0])
     policy_loss = -(torch.log_softmax(policy_logits, dim=1) * target_policy[:, 0]).sum(1)
+    #-(torch.log_softmax(policy_logits, dim=1) * target_policy[:, 0]).sum(1)
     value_prefix_loss = torch.zeros(batch_size, device=config.device)
     consistency_loss = torch.zeros(batch_size, device=config.device)
     commitment_loss = torch.zeros(batch_size, device=config.device)
@@ -162,12 +176,13 @@ def update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_r
                 #end_index = config.image_channel * (step_i + config.stacked_observations)
 
                 # obtain the oracle hidden states and chance outcomes from representation function
-                _, _, _, presentation_state, _, chance_token_onehot, chance_token_softmax = model.initial_inference(torch.reshape(obs_batch_ori[:, i:i+config.stacked_observations, :, :, :, :], (obs_batch_ori.shape[0],config.stacked_observations*obs_batch_ori.shape[2], *obs_batch_ori.shape[3:])))
+                _, _, _, presentation_state, _, chance_token_onehot, chance_token_softmax = model.initial_inference(torch.reshape(obs_target_batch[:, i:i+config.stacked_observations, :, :, :, :], (obs_batch_ori.shape[0],config.stacked_observations*obs_batch_ori.shape[2], *obs_batch_ori.shape[3:])))
                 
+                #chance_token_onehot, chance_token_softmax = model.encoder_network(torch.reshape(obs_target_batch[:, i:i+config.stacked_observations, :, :, :, :], (obs_batch_ori.shape[0],config.stacked_observations*obs_batch_ori.shape[2], *obs_batch_ori.shape[3:])))
+
                 # predict the state
                 state_value, state_value_prefix, policy_logits, hidden_state, reward_hidden, _, _ = model.recurrent_state_inference(hidden_afterstate, reward_hidden, chance_token_onehot)              
-                
-                print((hidden_state[0], presentation_state[0]))
+                              
                 # no grad for the presentation_state branch
                 dynamic_proj = model.project(hidden_state, with_grad=True)
                 observation_proj = model.project(presentation_state, with_grad=False)
@@ -177,13 +192,24 @@ def update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_r
                 consistency_loss += temp_loss
                 
                 policy_loss += -(torch.log_softmax(policy_logits, dim=1) * target_policy[:, step_i + 1]).sum(1) * mask_batch[:, step_i]
-                chance_loss += -(torch.log_softmax(chance_token_logits, dim=1) * (chance_token_onehot)).sum(1) * mask_batch[:, step_i]
-                value_loss += config.scalar_value_loss(afterstate_value, target_value_phi[:, step_i + 1]) * mask_batch[:, step_i]
-                value_loss += config.scalar_value_loss(state_value, target_value_phi[:, step_i + 1]) * mask_batch[:, step_i]
-                value_prefix_loss += config.scalar_reward_loss(afterstate_value_prefix, target_value_prefix_phi[:, step_i]) * mask_batch[:, step_i]
-                value_prefix_loss += config.scalar_reward_loss(state_value_prefix, target_value_prefix_phi[:, step_i]) * mask_batch[:, step_i]
+                #
                 
-                commitment_loss += ((chance_token_onehot + 1e9)*(torch.log(chance_token_onehot + 1e9)-torch.log(chance_token_softmax + 1e9))).sum(1)
+                chance_logit_softmax = torch.nn.Softmax(dim=-1)(chance_token_logits)
+                chance_loss += ((chance_token_onehot + 1e-5)*(torch.log(chance_token_onehot + 1e-5)-torch.log(chance_logit_softmax + 1e-5))).sum(1) * mask_batch[:, step_i]
+                #-(torch.log_softmax(chance_token_logits, dim=1) * (chance_token_onehot)).sum(1)
+                value_loss += config.scalar_value_loss(afterstate_value, target_value_phi[:, step_i + 1]) * mask_batch[:, step_i]
+                #
+                value_loss += config.scalar_value_loss(state_value, target_value_phi[:, step_i + 1]) * mask_batch[:, step_i]
+                #
+                value_prefix_loss += config.scalar_reward_loss(afterstate_value_prefix, target_value_prefix_phi[:, step_i]) * mask_batch[:, step_i]
+                #
+                value_prefix_loss += config.scalar_reward_loss(state_value_prefix, target_value_prefix_phi[:, step_i]) * mask_batch[:, step_i]
+                #
+                
+                commitment_loss += ((chance_token_onehot + 1e-5)*(torch.log(chance_token_onehot + 1e-5)-torch.log(chance_token_softmax + 1e-5))).sum(1) * mask_batch[:, step_i]
+                #
+
+                #((chance_token_onehot)*(torch.log(chance_token_onehot)-torch.log(chance_token_softmax))).sum(1)
                 # Follow MuZero, set half gradient
                 hidden_state.register_hook(lambda grad: grad * 0.5)
 
@@ -239,8 +265,11 @@ def update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_r
                 consistency_loss += temp_loss
 
             policy_loss += -(torch.log_softmax(policy_logits, dim=1) * target_policy[:, step_i + 1]).sum(1) * mask_batch[:, step_i]
+            #-(torch.log_softmax(policy_logits, dim=1) * target_policy[:, step_i + 1]).sum(1) * mask_batch[:, step_i]
             value_loss += config.scalar_value_loss(value, target_value_phi[:, step_i + 1]) * mask_batch[:, step_i]
+            #config.scalar_value_loss(value, target_value_phi[:, step_i + 1]) * mask_batch[:, step_i]
             value_prefix_loss += config.scalar_reward_loss(value_prefix, target_value_prefix_phi[:, step_i]) * mask_batch[:, step_i]
+            #config.scalar_reward_loss(value_prefix, target_value_prefix_phi[:, step_i]) * mask_batch[:, step_i]
             # Follow MuZero, set half gradient
             hidden_state.register_hook(lambda grad: grad * 0.5)
 
@@ -275,7 +304,7 @@ def update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_r
                     other_loss[key + '_0'] = metric_loss(scaled_value_prefixs_cpu[value_prefix_indices_0], target_value_prefix_base[value_prefix_indices_0])
     # ----------------------------------------------------------------------------------
    
-    print((policy_loss, chance_loss, value_loss, value_prefix_loss, consistency_loss, commitment_loss))
+    #print((policy_loss.mean(), chance_loss.mean(), value_loss.mean(), value_prefix_loss.mean(), consistency_loss.mean(), commitment_loss.mean()))
 
     # weighted loss with masks (some invalid states which are out of trajectory.)
     loss = (config.consistency_coeff * consistency_loss + config.policy_loss_coeff * policy_loss +
@@ -313,7 +342,8 @@ def update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_r
 
     # packing data for logging
     loss_data = (total_loss.item(), weighted_loss.item(), loss.mean().item(), 0, policy_loss.mean().item(),
-                 value_prefix_loss.mean().item(), value_loss.mean().item(), consistency_loss.mean())
+                 value_prefix_loss.mean().item(), value_loss.mean().item(), consistency_loss.mean(), 
+                 chance_loss.mean(), commitment_loss.mean())
     if vis_result:
         #reward_w_dist, representation_mean, dynamic_mean, reward_mean = model.get_params_mean()
         #other_dist['reward_weights_dist'] = reward_w_dist
@@ -406,7 +436,8 @@ def _train(models, target_models, replay_buffers, shared_storage, mcts_storage, 
         # remove data if the replay buffer is full. (more data settings)
         if step_counts[curr_model] == counter_init:
             shared_storage.set_start_signal.remote(curr_model)
-        
+        #if step_counts[curr_model] == 3:
+        #    torch.autograd.set_detect_anomaly(True)
         if step_counts[curr_model] % 40 == 0:          
             [replay_buffer.remove_to_fit.remote() for replay_buffer in replay_buffers if replay_buffer]
 

@@ -356,6 +356,7 @@ class BoardComparisonResNet(nn.Module):
         self.embedding_size = embedding_size
         self.length = length
 
+        """
         pre_cnn_resblocks = []
         for i in range(num_pre_cnn_resblocks):
             pre_cnn_resblocks.append(LinearResidualBlock(embedding_size, embedding_size, (length, embedding_size)))
@@ -370,7 +371,7 @@ class BoardComparisonResNet(nn.Module):
                                                      8),
                                                     k=3))
         self.matchup_cnn_blocks = nn.ModuleList(matchup_cnn_blocks)
-        
+        """
         pre_attn_resblocks = []
         for i in range(num_pre_attn_resblocks):
             pre_attn_resblocks.append(LinearResidualBlock(embedding_size, embedding_size, (length, embedding_size)))
@@ -386,28 +387,28 @@ class BoardComparisonResNet(nn.Module):
                
     def forward(self, x, cross_list):
         crosses = []
-        x_board = x[:, :28, :]
-        x_board = torch.reshape(x_board, (-1, 7, 4, self.embedding_size))
+        #x_board = x[:, :28, :]
+        #x_board = torch.reshape(x_board, (-1, 7, 4, self.embedding_size))
         for c in cross_list:
-            for block in self.pre_cnn_resblocks:
-                c = block(c)            
-            c_board = c[:, :28, :]
-            c_board = torch.flip(c_board, dims=(1,))
-            c_board = torch.reshape(c_board, (-1, 7, 4, self.embedding_size))
-            matchup = torch.concat([x_board, c_board], dim=-2)
-            matchup = torch.moveaxis(matchup, -1, -3)
-            for block in self.matchup_cnn_blocks:
-                matchup = block(matchup)
-            matchup = torch.moveaxis(matchup, -3, -1)
-            x_match = torch.reshape(matchup[:, :, :4, :], (-1, 28, self.embedding_size))
-            c_match = torch.reshape(matchup[:, :, 4:, :], (-1, 28, self.embedding_size))
-            c = nn.functional.pad(torch.flip(c_match, dims=(1,)), (0, 0, 0, self.length - 28)) + c
-            x_match = nn.functional.pad(x_match, (0, 0, 0, self.length - 28)) + x
+            #for block in self.pre_cnn_resblocks:
+            #    c = block(c)            
+            #c_board = c[:, :28, :]
+            #c_board = torch.flip(c_board, dims=(1,))
+            #c_board = torch.reshape(c_board, (-1, 7, 4, self.embedding_size))
+            #matchup = torch.concat([x_board, c_board], dim=-2)
+            #matchup = torch.moveaxis(matchup, -1, -3)
+            #for block in self.matchup_cnn_blocks:
+            #    matchup = block(matchup)
+            #matchup = torch.moveaxis(matchup, -3, -1)
+            #x_match = torch.reshape(matchup[:, :, :4, :], (-1, 28, self.embedding_size))
+            #c_match = torch.reshape(matchup[:, :, 4:, :], (-1, 28, self.embedding_size))
+            #c = nn.functional.pad(torch.flip(c_match, dims=(1,)), (0, 0, 0, self.length - 28)) + c
+            #x_match = nn.functional.pad(x_match, (0, 0, 0, self.length - 28)) + x
             
             for block in self.pre_attn_resblocks:
                 c = block(c)
             for block in self.attn_resblocks:
-                c = block(x_match, c, c)
+                c = block(x, c, c)
             for block in self.post_attn_resblocks:
                 c = block(c)
             crosses.append(c.unsqueeze(-2))
@@ -448,10 +449,9 @@ class HistoryCrossAttention(nn.Module):
             for block in self.pre_attn_resblocks:
                 c = block(c)
             for block in self.attn_resblocks:
-                c = block(x, c, c)
+                x = block(x, c, c)
             for block in self.post_attn_resblocks:
-                c = block(c)
-            x = x + c
+                x = block(c)
         return x
             
 #straight-through estimator is used during the backward to allow the gradients to flow only to the encoder during the backpropagation.
@@ -514,10 +514,10 @@ class RepresentationNetwork(nn.Module):
         
         # self attention resnet applied to the board
         self.board_sa = SelfAttentionResNet(embedding_size=unit_embed_channels, 
-                                            num_pre_attn_resblocks=2, 
-                                            num_attn_resblocks=3, 
+                                            num_pre_attn_resblocks=1, 
+                                            num_attn_resblocks=2, 
                                             num_attn_heads=2, 
-                                            num_post_attn_resblocks=2, 
+                                            num_post_attn_resblocks=1, 
                                             length=28)
         
         # CNN resnet applied to the board
@@ -533,10 +533,10 @@ class RepresentationNetwork(nn.Module):
         
         # self attention resnet applied to the board, benches, and shop
         self.units_sa = SelfAttentionResNet(embedding_size=unit_embed_channels, 
-                                            num_pre_attn_resblocks=2, 
-                                            num_attn_resblocks=3, 
+                                            num_pre_attn_resblocks=1, 
+                                            num_attn_resblocks=2, 
                                             num_attn_heads=2, 
-                                            num_post_attn_resblocks=2, 
+                                            num_post_attn_resblocks=1, 
                                             length=self.state_length - self.observation_shape[-1])       
         
         # encodes the non-units state vector
@@ -595,34 +595,265 @@ class RepresentationNetwork(nn.Module):
         # self attention resnet applied to the board, benches, and shop after
         # merging with the state vector
         self.postmerge_sa = SelfAttentionResNet(embedding_size=unit_embed_channels, 
-                                            num_pre_attn_resblocks=2, 
-                                            num_attn_resblocks=3, 
+                                            num_pre_attn_resblocks=1, 
+                                            num_attn_resblocks=2, 
                                             num_attn_heads=2, 
-                                            num_post_attn_resblocks=2, 
+                                            num_post_attn_resblocks=1, 
                                             length=self.state_length)         
         
         # apply cross attention to compare player boards
         self.cross_attention_network = BoardComparisonResNet(embedding_size=unit_embed_channels, 
                                                             num_pre_cnn_resblocks=2,
                                                             num_cnn_resblocks=8,
-                                                            num_pre_attn_resblocks=2,
-                                                            num_attn_resblocks=3,
+                                                            num_pre_attn_resblocks=1,
+                                                            num_attn_resblocks=2,
                                                             num_attn_heads=2,
-                                                            num_post_attn_resblocks=2,
+                                                            num_post_attn_resblocks=1,
                                                             length=self.state_length)
         
         # self attention resnet applied after cross attention
         self.postcross_sa = SelfAttentionResNet(embedding_size=unit_embed_channels, 
-                                            num_pre_attn_resblocks=2, 
-                                            num_attn_resblocks=3, 
+                                            num_pre_attn_resblocks=1, 
+                                            num_attn_resblocks=2, 
                                             num_attn_heads=2, 
-                                            num_post_attn_resblocks=2, 
+                                            num_post_attn_resblocks=1, 
                                             length=self.state_length)
         
         # apply cross attention to compare player boards
         self.post_cross_attention_network = HistoryCrossAttention(embedding_size=unit_embed_channels, 
-                                                            num_pre_attn_resblocks=2,
-                                                            num_attn_resblocks=3,
+                                                            num_pre_attn_resblocks=1,
+                                                            num_attn_resblocks=2,
+                                                            num_attn_heads=2,
+                                                            num_post_attn_resblocks=2,
+                                                            length=self.state_length)
+                                                     
+        self.num_boards = observation_shape[0]
+        
+        self.num_players = num_players
+        
+        self.chance_conv = nn.Sequential(nn.LayerNorm((self.state_length,
+                                                    unit_embed_channels,
+                                                    )),
+                                      nn.LeakyReLU(),
+                                      nn.Linear(unit_embed_channels, 
+                                                reduced_channels_chance, 
+                                                bias=False
+                                                ))
+        
+        
+        self.block_output_size_chance = self.state_length * reduced_channels_chance
+
+        self.fc_chance = mlp(self.block_output_size_chance, 
+                            fc_chance_layers, 
+                            num_chance_tokens, 
+                            )
+        
+        
+    def forward(self, x):
+        
+        states = []
+        for i in range(self.num_boards // self.num_players):
+            
+            opponents = []
+            for i in range(self.num_players):
+                
+                # get the player state from the observation stack
+                obs = x[:, i, :, :, :]
+                
+                # separate out the units in the board, benches and shops
+                units = obs[:, :-1, :, :]
+                
+                # reshape for the unit encoding step
+                units = units.view(-1, self.state_length - self.observation_shape[-1], self.observation_shape[-3])            
+                
+                # encode each unit
+                units = self.unit_encoding(units)
+                
+                # apply SA to the board
+                board = units[:, :28, :]
+                board = self.board_sa(board)
+                
+                # reshape the board for CNN
+                board = torch.moveaxis(board, -1, -2)
+                board = torch.reshape(board, (-1, self.unit_embed_channels, 7, self.observation_shape[-1]))
+                
+                # CNN resnet for board
+                for block in self.board_cnn_blocks:
+                    board = block(board)
+                
+                # reshape the board for SA
+                board = torch.moveaxis(board, -3, -1)
+                board = torch.reshape(board, (-1, 28, self.unit_embed_channels))
+                
+                # concatenate the board with the benches/shops for SA
+                units = torch.concat([board, units[:, 28:, :]], dim=-2)
+                               
+                # pad the units tensor to match the input dimensions
+                #units = nn.functional.pad(units, (0, 0, 0, self.observation_shape[-1]))
+                
+                # apply SA to the units
+                units = self.units_sa(units)
+                
+                # skip connection
+                
+                # sum unit embeddings for concatenation with the linear state vector
+                board_sum = torch.sum(units[:, :28, :], dim=-2)
+                bench_sum = torch.sum(units[:, 28:28+9, :], dim=-2)
+                shop_sum = torch.sum(units[:, 28+9:28+9+5, :], dim=-2)
+                ibench_sum = torch.sum(units[:, 28+9+5:28+9+5+10, :], dim=-2)
+                
+                # vector component of the player state
+                vec = obs[:, -1, :, :]
+                
+                # flatten the player state vector
+                vec = torch.reshape(vec, (-1, self.observation_shape[-3] * self.observation_shape[-1]))
+                
+                # encode the player state vector
+                vec = self.vec_encoding(vec)
+                
+                # make a linear embedding of the units
+                lin_units = torch.reshape(units, (-1, (self.state_length - self.observation_shape[-1]) * self.unit_embed_channels))
+                lin_units = self.lin_units_embedding(lin_units)
+                
+                # concatenate the player state vector with the visual embedding and the board region unit embedding sums
+                vec = torch.concat([vec, board_sum, bench_sum, shop_sum, ibench_sum, lin_units], dim=-1)
+                
+                # linear resnet for the full state vector
+                for block in self.vec_resblocks:
+                    vec = block(vec)
+                    
+                # fill out the units tensor with a vector embedding
+                vec_fill = self.vec_fill(vec)
+                vec_fill = torch.reshape(vec_fill, (-1, self.observation_shape[-1], self.unit_embed_channels))
+                
+                units_concat = torch.concat([units, vec_fill], dim=-2)
+                    
+                # reshape the linear vector for concatenation with the units tensor
+                vec = vec.view(-1, self.observation_shape[-2] * self.observation_shape[-1], self.vec_channels)
+                
+                # concatenate units tensor with the reshaped state vector along channels axis
+                player_state = torch.concat([units_concat, vec], dim=-1)
+                
+                # reduce the channels in the state by passing it through a Linear layer
+                player_state = self.post_merge_lin(player_state)
+                               
+                # apply SA to the player state
+                player_state = self.postmerge_sa(player_state)
+                
+                
+                # append board to player or opponent list
+                if i % self.num_players:
+                    opponents.append(player_state)
+                else:
+                    player = player_state
+            
+            # apply cross-attention to boards
+            cross = self.cross_attention_network(player, opponents)
+            
+            # add the cross attention output to the player state
+            state = player + cross
+            
+            state = self.postcross_sa(state)
+            
+            states.append(state)
+
+        state = states[-1]
+        if len(states) > 1:
+            state = self.post_cross_attention_network(state, states)
+                      
+        
+        chance = self.chance_conv(state)
+        chance = chance.view(-1, self.block_output_size_chance)
+        chance = self.fc_chance(chance)
+        
+        c_e_t = torch.nn.Softmax(-1)(chance)
+        # print(("chance minmax:", chance.min(), chance.max(), "softmax minmax:", c_e_t.min(), c_e_t.max()))
+        c_t = Onehot_argmax.apply(c_e_t)
+        
+        
+        return state, c_t, c_e_t
+
+    def get_param_mean(self):
+        mean = []
+        for name, param in self.named_parameters():
+            mean += np.abs(param.detach().cpu().numpy().reshape(-1)).tolist()
+        mean = sum(mean) / len(mean)
+        return mean
+
+# Encode the observations into hidden states and chance outcome tokens
+class EncoderNetwork(nn.Module):
+    def __init__(
+        self,
+        observation_shape,
+        num_players,
+        num_board_cnn_resblocks,
+        unit_embed_channels,
+        vec_blocks,
+        vec_channels,
+        state_channels,
+        reduced_channels_chance,
+        fc_chance_layers, 
+        num_chance_tokens,
+    ):
+        """Representation network
+        Parameters
+        ----------
+        observation_shape: tuple or list
+            shape of observations: [C, W, H]
+        num_blocks: int
+            number of res blocks
+        num_channels: int
+            channels of hidden states
+        downsample: bool
+            True -> do downsampling for observations. (For board games, do not need)
+        """
+        super().__init__()
+        
+        self.unit_embed_channels = unit_embed_channels
+        self.vec_channels = vec_channels
+        
+        self.observation_shape = observation_shape
+        self.state_length = observation_shape[-1] * observation_shape[-2]
+        
+        # this embedding layer is used by both the unit encoding and vector encoding modules
+        self.origin_embedding = nn.Embedding(27, 8, padding_idx=0)
+        
+        # encodes all units and items
+        self.unit_encoding = UnitEncoding(item_embedding_size=8, 
+                                          item_encoded_size=16, 
+                                          unit_embedding_size=16, 
+                                          origin_embedding_layer=self.origin_embedding, 
+                                          origin_embedding_size=8,
+                                          output_size=unit_embed_channels)               
+        
+        # encodes the non-units state vector
+        self.vec_encoding = VectorEncoding(origin_embedding_layer=self.origin_embedding, 
+                                           origin_embedding_size=8,
+                                           output_size=unit_embed_channels * observation_shape[-1])
+                        
+        # self attention resnet applied to the board, benches, and shop after
+        # merging with the state vector
+        self.postmerge_sa = SelfAttentionResNet(embedding_size=unit_embed_channels, 
+                                            num_pre_attn_resblocks=1, 
+                                            num_attn_resblocks=2, 
+                                            num_attn_heads=2, 
+                                            num_post_attn_resblocks=1, 
+                                            length=self.state_length)         
+        
+        # apply cross attention to compare player boards
+        self.cross_attention_network = BoardComparisonResNet(embedding_size=unit_embed_channels, 
+                                                            num_pre_cnn_resblocks=2,
+                                                            num_cnn_resblocks=8,
+                                                            num_pre_attn_resblocks=1,
+                                                            num_attn_resblocks=2,
+                                                            num_attn_heads=2,
+                                                            num_post_attn_resblocks=1,
+                                                            length=self.state_length)
+               
+        # apply cross attention to compare player boards
+        self.post_cross_attention_network = HistoryCrossAttention(embedding_size=unit_embed_channels, 
+                                                            num_pre_attn_resblocks=1,
+                                                            num_attn_resblocks=2,
                                                             num_attn_heads=2,
                                                             num_post_attn_resblocks=2,
                                                             length=self.state_length)
@@ -666,43 +897,7 @@ class RepresentationNetwork(nn.Module):
                 
                 # encode each unit
                 units = self.unit_encoding(units)
-                
-                # apply SA to the board
-                board = units[:, :28, :]
-                board = self.board_sa(board)
-                
-                # reshape the board for CNN
-                board = torch.moveaxis(board, -1, -2)
-                board = torch.reshape(board, (-1, self.unit_embed_channels, 7, self.observation_shape[-1]))
-                
-                # CNN resnet for board
-                for block in self.board_cnn_blocks:
-                    board = block(board)
-                
-                # reshape the board for SA
-                board = torch.moveaxis(board, -3, -1)
-                board = torch.reshape(board, (-1, 28, self.unit_embed_channels))
-                
-                # concatenate the board with the benches/shops for SA
-                units_concat = torch.concat([board, units[:, 28:, :]], dim=-2)
-                
-                units = units + units_concat
-                
-                # pad the units tensor to match the input dimensions
-                #units = nn.functional.pad(units, (0, 0, 0, self.observation_shape[-1]))
-                
-                # apply SA to the units
-                units_sa = self.units_sa(units)
-                
-                # skip connection
-                units = units + units_sa
-                
-                # sum unit embeddings for concatenation with the linear state vector
-                board_sum = torch.sum(units[:, :28, :], dim=-2)
-                bench_sum = torch.sum(units[:, 28:28+9, :], dim=-2)
-                shop_sum = torch.sum(units[:, 28+9:28+9+5, :], dim=-2)
-                ibench_sum = torch.sum(units[:, 28+9+5:28+9+5+10, :], dim=-2)
-                
+                               
                 # vector component of the player state
                 vec = obs[:, -1, :, :]
                 
@@ -710,41 +905,14 @@ class RepresentationNetwork(nn.Module):
                 vec = torch.reshape(vec, (-1, self.observation_shape[-3] * self.observation_shape[-1]))
                 
                 # encode the player state vector
-                vec = self.vec_encoding(vec)
+                vec = self.vec_encoding(vec)                
+                vec = torch.reshape(vec, (-1, self.observation_shape[-1], self.unit_embed_channels))
                 
-                # make a linear embedding of the units
-                lin_units = torch.reshape(units, (-1, (self.state_length - self.observation_shape[-1]) * self.unit_embed_channels))
-                lin_units = self.lin_units_embedding(lin_units)
+                units_concat = torch.concat([units, vec], dim=-2)
+
+                player_state = self.postmerge_sa(units_concat)
                 
-                # concatenate the player state vector with the visual embedding and the board region unit embedding sums
-                vec = torch.concat([vec, board_sum, bench_sum, shop_sum, ibench_sum, lin_units], dim=-1)
-                
-                # linear resnet for the full state vector
-                for block in self.vec_resblocks:
-                    vec = block(vec)
-                    
-                # fill out the units tensor with a vector embedding
-                vec_fill = self.vec_fill(vec)
-                vec_fill = torch.reshape(vec_fill, (-1, self.observation_shape[-1], self.unit_embed_channels))
-                
-                units = torch.concat([units, vec_fill], dim=-2)
-                    
-                # reshape the linear vector for concatenation with the units tensor
-                vec = vec.view(-1, self.observation_shape[-2] * self.observation_shape[-1], self.vec_channels)
-                
-                # concatenate units tensor with the reshaped state vector along channels axis
-                player_state = torch.concat([units, vec], dim=-1)
-                
-                # reduce the channels in the state by passing it through a Linear layer
-                player_state = self.post_merge_lin(player_state)
-                
-                
-                # apply SA to the player state
-                player_state_sa = self.postmerge_sa(player_state)
-                
-                player_state = player_state_sa + units
-                
-                # append board to player or opponent list
+                                # append board to player or opponent list
                 if i % self.num_players:
                     opponents.append(player_state)
                 else:
@@ -756,24 +924,21 @@ class RepresentationNetwork(nn.Module):
             # add the cross attention output to the player state
             state = player + cross
             
-            state_sa = self.postcross_sa(state)
-            
-            state = state + state_sa
-            
             states.append(state)
 
         state = states[-1]
         if len(states) > 1:
-            history_cross = self.post_cross_attention_network(state, states[::-1])
-        state = state + history_cross
-                            
+            state = self.post_cross_attention_network(state, states)
+                           
         chance = self.chance_conv(state)
         chance = chance.view(-1, self.block_output_size_chance)
         chance = self.fc_chance(chance)
+        
         c_e_t = torch.nn.Softmax(-1)(chance)
+        # print(("chance minmax:", chance.min(), chance.max(), "softmax minmax:", c_e_t.min(), c_e_t.max()))
         c_t = Onehot_argmax.apply(c_e_t)
         
-        return state, c_t, c_e_t
+        return c_t, c_e_t
 
     def get_param_mean(self):
         mean = []
@@ -781,7 +946,12 @@ class RepresentationNetwork(nn.Module):
             mean += np.abs(param.detach().cpu().numpy().reshape(-1)).tolist()
         mean = sum(mean) / len(mean)
         return mean
-
+    
+def check_tensor(tensor, name):
+    if torch.isnan(tensor).any():
+        print(f"{name} contains nan")
+    if torch.isinf(tensor).any():
+        print(f"{name} contains inf")
 
 # Predict States given current afterstates and chance tokens
 class StateDynamicsNetwork(nn.Module):
@@ -821,10 +991,10 @@ class StateDynamicsNetwork(nn.Module):
         length = observation_shape[-1] * observation_shape[-2]
         
         self.action_sa = SelfAttentionResNet(embedding_size=channels+outcome_space_layers, 
-                                             num_pre_attn_resblocks=2, 
-                                             num_attn_resblocks=3, 
+                                             num_pre_attn_resblocks=1, 
+                                             num_attn_resblocks=2, 
                                              num_attn_heads=2, 
-                                             num_post_attn_resblocks=2, 
+                                             num_post_attn_resblocks=1, 
                                              length=length)
     
         self.act_conv = nn.Sequential(nn.LayerNorm((length,
@@ -837,8 +1007,8 @@ class StateDynamicsNetwork(nn.Module):
                                                 ))
         
         self.dynamics_sa = SelfAttentionResNet(embedding_size=channels, 
-                                             num_pre_attn_resblocks=2, 
-                                             num_attn_resblocks=3, 
+                                             num_pre_attn_resblocks=1, 
+                                             num_attn_resblocks=2, 
                                              num_attn_heads=2, 
                                              num_post_attn_resblocks=2, 
                                              length=length)
@@ -940,10 +1110,10 @@ class AfterstateDynamicsNetwork(nn.Module):
         length = observation_shape[-1] * observation_shape[-2]
         
         self.action_sa = SelfAttentionResNet(embedding_size=channels+action_space_layers, 
-                                             num_pre_attn_resblocks=2, 
-                                             num_attn_resblocks=3, 
+                                             num_pre_attn_resblocks=1, 
+                                             num_attn_resblocks=2, 
                                              num_attn_heads=2, 
-                                             num_post_attn_resblocks=2, 
+                                             num_post_attn_resblocks=1, 
                                              length=length)
     
         self.act_conv = nn.Sequential(nn.LayerNorm((length,
@@ -956,8 +1126,8 @@ class AfterstateDynamicsNetwork(nn.Module):
                                                 ))
         
         self.dynamics_sa = SelfAttentionResNet(embedding_size=channels, 
-                                             num_pre_attn_resblocks=2, 
-                                             num_attn_resblocks=3, 
+                                             num_pre_attn_resblocks=1, 
+                                             num_attn_resblocks=2, 
                                              num_attn_heads=2, 
                                              num_post_attn_resblocks=2, 
                                              length=length)
@@ -1065,8 +1235,8 @@ class AfterstatePredictionNetwork(nn.Module):
         length = observation_shape[-1] * observation_shape[-2]
         
         self.sa = SelfAttentionResNet(embedding_size=num_channels, 
-                                             num_pre_attn_resblocks=2, 
-                                             num_attn_resblocks=3, 
+                                             num_pre_attn_resblocks=1, 
+                                             num_attn_resblocks=2, 
                                              num_attn_heads=2, 
                                              num_post_attn_resblocks=2, 
                                              length=length)
@@ -1158,8 +1328,8 @@ class StatePredictionNetwork(nn.Module):
         length = observation_shape[-1] * observation_shape[-2]
         
         self.sa = SelfAttentionResNet(embedding_size=num_channels, 
-                                             num_pre_attn_resblocks=2, 
-                                             num_attn_resblocks=3, 
+                                             num_pre_attn_resblocks=1, 
+                                             num_attn_resblocks=2, 
                                              num_attn_heads=2, 
                                              num_post_attn_resblocks=2, 
                                              length=length)
@@ -1313,6 +1483,21 @@ class EfficientZeroNet(BaseNet):
             fc_chance_layers=fc_chance_layers, 
             num_chance_tokens=num_chance_tokens,
             )
+
+        '''
+        self.encoder_network = EncoderNetwork(            
+            observation_shape=observation_shape,
+            num_players=num_players,
+            num_board_cnn_resblocks=8,
+            unit_embed_channels=num_channels,
+            vec_blocks=8,
+            vec_channels=16,
+            state_channels=num_channels,
+            reduced_channels_chance=16,
+            fc_chance_layers=fc_chance_layers, 
+            num_chance_tokens=num_chance_tokens,
+            )
+        '''
 
         self.afterstate_dynamics_network = AfterstateDynamicsNetwork(
             observation_shape=observation_shape,

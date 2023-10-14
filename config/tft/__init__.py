@@ -25,8 +25,8 @@ class TFTConfig(BaseConfig):
             discount=0.997,
             dirichlet_alpha=0.3,
             value_delta_max=0.01,
-            num_simulations=75,
-            batch_size=128,
+            num_simulations=150,
+            batch_size=256,
             td_steps=10,
             num_actors=1,
             # network initialization/ & normalization
@@ -43,7 +43,7 @@ class TFTConfig(BaseConfig):
             lr_decay_steps=100000,
             auto_td_steps_ratio=0.3,
             # replay window
-            start_transitions=1e5,
+            start_transitions=5e2,
             total_transitions=100 * 1000,
             transition_num=1e6,
             # frame skip & stack observation
@@ -52,10 +52,10 @@ class TFTConfig(BaseConfig):
             stacked_observations=2,
             # coefficient
             reward_loss_coeff=1,
-            value_loss_coeff=0.25,
+            value_loss_coeff=1,
             policy_loss_coeff=1,
-            consistency_coeff=2,
-            commitment_loss_coeff=0.25,
+            consistency_coeff=1,
+            commitment_loss_coeff=1,
             chance_loss_coeff=1,
             # reward sum
             lstm_hidden_size=256,
@@ -125,6 +125,13 @@ class TFTConfig(BaseConfig):
                 val = dist[best_action] / s
                 a_val = dist[action] / s
                 env.PLAYERS[player].print("chosen action: {} / {}, best action: {} / {}".format(action, round(a_val, 2), best_action, round(val, 2)))
+
+    def record_tokens(self, tokens, env):
+        if env.log:
+            for player, token in tokens.items():
+                best_action = np.argmax(token)
+                env.PLAYERS[player].print("chance token assigned: {}".format(best_action))
+
 
     def get_uniform_network(self):
         return EfficientZeroNet(

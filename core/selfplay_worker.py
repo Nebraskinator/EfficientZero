@@ -185,7 +185,7 @@ class DataWorker(object):
         # max transition to collect for this data worker
         max_transitions = self.config.total_transitions // self.config.num_actors
         mcts = MCTS(self.config)
-        learned_agent_actions_start = 15000
+        learned_agent_actions_start = 9000
         value_training_start = learned_agent_actions_start
         #snap_0 = tracemalloc.take_snapshot()
         with torch.no_grad():
@@ -341,7 +341,7 @@ class DataWorker(object):
                         '''
 
                     step_counter += 1
-                    action, visit_entropy, dists, vals = {}, {}, {}, {}
+                    action, visit_entropy, dists, vals, tokens = {}, {}, {}, {}, {}
                     # stack obs for model inference
                     
                     for curr_model, model in enumerate(models):
@@ -362,6 +362,7 @@ class DataWorker(object):
                             hidden_state_roots = network_output.hidden_state
                             reward_hidden_roots = network_output.reward_hidden
                             value_prefix_pool = network_output.value_prefix
+                            chance_token_pool = network_output.chance_token_onehot.detach().cpu()
                             #policy_logits_pool = np.array([np.exp(x - np.max(x)) / np.exp(x - np.max(x)).sum() for x in network_output.policy_logits])
                             #policy_logits_pool = (network_output.policy_logits * np.array([action_masks[p] for p in model_acting_agents])).astype(np.float32).tolist()
                             #policy_logits_pool = (network_output.policy_logits * np.array([action_masks[p] for p in model_acting_agents])).astype(np.float32).tolist()
@@ -373,6 +374,7 @@ class DataWorker(object):
                             policy_logits_pool = []
                             noises = []
                             for i, p in enumerate(model_acting_agents):
+                                tokens[p] = chance_token_pool[i]
                                 #noise = np.zeros(self.config.action_space_size)
                                 #noise[np.flatnonzero(action_masks[p])] = np.random.dirichlet([self.config.root_dirichlet_alpha] * np.sum(action_masks[p]).astype(int))
                                 #noises.append(noise.astype(np.float32).tolist())  
@@ -475,7 +477,8 @@ class DataWorker(object):
                         if p not in step_acting_agents:
                             action[p] = 2090
                     
-                    self.config.record_best_actions(action, dists, env)
+                    self.config.record_tokens(tokens, env)
+                    self.config.record_best_actions(action, dists, env)                    
                     
                     for p in random_actors:
                         #action[p] = np.random.choice(np.where(action_masks[p])[0].tolist())
