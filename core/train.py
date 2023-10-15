@@ -176,13 +176,13 @@ def update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_r
                 #end_index = config.image_channel * (step_i + config.stacked_observations)
 
                 # obtain the oracle hidden states and chance outcomes from representation function
-                _, _, _, presentation_state, _, chance_token_onehot, chance_token_softmax = model.initial_inference(torch.reshape(obs_target_batch[:, i:i+config.stacked_observations, :, :, :, :], (obs_batch_ori.shape[0],config.stacked_observations*obs_batch_ori.shape[2], *obs_batch_ori.shape[3:])))
+                _, _, _, presentation_state, _, chance_token_onehot, chance_token_softmax = model.initial_inference(torch.reshape(obs_target_batch[:, step_i:step_i+config.stacked_observations, :, :, :, :], (obs_batch_ori.shape[0],config.stacked_observations*obs_batch_ori.shape[2], *obs_batch_ori.shape[3:])))
                 
                 #chance_token_onehot, chance_token_softmax = model.encoder_network(torch.reshape(obs_target_batch[:, i:i+config.stacked_observations, :, :, :, :], (obs_batch_ori.shape[0],config.stacked_observations*obs_batch_ori.shape[2], *obs_batch_ori.shape[3:])))
 
                 # predict the state
                 state_value, state_value_prefix, policy_logits, hidden_state, reward_hidden, _, _ = model.recurrent_state_inference(hidden_afterstate, reward_hidden, chance_token_onehot)              
-                              
+                
                 # no grad for the presentation_state branch
                 dynamic_proj = model.project(hidden_state, with_grad=True)
                 observation_proj = model.project(presentation_state, with_grad=False)
@@ -255,7 +255,7 @@ def update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_r
             # consistency loss
             if config.consistency_coeff > 0:
                 # obtain the oracle hidden states from representation function
-                _, _, _, presentation_state, _, chance_token_onehot, chance_token_softmax = model.initial_inference(obs_target_batch[:, i, :, :, :])
+                _, _, _, presentation_state, _, chance_token_onehot, chance_token_softmax = model.initial_inference(obs_target_batch[:, step_i, :, :, :])
                 # no grad for the presentation_state branch
                 dynamic_proj = model.project(hidden_state, with_grad=True)
                 observation_proj = model.project(presentation_state, with_grad=False)

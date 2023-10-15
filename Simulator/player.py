@@ -1082,6 +1082,8 @@ class Player:
                 if self.board[x][y]:                    
                     curr_champ = self.board[x][y]                        
                     obs[x, y, :] = encode_champion(curr_champ, 1)
+                else:
+                    obs[x, y, 40] = 1
 
         for x_bench in range(len(self.bench)):
             x, y = x_bench // 4 + 7, x_bench % 4

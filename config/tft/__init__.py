@@ -43,7 +43,7 @@ class TFTConfig(BaseConfig):
             lr_decay_steps=100000,
             auto_td_steps_ratio=0.3,
             # replay window
-            start_transitions=5e2,
+            start_transitions=1e5,
             total_transitions=100 * 1000,
             transition_num=1e6,
             # frame skip & stack observation
