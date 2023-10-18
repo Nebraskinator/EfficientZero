@@ -185,7 +185,7 @@ class DataWorker(object):
         # max transition to collect for this data worker
         max_transitions = self.config.total_transitions // self.config.num_actors
         mcts = MCTS(self.config)
-        learned_agent_actions_start = 9000
+        learned_agent_actions_start = self.config.learned_agent_actions_start
         value_training_start = learned_agent_actions_start
         #snap_0 = tracemalloc.take_snapshot()
         with torch.no_grad():
@@ -362,6 +362,7 @@ class DataWorker(object):
                             hidden_state_roots = network_output.hidden_state
                             reward_hidden_roots = network_output.reward_hidden
                             value_prefix_pool = network_output.value_prefix
+                            value_pool = network_output.value.reshape(-1).tolist()
                             chance_token_pool = network_output.chance_token_onehot.detach().cpu()
                             #policy_logits_pool = np.array([np.exp(x - np.max(x)) / np.exp(x - np.max(x)).sum() for x in network_output.policy_logits])
                             #policy_logits_pool = (network_output.policy_logits * np.array([action_masks[p] for p in model_acting_agents])).astype(np.float32).tolist()
@@ -382,13 +383,14 @@ class DataWorker(object):
                                 policy_logits_pool.append(network_output.policy_logits[i, np.flatnonzero(action_masks[p])].astype(np.float32).tolist())
                             #noises = [(np.random.dirichlet([self.config.root_dirichlet_alpha] * np.sum(action_masks[p]))).astype(np.float32).tolist() for p in step_acting_agents]
                             #print((noises, policy_logits_pool))
-                            roots.prepare(self.config.root_exploration_fraction, noises, value_prefix_pool, policy_logits_pool)
+                            roots.prepare(self.config.root_exploration_fraction, noises, value_prefix_pool, value_pool, policy_logits_pool)
                             # do MCTS for a policy
                             mcts.search(roots, model, hidden_state_roots, reward_hidden_roots, training_start=((start_training[curr_model] or self.config.resume_training) and all([s >= value_training_start for s in trained_steps])))
         
                             roots_distributions = roots.get_distributions()
                             roots_values = roots.get_values()
-                                                        
+                            #roots_completed_values = roots.get_children_values(self.config.discount)
+                            roots_improved_policy_probs = roots.get_policies(self.config.discount) # new policy constructed with completed Q in gumbel muzero
                             for i, p in enumerate(model_acting_agents):
                                 if self.config.use_priority and not self.config.use_max_priority and start_training[curr_model]:
                                     pred_values_lst[p].append(network_output.value[i].item())
@@ -396,25 +398,27 @@ class DataWorker(object):
                                     #search_values_lst[p].append(0)
                                 deterministic = False                                
                                 if (start_training[curr_model] or self.config.resume_training) and all([s >= learned_agent_actions_start for s in trained_steps]):
-                                    search_stats, value, temperature = roots_distributions[i], float(roots_values[i]), float(_temperature[i])
+                                    search_stats, value, temperature = roots_improved_policy_probs[i], float(roots_values[i]), float(_temperature[i])
                                     #distributions, value, temperature = np.ones(self.config.action_space_size), 0., 0.3
                                     distributions = np.zeros(self.config.action_space_size)
                                     distributions[np.flatnonzero(action_masks[p])] = search_stats
-                                    distributions = distributions.astype(float)
-                                    action[p], visit_entropy[p] = select_action(distributions, temperature=temperature, deterministic=deterministic)
+                                    #distributions = distributions.astype(float)
+                                    action[p] = np.argmax(distributions)
+                                    #action[p], visit_entropy[p] = select_action(distributions, temperature=temperature, deterministic=deterministic)
                                 else:
                                     # before starting training, use random policy
                                     if (start_training[curr_model] or self.config.resume_training) and all([s >= value_training_start for s in trained_steps]):
                                         value, temperature = float(roots_values[i]), float(_temperature[i])
                                     else:
                                         value, temperature = 0., 0.3
-                                    distributions_select = action_masks[p].copy()
-                                    distributions = np.zeros(self.config.action_space_size).astype(float)
+                                    distributions = action_masks[p].copy()
+                                    #distributions = np.zeros(self.config.action_space_size).astype(float)
                                     #distributions *= action_masks[p]
-                                    a = env.PLAYERS[p].ai.get_action()
-                                    distributions[a] = 1    
-                                    distributions_select[a] = 10                        
-                                    action[p], visit_entropy[p] = select_action(distributions_select, temperature=temperature, deterministic=deterministic)
+                                    #a = env.PLAYERS[p].ai.get_action()
+                                    #distributions[a] = 1    
+                                    #distributions_select[a] = 10  
+                                    action[p] = np.random.choice(np.flatnonzero(distributions))
+                                    #action[p], visit_entropy[p] = select_action(distributions_select, temperature=temperature, deterministic=deterministic)
                                 #if np.sum(distributions) == 0:
                                 #    distributions[1976] = 1 
                                 dists[p] = distributions
@@ -481,8 +485,8 @@ class DataWorker(object):
                     self.config.record_best_actions(action, dists, env)                    
                     
                     for p in random_actors:
-                        #action[p] = np.random.choice(np.where(action_masks[p])[0].tolist())
-                        action[p] = env.PLAYERS[p].ai.get_action()
+                        action[p] = np.random.choice(np.flatnonzero(action_masks[p]))
+                        #action[p] = env.PLAYERS[p].ai.get_action()
                     
                     '''
                     for p in live_actors:
@@ -513,7 +517,7 @@ class DataWorker(object):
                         eps_reward_lst += clip_reward
                         eps_ori_reward_lst += ori_reward[p]
 
-                        visit_entropies_lst += visit_entropy[p]
+                        #visit_entropies_lst += visit_entropy[p]
 
                         eps_steps_lst += 1
                         total_transitions += 1
@@ -592,12 +596,25 @@ class DataWorker(object):
                     print("rank: {}, ".format(self.rank)+print_rewards)
                 if env.log and (start_training[curr_model] or self.config.resume_training) and all([s >= value_training_start for s in trained_steps]) and os.path.isfile("log.txt"):
                     subdir = "./logs"
-                    prev = [int(i.split(".")[0]) for i in os.listdir(subdir) if i.endswith("txt")]
+                    prev = [int(i.split("_")[0]) for i in os.listdir(subdir) if i.endswith("txt")]
                     idx = 0
                     if prev:
                         idx = max(prev) + 1
                     idx = str(idx).zfill(6)
-                    shutil.copy("log.txt", "./logs/{}.txt".format(idx))
+                    win = 'W'
+                    if env.PLAYERS['player_0'].health < 1:
+                        win = 'L'
+                    m = 0
+                    c = 'None'
+                    for k, v in env.PLAYERS['player_0'].team_tiers.items():
+                        if v:
+                            if v == m:
+                                c = c + k
+                            if v > m:
+                                m = v
+                                c = k
+                    shutil.copy("log.txt", "./logs/{}_{}_{}.txt".format(idx, win, c))
+                    
 
                 '''
                             # reset the finished env and new a env

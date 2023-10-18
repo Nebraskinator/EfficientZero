@@ -2,6 +2,7 @@ import math
 import time
 import numpy as np
 import random
+from collections import defaultdict
 from Simulator import champion, origin_class
 import Simulator.utils as utils
 import Simulator.config as config
@@ -40,7 +41,12 @@ class Player:
         self.health = 100
         self.player_num = player_num
         
-        self.ai = PlayerAI(self)
+        #self.ai = PlayerAI(self)
+        self.similarity_scorer = SimilarityScorer(self)
+        self.similarity_score = 0
+        self.similarity_coeff = 0.5
+        self.max_similarity_reward = 100
+        
 
         self.win_streak = 0  # For purposes of gold generation at start of turn
         self.loss_streak = 0  # For purposes of gold generation at start of turn
@@ -136,7 +142,7 @@ class Player:
         self.item_reward = 0
         self.won_game_reward = 10
         self.prev_rewards = 0
-        self.damage_reward = 0.4
+        self.damage_reward = 1
         self.excess_gold_reward = 0
 
         # Everyone shares the pool object.
@@ -186,6 +192,14 @@ class Player:
         #self.generate_bench_vector()
         #self.generate_item_vector()
         #self.generate_chosen_vector()
+
+    def score(self):
+        new_score = self.similarity_scorer.score()
+        reward = (new_score - self.similarity_score) * self.max_similarity_reward
+        if reward:
+            self.print("{} reward for board similarity".format(round(reward, 2)))
+        self.reward += reward
+        self.similarity_score = new_score
 
     """
     Description - Main method used in buy_champion to add units to the bench
@@ -1436,7 +1450,7 @@ class Player:
         if not self.combat:
             self.loss_streak += 1
             self.win_streak = 0
-            self.reward -= self.damage_reward * damage
+            self.reward -= self.damage_reward * damage * (1-self.similarity_coeff)
             self.print(str(-self.damage_reward * damage) + " reward for losing round against player " + str(self.opponent.player_num))
             self.match_history.append(0)
 
@@ -2180,7 +2194,7 @@ class Player:
                   False: There are actions possible
     """
     def spill_reward(self, damage):
-        self.reward += self.damage_reward * damage
+        self.reward += self.damage_reward * damage * (1-self.similarity_coeff)
         self.print("Spill reward of {} received".format(self.damage_reward * damage))
 
     """
@@ -2206,7 +2220,7 @@ class Player:
             if (x[1] != -1 and self.board[x[0]][x[1]]) or self.bench[x[0]]:
                 self.thieves_gloves(x[0], x[1])
         self.actions_taken_this_round = 0
-        self.ai.reset_phase()
+        #self.ai.reset_phase()
         self.selection = None
         if log:
             self.printComp()
@@ -2444,7 +2458,7 @@ class Player:
             self.win_streak += 1
             self.loss_streak = 0
             self.gold += 1
-            self.reward += self.damage_reward * damage
+            self.reward += self.damage_reward * damage * (1-self.similarity_coeff)
             self.print(str(self.damage_reward * damage) + " reward for winning round against player " + str(self.opponent.player_num))
             self.match_history.append(1)
 
@@ -2458,17 +2472,61 @@ class Player:
                 self.fortune_loss_streak = 0
 
 class Comp:
-    def __init__(self, champions, positions, item_components, chosen, 
+    def __init__(self, champions, positions, desired_items, chosen,
                  mirror=False):
         self.champions = champions
+        max_score = sum([cost_star_values[COST[c] - 1][2] for c in champions])
+        max_score += 11 * len(champions)
+        max_score += sum([2 * len(i) for i in desired_items])
+        max_score += 2
+        self.max_score = max_score
         if mirror:
             self.positions = {champ: (6-pos[0], pos[1]) for champ, pos in zip(champions, positions)}
         else:
             self.positions = {champ: pos for champ, pos in zip(champions, positions)}
-        self.champ_items = {champ: item for champ, item in zip(champions, item_components)}
-        self.items = [a for i in item_components for a in i ]
-        self.crafted_items = []
+        self.champ_items = {champ: item for champ, item in zip(champions, desired_items)}
         self.chosen = chosen
+        
+    def score(self, player, norm=True):
+        board_score = {}
+        champ_sums = defaultdict(int)
+        for row in player.board:
+            for c in row:
+                if c and c.name in self.champions:
+                    champ_score = cost_star_values[c.cost - 1][c.stars - 1]
+                    champ_sums[c.name] += 3 ** (c.stars - 1)
+                    if c.chosen and c.chosen in self.chosen:
+                        champ_score += 2
+                    distance = abs(c.x - self.positions[c.name][0]) + abs(c.y - self.positions[c.name][1])
+                    champ_score += 2 / (distance + 1)
+                    desired_items = [i for i in self.champ_items[c.name]]
+                    if desired_items:
+                        check = []
+                        for i in c.items:
+                            if i in desired_items:
+                                champ_score += 2
+                                desired_items.remove(i)
+                            else:
+                                check.append(i)
+                        components = []
+                        for desired_item in desired_items:
+                            components += item_builds[desired_item]
+                        for i in check:
+                            if i in components:
+                                champ_score += 1
+                    if c.name in board_score:
+                        champ_score = max(champ_score, board_score[c.name])
+                    board_score[c.name] = champ_score
+        for c in player.bench:
+            if c and c.name in self.champions:
+                champ_sums[c.name] += 3 ** (c.stars - 1)
+        
+        score = sum(board_score.values()) + sum([min(9, i) for i in champ_sums.values()])
+        if norm:
+            return score / self.max_score
+        else:
+            return score
+    '''
     def in_comp(self, champ):
         return champ in self.champions
     def champion_position(self, champ):
@@ -2486,7 +2544,369 @@ class Comp:
                     if item_pair[0] in components and item_pair[1] in components:
                         pass
         return None
-            
+     ''' 
+
+class SimilarityScorer:
+    def __init__(self, player):
+        self.player = player
+        self.comps = []
+        self.make_comps()
+        
+    def score(self):
+        return max([c.score(self.player) for c in self.comps])
+    
+    def make_comps(self):
+        
+        champs = ['zed',
+                'akali',
+                'evelynn',
+                'kennen',
+                'pyke',
+                'elise',
+                'shen',
+                ]
+        positions = [(0, 0),
+                     (1, 0),
+                     (2, 0),
+                     (3, 0),
+                     (4, 0),
+                     (3, 1),
+                     (4, 1),
+                     ]
+        desired_items = [['rapid_firecannon', 'runaans_hurricane', 'quicksilver'],
+                         ['zekes_herald', 'chalice_of_power'],
+                         ['locket_of_the_iron_solari','locket_of_the_iron_solari'],
+                         [],
+                         [],
+                         [],
+                         []
+                         ]
+
+        self.comps.append(Comp(champs, positions, desired_items, ['shade']))
+        
+        champs = ['irelia',
+                'jax',
+                'warwick',
+                'leesin',
+                'shen',
+                'ezreal',
+                'lux',
+                'yone'
+                ]
+        positions = [(0, 0),
+                     (1, 0),
+                     (2, 0),
+                     (3, 0),
+                     (4, 0),
+                     (3, 1),
+                     (4, 1),
+                     (5, 0),
+                     ]
+        desired_items = [[],
+                         [],
+                         ['quicksilver','runaans_hurricane','deathblade'],
+                         [],
+                         [],
+                         [],
+                         [],
+                         []
+                         ]
+        self.comps.append(Comp(champs, positions, desired_items, ['divine','adept','hunter']))
+        
+        champs = ['vayne',
+                'thresh',
+                'lillia',
+                'jhin',
+                'zilean',
+                'aatrox',
+                'riven',
+                'cassiopeia'
+                ]
+        positions = [(0, 0),
+                     (4, 0),
+                     (5, 0),
+                     (6, 0),
+                     (6, 1),
+                     (2, 3),
+                     (3, 3),
+                     (4, 3),
+                     ]
+        desired_items = [[],
+                         [],
+                         [],
+                         ['infinity_edge','guardian_angel','last_whisper'],
+                         [],
+                         [],
+                         ['bramble_vest','ionic_spark'],
+                         []
+                         ]
+        self.comps.append(Comp(champs, positions, desired_items, ['dusk','mystic','sharpshooter','keeper']))
+        
+        champs = ['katarina',
+                'akali',
+                'talon',
+                'lissandra',
+                'morgana',
+                'diana',
+                'pyke',
+                ]
+        positions = [(0, 0),
+                     (1, 0),
+                     (2, 0),
+                     (3, 0),
+                     (4, 0),
+                     (5, 0),
+                     (6, 0),
+                     ]
+        desired_items = [[],
+                         [],
+                         [],
+                         ['youmuus_ghostblade','locket_of_the_iron_solari'],
+                         ['chalice_of_power','zekes_herald'],
+                         ['hextech_gunblade','titans_resolve','quicksilver'],
+                         [],
+                         ]
+        self.comps.append(Comp(champs, positions, desired_items, ['moonlight']))
+        
+        champs = ['jax',
+                'fiora',
+                'yone',
+                'yasuo',
+                'leesin',
+                'lux',
+                'irelia',
+                'ezreal'
+                ]
+        positions = [(3, 3),
+                     (5, 3),
+                     (0, 2),
+                     (6, 2),
+                     (2, 1),
+                     (0, 0),
+                     (4, 0),
+                     (6, 0),
+                     ]
+        desired_items = [['dragons_claw'],
+                         [],
+                         [],
+                         ['quicksilver','infinity_edge','titans_resolve'],
+                         ['blue_buff','rapid_firecannon'],
+                         [],
+                         [],
+                         []
+                         ]
+        self.comps.append(Comp(champs, positions, desired_items, ['duelist']))
+        
+        champs = ['sejuani',
+                'yuumi',
+                'shen',
+                'jhin',
+                'teemo',
+                'jinx',
+                'nidalee',
+                'vayne'
+                ]
+        positions = [(3, 3),
+                     (3, 1),
+                     (4, 1),
+                     (0, 0),
+                     (1, 0),
+                     (2, 0),
+                     (3, 0),
+                     (6, 0),
+                     ]
+        desired_items = [['gargoyle_stoneplate'],
+                         [],
+                         [],
+                         ['guardian_angel','infinity_edge'],
+                         ['zekes_herald','chalice_of_power','zekes_herald'],
+                         ['locket_of_the_iron_solari','locket_of_the_iron_solari','quicksilver'],
+                         [],
+                         []
+                         ]
+        self.comps.append(Comp(champs, positions, desired_items, ['sharpshooter','vanguard','mystic']))
+        
+        champs = ['irelia',
+                'yone',
+                'shen',
+                'yuumi',
+                'warwick',
+                'ashe',
+                'kindred',
+                'aphelios'
+                ]
+        positions = [(1, 3),
+                     (3, 3),
+                     (5, 3),
+                     (6, 3),
+                     (2, 1),
+                     (0, 0),
+                     (1, 0),
+                     (2, 0),
+                     ]
+        desired_items = [[],
+                         [],
+                         [],
+                         [],
+                         [],
+                         ['infinity_edge','quicksilver','hand_of_justice'],
+                         ['blue_buff','locket_of_the_iron_solari','warmogs_armor'],
+                         []
+                         ]
+        self.comps.append(Comp(champs, positions, desired_items, ['hunter','adept']))
+        
+        champs = ['shen',
+                'yone',
+                'irelia',
+                'pyke',
+                'lux',
+                'talon',
+                'morgana',
+                'janna'
+                ]
+        positions = [(1, 3),
+                     (3, 3),
+                     (5, 3),
+                     (6, 2),
+                     (0, 0),
+                     (4, 0),
+                     (5, 0),
+                     (6, 0),
+                     ]
+        desired_items = [[],
+                         ['hand_of_justice','hextech_gunblade'],
+                         ['zzrot_portal'],
+                         [],
+                         [],
+                         ['infinity_edge','guardian_angel','deathblade'],
+                         ['morellonomicon','chalice_of_power'],
+                         []
+                         ]
+        self.comps.append(Comp(champs, positions, desired_items, ['enlightened','assassin',
+                                                                  'adept','mystic',
+                                                                  'divine','dazzler']))
+        
+        champs = ['cassiopeia',
+                'aatrox',
+                'sejuani',
+                'thresh',
+                'zilean',
+                'yuumi',
+                'janna',
+                'ahri'
+                ]
+        positions = [(0, 3),
+                     (2, 3),
+                     (4, 3),
+                     (6, 3),
+                     (6, 1),
+                     (0, 0),
+                     (5, 0),
+                     (6, 0),
+                     ]
+        desired_items = [[],
+                         [],
+                         ['sunfire_cape','dragons_claw'],
+                         [],
+                         [],
+                         [],
+                         [],
+                         ['jeweled_gauntlet','infinity_edge','spear_of_shojin']
+                         ]
+        self.comps.append(Comp(champs, positions, desired_items, ['vanguard','mystic']))
+    
+        champs = ['elise',
+                'aatrox',
+                'pyke',
+                'kalista',
+                'evelynn',
+                'zilean',
+                'twistedfate',
+                'jhin'
+                ]
+        positions = [(3, 2),
+                     (5, 2),
+                     (0, 1),
+                     (6, 1),
+                     (3, 0),
+                     (4, 0),
+                     (5, 0),
+                     (6, 0),
+                     ]
+        desired_items = [[],
+                         [],
+                         ['sunfire_cape'],
+                         [],
+                         [],
+                         [],
+                         [],
+                         ['infinity_edge','guardian_angel']
+                         ]
+        self.comps.append(Comp(champs, positions, desired_items, ['cultist']))
+        
+        champs = ['sett',
+                'maokai',
+                'warwick',
+                'nunu',
+                'lulu',
+                'kindred',
+                'ezreal',
+                'ashe'
+                ]
+        positions = [(3, 3),
+                     (5, 3),
+                     (4, 1),
+                     (6, 1),
+                     (0, 0),
+                     (4, 0),
+                     (5, 0),
+                     (6, 0),
+                     ]
+        desired_items = [['rabadons_deathcap'],
+                         [],
+                         [],
+                         ['sunfire_cape'],
+                         [],
+                         [],
+                         [],
+                         ['quicksilver','giant_slayer','guinsoos_rageblade']
+                         ]
+        self.comps.append(Comp(champs, positions, desired_items, ['hunter','elderwood','brawler']))
+        
+        champs = ['irelia',
+                'shen',
+                'annie',
+                'fiora',
+                'talon',
+                'morgana',
+                'janna',
+                'nami'
+                ]
+        positions = [(1, 3),
+                     (3, 3),
+                     (5, 3),
+                     (6, 1),
+                     (1, 0),
+                     (4, 0),
+                     (5, 0),
+                     (6, 0),
+                     ]
+        desired_items = [[],
+                         [],
+                         ['bramble_vest','sunfire_cape','zzrot_portal'],
+                         [],
+                         [],
+                         [],
+                         [],
+                         ['ludens_echo','ludens_echo','quicksilver']
+                         ]
+        self.comps.append(Comp(champs, positions, desired_items, ['mage']))
+        
+        
+        
+        
+
+      
 five_cost = [c for c, co in COST.items() if co == 5]
 class PlayerAI:
     # Explanation - We may switch to a class config for the AI side later so separating the two now is highly useful.

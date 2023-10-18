@@ -36,6 +36,7 @@ class BaseConfig(object):
                  dirichlet_alpha: float,
                  value_delta_max: float,
                  num_simulations: int,
+                 max_moves_considered: int,
                  batch_size: int,
                  td_steps: int,
                  num_actors: int,
@@ -73,8 +74,8 @@ class BaseConfig(object):
                  proj_out: int = 256,
                  pred_hid: int = 64,
                  pred_out: int = 256,
-                 value_support: DiscreteSupport = DiscreteSupport(-200, 200, delta=1),
-                 reward_support: DiscreteSupport = DiscreteSupport(-200, 200, delta=1)):
+                 value_support: DiscreteSupport = DiscreteSupport(-200, 300, delta=1),
+                 reward_support: DiscreteSupport = DiscreteSupport(-200, 300, delta=1)):
         """Base Config for EfficietnZero
         Parameters
         ----------
@@ -215,6 +216,7 @@ class BaseConfig(object):
         self.test_max_moves = test_max_moves
         self.history_length = history_length
         self.num_simulations = num_simulations
+        self.max_moves_considered = max_moves_considered
         self.discount = discount
         self.max_grad_norm = 5
 

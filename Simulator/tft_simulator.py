@@ -458,7 +458,8 @@ class TFT_Simulator(AECEnv):
             if any(dones.values()):
                 self.game_round.update_players({p: agent for p, agent in self.PLAYERS.items() if p in self.live_agents})
             self.game_round.start_round()
-        
+        for player in self.PLAYERS.values():
+            player.score()
         obs_dict = {player: self.make_observation(player) for player in self.live_agents}
         if len(self.live_agents) <= 1:
             for p in self.live_agents:

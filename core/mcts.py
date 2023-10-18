@@ -49,8 +49,10 @@ class MCTS(object):
             horizons = self.config.lstm_horizon_len
             if training_start:
                 iters = self.config.num_simulations
+                max_moves_considered = self.config.max_moves_considered
             else:
                 iters = 1
+                max_moves_considered = 1
             for index_simulation in range(iters):
                 hs_to_append = [None for _ in range(num)]
                 hscr_to_append = [None for _ in range(num)]
@@ -78,7 +80,7 @@ class MCTS(object):
                 # hidden_state_index_x_lst: the iter index of leaf node states in hidden_state_pool
                 # hidden_state_index_y_lst: the batch index of leaf node states in hidden_state_pool
                 # the hidden state of the leaf node is hidden_state_pool[x, y]; value prefix states are the same
-                hidden_state_index_x_lst, hidden_state_index_y_lst, policy_node_y_lst, chance_node_y_lst, last_actions = tree.batch_traverse(roots, pb_c_base, pb_c_init, discount, min_max_stats_lst, results)
+                hidden_state_index_x_lst, hidden_state_index_y_lst, policy_node_y_lst, chance_node_y_lst, last_actions = tree.batch_traverse(roots, iters, max_moves_considered, discount, min_max_stats_lst, results)
                 
                 states_to_predict = []
                 states_to_predict_c_reward = []
