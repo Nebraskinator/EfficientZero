@@ -124,6 +124,7 @@ def update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_r
 
     transformed_target_value = config.scalar_transform(target_value)
     target_value_phi = config.value_phi(transformed_target_value)
+    #print(torch.argmax(target_value_phi[0, 0]))
 
     if config.amp_type == 'torch_amp':
         with autocast():
@@ -201,7 +202,7 @@ def update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_r
                 #
                 value_loss += config.scalar_value_loss(state_value, target_value_phi[:, step_i + 1]) * mask_batch[:, step_i]
                 #
-                value_prefix_loss += config.scalar_reward_loss(afterstate_value_prefix, target_value_prefix_phi[:, step_i]) * mask_batch[:, step_i]
+                #value_prefix_loss += config.scalar_reward_loss(afterstate_value_prefix, target_value_prefix_phi[:, step_i]) * mask_batch[:, step_i]
                 #
                 value_prefix_loss += config.scalar_reward_loss(state_value_prefix, target_value_prefix_phi[:, step_i]) * mask_batch[:, step_i]
                 #

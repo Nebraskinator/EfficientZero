@@ -504,7 +504,28 @@ class HistoryCrossAttention(nn.Module):
             for block in self.post_attn_resblocks:
                 x = block(c)
         return x
-            
+
+class PositionalEncoding(nn.Module):
+
+    def __init__(self, d_model: int, max_len: int = 52):
+        super().__init__()
+
+        position = torch.arange(max_len).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
+        pe = torch.zeros(1, max_len, d_model)
+        pe[0, :, 0::2] = torch.sin(position * div_term)
+        pe[0, :, 1::2] = torch.cos(position * div_term)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        """
+        Arguments:
+            x: Tensor, shape ``[seq_len, batch_size, embedding_dim]``
+        """
+        x = x + self.pe[:, :x.size(1), :]
+        return x
+
+
 #straight-through estimator is used during the backward to allow the gradients to flow only to the encoder during the backpropagation.
 class Onehot_argmax(torch.autograd.Function):
     #more information at : https://pytorch.org/tutorials/beginner/examples_autograd/two_layer_net_custom_function.html
@@ -568,6 +589,9 @@ class RepresentationNetwork(nn.Module):
                                           origin_embedding_size=8,
                                           output_size=unit_embed_channels)
         
+        self.pos_encoding = PositionalEncoding(unit_embed_channels, 52)
+        
+        '''
         # self attention resnet applied to the board
         self.board_sa = AttentionResNet(embedding_size=unit_embed_channels, 
                                             num_pre_attn_resblocks=2, 
@@ -586,6 +610,7 @@ class RepresentationNetwork(nn.Module):
                                                      self.observation_shape[-1]),
                                                     k=3))
         self.board_cnn_blocks = nn.ModuleList(board_cnn_blocks)
+        '''
         
         # self attention resnet applied to the board, benches, and shop
         self.units_sa = AttentionResNet(embedding_size=unit_embed_channels, 
@@ -639,7 +664,7 @@ class RepresentationNetwork(nn.Module):
                                   self.observation_shape[-1] * self.unit_embed_channels,
                                   bias=False))        
         
-        '''
+        
         # linear layer to reduce the embedding size after merging with
         # the reshaped state vector
         self.post_merge_lin = nn.Sequential(nn.LayerNorm((self.state_length,
@@ -648,7 +673,7 @@ class RepresentationNetwork(nn.Module):
                                       nn.Linear(vec_channels + unit_embed_channels,
                                                 unit_embed_channels,
                                                 bias=False))
-        '''        
+               
         
         # self attention resnet applied to the board, benches, and shop after
         # merging with the state vector
@@ -725,6 +750,7 @@ class RepresentationNetwork(nn.Module):
         self.fc_chance = mlp(self.block_output_size_chance, 
                             fc_chance_layers, 
                             num_chance_tokens, 
+                            init_zero=True,
                             )
         
         
@@ -742,6 +768,10 @@ class RepresentationNetwork(nn.Module):
         # encode units
         units = self.unit_encoding(units)
         
+        units = self.pos_encoding(units)
+        
+        
+        '''
         # apply Self-Attention and CNN to the boards
         
         # isolate board units
@@ -767,6 +797,8 @@ class RepresentationNetwork(nn.Module):
         # concatenate the board with the benches/shops for SA
         # new shape is [batch_size * stacked_frames * num_players, 52, channels]
         units = torch.concat([board, other_units], dim=-2)
+        '''
+        
         
         # apply SA to the units
         units = self.units_sa(units)
@@ -797,12 +829,22 @@ class RepresentationNetwork(nn.Module):
         for block in self.vec_resblocks:
             vec = block(vec)
             
-        # append the units tensor with a reshaped vector embedding
+        # append the units tensor with tokens from a vector embedding
         # new shape is [batch_size * stacked_frames * num_players, 56, channels]
         vec_fill = self.vec_fill(vec)
         vec_fill = torch.reshape(vec_fill, (-1, self.observation_shape[-1], self.unit_embed_channels))        
         player_state = torch.concat([units, vec_fill], dim=-2)
-                              
+        
+        
+        '''
+        # reshape the vector for channels concatenation
+        vec = torch.reshape(vec, (-1, self.state_length, self.vec_channels))
+        player_state = torch.concat([player_state, vec], dim=-1)
+        
+        # reduct the player state channels
+        player_state = self.post_merge_lin(player_state)
+        '''                      
+        
         # apply SA to the player state
         player_state = self.postmerge_sa(player_state)                
                 
@@ -1108,13 +1150,16 @@ class StateDynamicsNetwork(nn.Module):
                                                 ))
         
         self.block_output_size_reward = length * reward_channels
+        
+        '''
         self.lstm = nn.LSTM(input_size=self.block_output_size_reward, 
                             hidden_size=lstm_hidden_size)
+        '''
         
-        self.fc = mlp(lstm_hidden_size, 
+        self.fc = mlp(self.block_output_size_reward, 
                         fc_reward_layers, 
                         full_support_size, 
-                        init_zero=init_zero, 
+                        init_zero=True, 
                         )
 
     def forward(self, x, reward_hidden):
@@ -1130,12 +1175,12 @@ class StateDynamicsNetwork(nn.Module):
     
         x = self.reward_conv(state)
     
-        x = x.view(-1, self.block_output_size_reward).unsqueeze(0)
-        value_prefix, reward_hidden = self.lstm(x, reward_hidden)
-        value_prefix = value_prefix.squeeze(0)
-        value_prefix = self.fc(value_prefix)
+        x = x.view(-1, self.block_output_size_reward) #.unsqueeze(0)
+        #value_prefix, reward_hidden = self.lstm(x, reward_hidden)
+        #value_prefix = value_prefix.squeeze(0)
+        value_prefix = self.fc(x)
     
-        return state, reward_hidden, value_prefix
+        return state, None, value_prefix
 
     def get_dynamic_mean(self):
         dynamic_mean = np.abs(self.conv.weight.detach().cpu().numpy().reshape(-1)).tolist()
@@ -1214,7 +1259,7 @@ class AfterstateDynamicsNetwork(nn.Module):
                                              num_post_attn_resblocks=2, 
                                              length=length)
         
-      
+        '''
         self.reward_conv = nn.Sequential(nn.LayerNorm((length,
                                                     channels,
                                                     )),
@@ -1232,6 +1277,7 @@ class AfterstateDynamicsNetwork(nn.Module):
                         full_support_size, 
                         init_zero=init_zero, 
                         )
+        '''
 
     def forward(self, x, reward_hidden):
         
@@ -1243,15 +1289,17 @@ class AfterstateDynamicsNetwork(nn.Module):
         x = state + x
     
         state = self.dynamics_sa(x)
-    
+        
+        '''
         x = self.reward_conv(state)
     
         x = x.view(-1, self.block_output_size_reward).unsqueeze(0)
         value_prefix, reward_hidden = self.lstm(x, reward_hidden)
         value_prefix = value_prefix.squeeze(0)
         value_prefix = self.fc(value_prefix)
+        '''
     
-        return state, reward_hidden, value_prefix
+        return state, None, None
 
     def get_dynamic_mean(self):
         dynamic_mean = np.abs(self.conv.weight.detach().cpu().numpy().reshape(-1)).tolist()
@@ -1344,12 +1392,12 @@ class AfterstatePredictionNetwork(nn.Module):
         self.fc_value = mlp(self.block_output_size_value, 
                             fc_value_layers, 
                             full_support_size, 
-                            init_zero=init_zero, 
+                            init_zero=True, 
                             )
         self.fc_policy = mlp(self.block_output_size_policy, 
                              fc_chance_layers, 
                              num_chance_tokens, 
-                             init_zero=init_zero, 
+                             init_zero=True, 
                             )
 
     def forward(self, x):
@@ -1423,23 +1471,25 @@ class StatePredictionNetwork(nn.Module):
                                                 reduced_channels_value, 
                                                 bias=False
                                                 ))
+
+        policy_conv = [nn.LayerNorm((position_length,
+                                            num_channels,
+                                            )),
+                            nn.LeakyReLU(),
+                            nn.Linear(num_channels, 
+                                      reduced_channels_policy, 
+                                      bias=False
+                                      )]
         
-        self.policy_conv = nn.Sequential(nn.LayerNorm((position_length,
-                                                    num_channels,
-                                                    )),
-                                      nn.LeakyReLU(),
-                                      nn.Linear(num_channels, 
-                                                reduced_channels_policy, 
-                                                bias=False
-                                                ))
-        
+        policy_conv[-1].weight.data.fill_(0)
+        self.policy_conv = nn.Sequential(*policy_conv)
         
         self.block_output_size_value = length * reduced_channels_value
         self.block_output_size_policy = position_length * reduced_channels_policy
         self.fc_value = mlp(self.block_output_size_value, 
                             fc_value_layers, 
                             full_support_size, 
-                            init_zero=init_zero, 
+                            init_zero=True, 
                             )
         #self.fc_policy = mlp(self.block_output_size_policy, 
         #                     fc_policy_layers, 

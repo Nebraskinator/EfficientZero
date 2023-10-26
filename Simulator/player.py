@@ -44,8 +44,8 @@ class Player:
         #self.ai = PlayerAI(self)
         self.similarity_scorer = SimilarityScorer(self)
         self.similarity_score = 0
-        self.similarity_coeff = 0.5
-        self.max_similarity_reward = 100
+        self.similarity_coeff = 0.8
+        self.max_similarity_reward = 300
         
 
         self.win_streak = 0  # For purposes of gold generation at start of turn
@@ -1132,11 +1132,11 @@ class Player:
         
         v_idx = max_o*2
         
-        vector[v_idx] = np.clip(self.level - 1 / 8 * 255, 0, 255)
+        vector[v_idx] = np.clip((self.level - 1) / 8 * 255, 0, 255)
         v_idx += 1
-        vector[v_idx] = np.clip(self.max_units - 1 / 9 * 255, 0, 255)
+        vector[v_idx] = np.clip((self.max_units - 1) / 9 * 255, 0, 255)
         v_idx += 1
-        vector[v_idx] = np.clip(self.max_units - self.num_units_in_play / 10 * 255, 0, 255)
+        vector[v_idx] = np.clip((self.max_units - self.num_units_in_play) / 10 * 255, 0, 255)
         v_idx += 1
         vector[v_idx] = np.clip(self.num_units_in_play / 10 * 255, 0, 255)
         v_idx += 1
@@ -1450,8 +1450,9 @@ class Player:
         if not self.combat:
             self.loss_streak += 1
             self.win_streak = 0
-            self.reward -= self.damage_reward * damage * (1-self.similarity_coeff)
-            self.print(str(-self.damage_reward * damage) + " reward for losing round against player " + str(self.opponent.player_num))
+            damage_reward = self.damage_reward * damage * (1-self.similarity_coeff)
+            self.reward -= damage_reward
+            self.print(str(-round(damage_reward, 2)) + " reward for losing round against player " + str(self.opponent.player_num))
             self.match_history.append(0)
 
             if self.team_tiers['fortune'] > 0:
@@ -2194,8 +2195,10 @@ class Player:
                   False: There are actions possible
     """
     def spill_reward(self, damage):
-        self.reward += self.damage_reward * damage * (1-self.similarity_coeff)
-        self.print("Spill reward of {} received".format(self.damage_reward * damage))
+        reward = self.damage_reward * damage * (1-self.similarity_coeff)
+        self.reward += reward
+        self.print("Spill reward of {} received".format(reward))
+
 
     """
     Description - Does all operations that happen at the start of the round. 
@@ -2223,6 +2226,7 @@ class Player:
         #self.ai.reset_phase()
         self.selection = None
         if log:
+            self.print("total similarity score: {}".format(round(self.similarity_score, 4)))
             self.printComp()
             self.printBench()
             self.printItemBench()
@@ -2458,8 +2462,9 @@ class Player:
             self.win_streak += 1
             self.loss_streak = 0
             self.gold += 1
-            self.reward += self.damage_reward * damage * (1-self.similarity_coeff)
-            self.print(str(self.damage_reward * damage) + " reward for winning round against player " + str(self.opponent.player_num))
+            damage_reward = self.damage_reward * damage * (1-self.similarity_coeff)
+            self.reward += damage_reward
+            self.print(str(round(damage_reward, 2)) + " reward for winning round against player " + str(self.opponent.player_num))
             self.match_history.append(1)
 
             if self.team_tiers['fortune'] > 0:
@@ -2497,7 +2502,7 @@ class Comp:
                     champ_sums[c.name] += 3 ** (c.stars - 1)
                     if c.chosen and c.chosen in self.chosen:
                         champ_score += 2
-                    distance = abs(c.x - self.positions[c.name][0]) + abs(c.y - self.positions[c.name][1])
+                    distance = abs(c.x - self.positions[c.name][0]) + abs(c.y - self.positions[c.name][1]) *2
                     champ_score += 2 / (distance + 1)
                     desired_items = [i for i in self.champ_items[c.name]]
                     if desired_items:
@@ -2584,6 +2589,8 @@ class SimilarityScorer:
 
         self.comps.append(Comp(champs, positions, desired_items, ['shade']))
         
+        
+        '''
         champs = ['irelia',
                 'jax',
                 'warwick',
@@ -2902,6 +2909,7 @@ class SimilarityScorer:
                          ]
         self.comps.append(Comp(champs, positions, desired_items, ['mage']))
         
+        '''
         
         
         

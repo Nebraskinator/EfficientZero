@@ -379,7 +379,9 @@ class BatchWorker_GPU(object):
                         target_values.append(value_lst[value_index])
                         # Since the horizon is small and the discount is close to 1.
                         # Compute the reward sum to approximate the value prefix for simplification
-                        value_prefix += reward_lst[current_index]  # * config.discount ** (current_index - base_index)
+                        value_prefix = reward_lst[current_index]  # * config.discount ** (current_index - base_index)
+
+                        #value_prefix += reward_lst[current_index]  # * config.discount ** (current_index - base_index)
                         target_value_prefixs.append(value_prefix)
                     else:
                         target_values.append(0)

@@ -100,18 +100,19 @@ class BaseNet(nn.Module):
 
     # state + action -> afterstate and chance logits
     def recurrent_afterstate_inference(self, hidden_state, reward_hidden, action) -> NetworkOutput:
-        afterstate, reward_hidden, value_prefix = self.afterstate_dynamics(hidden_state, reward_hidden, action)
+        afterstate, _, value_prefix = self.afterstate_dynamics(hidden_state, reward_hidden, action)
         chance_token_logit, value = self.afterstate_prediction(afterstate)
 
         if not self.training:
             # if not in training, obtain the scalars of the value/reward
             value = self.inverse_value_transform(value).detach().cpu().numpy()
-            value_prefix = self.inverse_reward_transform(value_prefix).detach().cpu().numpy()
+            value_prefix = np.zeros((len(value), 1))
+            #value_prefix = self.inverse_reward_transform(value_prefix).detach().cpu().numpy()
             afterstate = afterstate.detach().cpu().numpy()
-            reward_hidden = (reward_hidden[0].detach().cpu().numpy(), reward_hidden[1].detach().cpu().numpy())
+            #reward_hidden = (reward_hidden[0].detach().cpu().numpy(), reward_hidden[1].detach().cpu().numpy())
             chance_token_logit = chance_token_logit.detach().cpu().numpy()
 
-        return NetworkOutput(value, value_prefix, chance_token_logit, afterstate, reward_hidden, None, None)
+        return NetworkOutput(value, value_prefix, chance_token_logit, afterstate, (None, None), None, None)
 
     # afterstate + chance token -> state and policy logits
     def recurrent_state_inference(self, hidden_state, reward_hidden, chance_token) -> NetworkOutput:
@@ -123,7 +124,7 @@ class BaseNet(nn.Module):
             value = self.inverse_value_transform(value).detach().cpu().numpy()
             value_prefix = self.inverse_reward_transform(value_prefix).detach().cpu().numpy()
             state = state.detach().cpu().numpy()
-            reward_hidden = (reward_hidden[0].detach().cpu().numpy(), reward_hidden[1].detach().cpu().numpy())
+            #reward_hidden = (reward_hidden[0].detach().cpu().numpy(), reward_hidden[1].detach().cpu().numpy())
             actor_logit = actor_logit.detach().cpu().numpy()
 
         return NetworkOutput(value, value_prefix, actor_logit, state, reward_hidden, None, None)

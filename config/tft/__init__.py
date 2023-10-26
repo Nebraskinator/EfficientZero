@@ -25,9 +25,10 @@ class TFTConfig(BaseConfig):
             discount=0.997,
             dirichlet_alpha=0.3,
             value_delta_max=0.01,
-            num_simulations=150,
+            num_simulations=50,
+            max_moves_considered=16,
             batch_size=128,
-            td_steps=10,
+            td_steps=5,
             num_actors=1,
             # network initialization/ & normalization
             episode_life=True,
@@ -43,7 +44,7 @@ class TFTConfig(BaseConfig):
             lr_decay_steps=100000,
             auto_td_steps_ratio=0.3,
             # replay window
-            start_transitions=3e5,
+            start_transitions=2e5,
             total_transitions=100 * 1000,
             transition_num=1e6,
             # frame skip & stack observation
@@ -58,24 +59,25 @@ class TFTConfig(BaseConfig):
             commitment_loss_coeff=1,
             chance_loss_coeff=1,
             # reward sum
-            lstm_hidden_size=256,
+            lstm_hidden_size=128,
             lstm_horizon_len=10,
             # siamese
-            proj_hid=1024,
-            proj_out=1024,
-            pred_hid=512,
-            pred_out=1024,)
+            proj_hid=512,
+            proj_out=512,
+            pred_hid=256,
+            pred_out=512,)
         self.discount **= self.frame_skip
         self.max_moves //= self.frame_skip
         self.test_max_moves //= self.frame_skip
         self.num_models = 1
         self.freeze_models = [1, 2]
         self.model_switch_interval = 5000000
-        self.num_random_actors = 1
+        self.num_random_actors = 0
         self.num_prev_models = 0
         self.prev_model_update_interval = 15000
         
-        self.num_chance_tokens = 64
+        self.num_chance_tokens = 32
+        self.learned_agent_actions_start = 5000
 
         self.start_transitions = self.start_transitions // self.frame_skip
         self.start_transitions = max(1, self.start_transitions)
@@ -88,9 +90,9 @@ class TFTConfig(BaseConfig):
         self.board_embed_size = 1024  # x36 Number of channels in reward head
         self.state_embed_size = 2048  # x36 Number of channels in value head
         self.vec_embed_size = 128  # x36 Number of channels in policy head
-        self.resnet_fc_reward_layers = [1024]  # Define the hidden layers in the reward head of the dynamic network
-        self.resnet_fc_value_layers = [1024]
-        self.resnet_fc_chance_layers = [1024] # Define the hidden layers in the value head of the prediction network
+        self.resnet_fc_reward_layers = [256]  # Define the hidden layers in the reward head of the dynamic network
+        self.resnet_fc_value_layers = [256]
+        self.resnet_fc_chance_layers = [256] # Define the hidden layers in the value head of the prediction network
         self.resnet_policy_layers = 38  # Define the depth in the 3D policy head of the prediction network
         self.downsample = False  # Downsample observations before representation network (See paper appendix Network Architecture)
 

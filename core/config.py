@@ -74,8 +74,8 @@ class BaseConfig(object):
                  proj_out: int = 256,
                  pred_hid: int = 64,
                  pred_out: int = 256,
-                 value_support: DiscreteSupport = DiscreteSupport(-200, 300, delta=1),
-                 reward_support: DiscreteSupport = DiscreteSupport(-200, 300, delta=1)):
+                 value_support: DiscreteSupport = DiscreteSupport(-300, 300, delta=1),
+                 reward_support: DiscreteSupport = DiscreteSupport(-300, 300, delta=1)):
         """Base Config for EfficietnZero
         Parameters
         ----------
@@ -348,6 +348,7 @@ class BaseConfig(object):
         nan_part = torch.isnan(output)
         output[nan_part] = 0.
         output[torch.abs(output) < epsilon] = 0.
+        #print((value, output, sum(value)))
         return output
 
     def value_phi(self, x):
@@ -356,17 +357,17 @@ class BaseConfig(object):
     def reward_phi(self, x):
         return self._phi(x, self.reward_support.min, self.reward_support.max, self.reward_support.size)
 
-    def _phi(self, x, min, max, set_size: int):
+    def _phi(self, x, min_, max_, set_size: int):
         delta = self.value_support.delta
 
-        x.clamp_(min, max)
+        x.clamp_(min_, max_)
         x_low = x.floor()
         x_high = x.ceil()
         p_high = x - x_low
         p_low = 1 - p_high
 
         target = torch.zeros(x.shape[0], x.shape[1], set_size).to(x.device)
-        x_high_idx, x_low_idx = x_high - min / delta, x_low - min / delta
+        x_high_idx, x_low_idx = x_high - min_ / delta, x_low - min_ / delta
         target.scatter_(2, x_high_idx.long().unsqueeze(-1), p_high.unsqueeze(-1))
         target.scatter_(2, x_low_idx.long().unsqueeze(-1), p_low.unsqueeze(-1))
         return target

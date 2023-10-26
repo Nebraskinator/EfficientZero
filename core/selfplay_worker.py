@@ -270,7 +270,6 @@ class DataWorker(object):
                 #prev_pred_values = {}
                 #prev_search_values = {}
                 done_cnt = 0
-                
                 # play games until max moves
                 while done_cnt < num_actors and (step_counter <= self.config.max_moves):
                     
@@ -360,7 +359,7 @@ class DataWorker(object):
                             else:                        
                                 network_output = model.initial_inference(stack_obs.float())
                             hidden_state_roots = network_output.hidden_state
-                            reward_hidden_roots = network_output.reward_hidden
+                            #reward_hidden_roots = network_output.reward_hidden
                             value_prefix_pool = network_output.value_prefix
                             value_pool = network_output.value.reshape(-1).tolist()
                             chance_token_pool = network_output.chance_token_onehot.detach().cpu()
@@ -385,18 +384,18 @@ class DataWorker(object):
                             #print((noises, policy_logits_pool))
                             roots.prepare(self.config.root_exploration_fraction, noises, value_prefix_pool, value_pool, policy_logits_pool)
                             # do MCTS for a policy
-                            mcts.search(roots, model, hidden_state_roots, reward_hidden_roots, training_start=((start_training[curr_model] or self.config.resume_training) and all([s >= value_training_start for s in trained_steps])))
+                            mcts.search(roots, model, hidden_state_roots, training_start=((start_training[curr_model] or self.config.resume_training) and all([s >= value_training_start for s in trained_steps])))
         
-                            roots_distributions = roots.get_distributions()
+                            #roots_distributions = roots.get_distributions()
                             roots_values = roots.get_values()
-                            #roots_completed_values = roots.get_children_values(self.config.discount)
+                            roots_completed_values = roots.get_children_values(self.config.discount)
                             roots_improved_policy_probs = roots.get_policies(self.config.discount) # new policy constructed with completed Q in gumbel muzero
                             for i, p in enumerate(model_acting_agents):
                                 if self.config.use_priority and not self.config.use_max_priority and start_training[curr_model]:
                                     pred_values_lst[p].append(network_output.value[i].item())
                                     search_values_lst[p].append(roots_values[i])
                                     #search_values_lst[p].append(0)
-                                deterministic = False                                
+                                #deterministic = False                                
                                 if (start_training[curr_model] or self.config.resume_training) and all([s >= learned_agent_actions_start for s in trained_steps]):
                                     search_stats, value, temperature = roots_improved_policy_probs[i], float(roots_values[i]), float(_temperature[i])
                                     #distributions, value, temperature = np.ones(self.config.action_space_size), 0., 0.3
@@ -573,6 +572,7 @@ class DataWorker(object):
                             priorities = self.get_priorities(player, pred_values_lst, search_values_lst)
                                                   
                             game_histories[player].game_over()
+                            #print((game_histories[player].rewards, len(game_histories[player].obs_history), len(game_histories[player].rewards),  len(game_histories[player].actions)))
 
                             self.put([game_histories[player], priorities], curr_model)
                             #print('rank ' + str(self.rank) + ', saving match from ' + player + ', for model ' + str(curr_model) + ', dones count ' + str(done_cnt))
@@ -614,6 +614,7 @@ class DataWorker(object):
                                 m = v
                                 c = k
                     shutil.copy("log.txt", "./logs/{}_{}_{}.txt".format(idx, win, c))
+                    
                     
 
                 '''
