@@ -328,6 +328,9 @@ def update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_r
         total_loss.backward()
     elif config.amp_type == 'torch_amp':
         scaler.scale(total_loss).backward()
+        #for n, c in model.representation_network.named_children():
+        #    for p in c.parameters():
+        #      print(f'<{n}>:{p.grad}')
         scaler.unscale_(optimizer)
 
     torch.nn.utils.clip_grad_norm_(parameters, config.max_grad_norm)

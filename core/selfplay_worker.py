@@ -358,6 +358,7 @@ class DataWorker(object):
                                     network_output = model.initial_inference(stack_obs.float())
                             else:                        
                                 network_output = model.initial_inference(stack_obs.float())
+                                                            
                             hidden_state_roots = network_output.hidden_state
                             #reward_hidden_roots = network_output.reward_hidden
                             value_prefix_pool = network_output.value_prefix
@@ -373,6 +374,7 @@ class DataWorker(object):
                             roots = cytree.Roots(len(model_acting_agents), pool_size)
                             policy_logits_pool = []
                             noises = []
+                            action_mappings = []
                             for i, p in enumerate(model_acting_agents):
                                 tokens[p] = chance_token_pool[i]
                                 #noise = np.zeros(self.config.action_space_size)
@@ -380,9 +382,10 @@ class DataWorker(object):
                                 #noises.append(noise.astype(np.float32).tolist())  
                                 noises.append(np.random.dirichlet([self.config.root_dirichlet_alpha] * np.sum(action_masks[p]).astype(int)).astype(np.float32).tolist())
                                 policy_logits_pool.append(network_output.policy_logits[i, np.flatnonzero(action_masks[p])].astype(np.float32).tolist())
+                                action_mappings.append(np.flatnonzero(action_masks[p]).tolist())
                             #noises = [(np.random.dirichlet([self.config.root_dirichlet_alpha] * np.sum(action_masks[p]))).astype(np.float32).tolist() for p in step_acting_agents]
                             #print((noises, policy_logits_pool))
-                            roots.prepare(self.config.root_exploration_fraction, noises, value_prefix_pool, value_pool, policy_logits_pool)
+                            roots.prepare(self.config.root_exploration_fraction, noises, value_prefix_pool, value_pool, policy_logits_pool, action_mappings)
                             # do MCTS for a policy
                             mcts.search(roots, model, hidden_state_roots, training_start=((start_training[curr_model] or self.config.resume_training) and all([s >= value_training_start for s in trained_steps])))
         
@@ -390,14 +393,17 @@ class DataWorker(object):
                             roots_values = roots.get_values()
                             roots_completed_values = roots.get_children_values(self.config.discount)
                             roots_improved_policy_probs = roots.get_policies(self.config.discount) # new policy constructed with completed Q in gumbel muzero
+                            
+                            
                             for i, p in enumerate(model_acting_agents):
+                                
                                 if self.config.use_priority and not self.config.use_max_priority and start_training[curr_model]:
                                     pred_values_lst[p].append(network_output.value[i].item())
                                     search_values_lst[p].append(roots_values[i])
                                     #search_values_lst[p].append(0)
                                 #deterministic = False                                
                                 if (start_training[curr_model] or self.config.resume_training) and all([s >= learned_agent_actions_start for s in trained_steps]):
-                                    search_stats, value, temperature = roots_improved_policy_probs[i], float(roots_values[i]), float(_temperature[i])
+                                    search_stats, value, temperature = roots_improved_policy_probs[i], float(np.max(roots_completed_values[i])), float(_temperature[i])
                                     #distributions, value, temperature = np.ones(self.config.action_space_size), 0., 0.3
                                     distributions = np.zeros(self.config.action_space_size)
                                     distributions[np.flatnonzero(action_masks[p])] = search_stats
@@ -506,7 +512,8 @@ class DataWorker(object):
                             clip_reward = np.sign(ori_reward[p])
                         else:
                             clip_reward = ori_reward[p]
-
+                        #if env.log and p == 'player_0':
+                        #    print("search stats -- action: {}, val: {}, reward: {}".format(int(action[p]), float(vals[p]), float(clip_reward)))
                         # store data
                         game_histories[p].store_search_stats(dists[p].copy(), float(vals[p]))
                         if p not in obs:

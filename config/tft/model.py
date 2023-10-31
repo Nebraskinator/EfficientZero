@@ -750,7 +750,7 @@ class RepresentationNetwork(nn.Module):
         self.fc_chance = mlp(self.block_output_size_chance, 
                             fc_chance_layers, 
                             num_chance_tokens, 
-                            init_zero=True,
+                            init_zero=False,
                             )
         
         
@@ -1115,14 +1115,14 @@ class StateDynamicsNetwork(nn.Module):
         super().__init__()
         
         self.outcome_space_layers = outcome_space_layers
-        
+        '''
         self.action_sa = AttentionResNet(embedding_size=channels+outcome_space_layers, 
                                              num_pre_attn_resblocks=2, 
                                              num_attn_resblocks=3, 
                                              num_attn_heads=2, 
                                              num_post_attn_resblocks=2, 
                                              length=length)
-    
+        '''
         self.act_conv = nn.Sequential(nn.LayerNorm((length,
                                                     channels + outcome_space_layers,
                                                     )),
@@ -1166,7 +1166,7 @@ class StateDynamicsNetwork(nn.Module):
         
         state = x[:, :, :-self.outcome_space_layers]
         
-        x = self.action_sa(x)
+        #x = self.action_sa(x)
         x = self.act_conv(x)
     
         x = state + x
@@ -1235,14 +1235,14 @@ class AfterstateDynamicsNetwork(nn.Module):
         super().__init__()
         
         self.action_space_layers = action_space_layers
-        
+        '''
         self.action_sa = AttentionResNet(embedding_size=channels+action_space_layers, 
                                              num_pre_attn_resblocks=2, 
                                              num_attn_resblocks=3, 
                                              num_attn_heads=2, 
                                              num_post_attn_resblocks=2, 
                                              length=length)
-    
+        '''
         self.act_conv = nn.Sequential(nn.LayerNorm((length,
                                                     channels+action_space_layers,
                                                     )),
@@ -1283,7 +1283,7 @@ class AfterstateDynamicsNetwork(nn.Module):
         
         state = x[:, :, :-self.action_space_layers]
         
-        x = self.action_sa(x)
+        #x = self.action_sa(x)
         x = self.act_conv(x)
     
         x = state + x
@@ -1361,14 +1361,14 @@ class AfterstatePredictionNetwork(nn.Module):
             True -> zero initialization for the last layer of value/policy mlp
         """
         super().__init__()
-        
+        '''
         self.sa = AttentionResNet(embedding_size=num_channels, 
                                              num_pre_attn_resblocks=2, 
                                              num_attn_resblocks=3, 
                                              num_attn_heads=2, 
                                              num_post_attn_resblocks=2, 
                                              length=length)
-
+        '''
         self.value_conv = nn.Sequential(nn.LayerNorm((length,
                                                     num_channels,
                                                     )),
@@ -1401,7 +1401,7 @@ class AfterstatePredictionNetwork(nn.Module):
                             )
 
     def forward(self, x):
-        x = self.sa(x)
+        #x = self.sa(x)
         value = self.value_conv(x)
         policy = self.policy_conv(x)
         value = value.view(-1, self.block_output_size_value)
@@ -1455,14 +1455,14 @@ class StatePredictionNetwork(nn.Module):
         super().__init__()
         
         self.position_length = position_length
-        
+        '''
         self.sa = AttentionResNet(embedding_size=num_channels, 
                                              num_pre_attn_resblocks=2, 
                                              num_attn_resblocks=3, 
                                              num_attn_heads=2, 
                                              num_post_attn_resblocks=2, 
                                              length=length)
-
+        '''
         self.value_conv = nn.Sequential(nn.LayerNorm((length,
                                                     num_channels,
                                                     )),
@@ -1500,7 +1500,7 @@ class StatePredictionNetwork(nn.Module):
 
 
     def forward(self, x):
-        x = self.sa(x)
+        #x = self.sa(x)
         value = self.value_conv(x)
         policy = self.policy_conv(x[:, :self.position_length, :])
         value = value.view(-1, self.block_output_size_value)
@@ -1608,7 +1608,7 @@ class EfficientZeroNet(BaseNet):
             num_players=num_players,
             num_board_cnn_resblocks=8,
             unit_embed_channels=num_channels,
-            vec_blocks=8,
+            vec_blocks=2,
             vec_channels=16,
             state_channels=num_channels,
             reduced_channels_chance=16,

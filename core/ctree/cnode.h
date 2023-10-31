@@ -18,17 +18,18 @@ namespace tree {
 
     class CNode {
         public:
-            int visit_count, to_play, action_num, hidden_state_index_x, hidden_state_index_y, best_action, is_reset, select_child_using_chance;
+            int visit_count, to_play, action, action_num, hidden_state_index_x, hidden_state_index_y, best_action, is_reset, select_child_using_chance;
             float value_prefix, raw_value, prior, value_sum, gumbel_scale, gumbel_rng;
             std::vector<int> children_index;
             std::vector<CNode>* ptr_node_pool;
             std::vector<float> gumbel;
 
             CNode();
-            CNode(float prior, int select_child_using_chance, std::vector<CNode> *ptr_node_pool);
+            CNode(int action, float prior, int select_child_using_chance, std::vector<CNode> *ptr_node_pool);
             ~CNode();
 
             void expand(int to_play, int hidden_state_index_x, int hidden_state_index_y, float value_prefix, float value, const std::vector<float> &policy_logits);
+            void expand_as_root(int to_play, int hidden_state_index_x, int hidden_state_index_y, float value_prefix, float value, const std::vector<float> &policy_logits, const std::vector<int> &action_mapping);
             void add_exploration_noise(float exploration_fraction, const std::vector<float> &noises);
             float get_mean_q(int isRoot, float parent_q, float discount);
             void print_out();
@@ -55,8 +56,8 @@ namespace tree {
             CRoots(int root_num, int pool_size);
             ~CRoots();
 
-            void prepare(float root_exploration_fraction, const std::vector<std::vector<float>> &noises, const std::vector<float> &value_prefixs, const std::vector<float> &values, const std::vector<std::vector<float>> &policies);
-            void prepare_no_noise(const std::vector<float> &value_prefixs, const std::vector<float> &values, const std::vector<std::vector<float>> &policies);
+            void prepare(float root_exploration_fraction, const std::vector<std::vector<float>> &noises, const std::vector<float> &value_prefixs, const std::vector<float> &values, const std::vector<std::vector<float>> &policies, const std::vector<std::vector<int>> &action_mappings);
+            void prepare_no_noise(const std::vector<float> &value_prefixs, const std::vector<float> &values, const std::vector<std::vector<float>> &policies, const std::vector<std::vector<int>> &action_mappings);
             void clear();
             std::vector<std::vector<int>> get_trajectories();
             std::vector<std::vector<int>> get_distributions();
@@ -96,7 +97,8 @@ namespace tree {
     std::vector<std::vector<int> > get_table_of_considered_visits(int max_num_considered_actions, int num_simulations);
     std::vector<float> score_considered(int considered_visit, std::vector<float> gumbel, std::vector<float> logits, std::vector<float> normalized_qvalues, std::vector<int> visit_counts);
     std::vector<float> generate_gumbel(float gumbel_scale, float gumbel_rng, int shape);
-
+    std::pair<int, int> cselect_root_child(CNode* root, float discount_factor, int num_simulations, int max_num_considered_actions);
+    int cselect_interior_child(CNode* root, float discount_factor);
 }
 
 #endif

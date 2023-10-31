@@ -46,11 +46,11 @@ cdef class Roots:
         self.pool_size = pool_size
         self.roots = new CRoots(root_num, self.pool_size)
 
-    def prepare(self, float root_exploration_fraction, list noises, list value_prefix_pool, list value_pool, list policy_logits_pool):
-        self.roots[0].prepare(root_exploration_fraction, noises, value_prefix_pool, value_pool, policy_logits_pool)
+    def prepare(self, float root_exploration_fraction, list noises, list value_prefix_pool, list value_pool, list policy_logits_pool, list action_mappings):
+        self.roots[0].prepare(root_exploration_fraction, noises, value_prefix_pool, value_pool, policy_logits_pool, action_mappings)
 
-    def prepare_no_noise(self, list value_prefix_pool, list value_pool, list policy_logits_pool):
-        self.roots[0].prepare_no_noise(value_prefix_pool, value_pool, policy_logits_pool)
+    def prepare_no_noise(self, list value_prefix_pool, list value_pool, list policy_logits_pool, list action_mappings):
+        self.roots[0].prepare_no_noise(value_prefix_pool, value_pool, policy_logits_pool, action_mappings)
 
     def get_trajectories(self):
         return self.roots[0].get_trajectories()
@@ -88,9 +88,10 @@ cdef class Node:
         # self.cnode = CNode(prior, action_num)
         pass
 
-    def expand(self, int to_play, int hidden_state_index_x, int hidden_state_index_y, float value_prefix, float value, list policy_logits):
+    def expand_as_root(self, int to_play, int hidden_state_index_x, int hidden_state_index_y, float value_prefix, float value, list policy_logits, list action_mapping):
         cdef vector[float] cpolicy = policy_logits
-        self.cnode.expand(to_play, hidden_state_index_x, hidden_state_index_y, value_prefix, value, cpolicy)
+        cdef vector[int] caction_mapping = action_mapping
+        self.cnode.expand_as_root(to_play, hidden_state_index_x, hidden_state_index_y, value_prefix, value, cpolicy, caction_mapping)
     #def __dealloc__(self):
     #    del self.cnode
 

@@ -123,7 +123,6 @@ class MCTS(object):
                         policy_lst[y] = policy_logits_pool[i]
                         #hscr_to_append[y] = reward_hidden_nodes[0][:, [i], :]
                         #hshr_to_append[y] = reward_hidden_nodes[1][:, [i], :]
-                        
                 
                 states_to_predict = []
                 states_to_predict_c_reward = []
@@ -138,7 +137,7 @@ class MCTS(object):
                     #states_to_predict_c_reward.append(reward_hidden_c_pool[ix][0][iy])
                     #states_to_predict_h_reward.append(reward_hidden_h_pool[ix][0][iy])
                     actions_to_predict.append(last_actions[ic])
-                
+                               
                 if states_to_predict:
                     states_to_predict = torch.from_numpy(np.asarray(states_to_predict)).to(device).float()
                     #states_to_predict_c_reward = torch.from_numpy(np.asarray(states_to_predict_c_reward)).to(device).unsqueeze(0)
@@ -167,7 +166,6 @@ class MCTS(object):
                         policy_lst[y] = policy_logits_pool[i]
                         #hscr_to_append[y] = reward_hidden_nodes[0][:, [i], :]
                         #hshr_to_append[y] = reward_hidden_nodes[1][:, [i], :]
-                
                 
                 hidden_state_pool.append(hs_to_append)
                 #hscr_to_append = np.concatenate(hscr_to_append, axis=-2)

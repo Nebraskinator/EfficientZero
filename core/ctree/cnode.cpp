@@ -51,6 +51,7 @@ namespace tree{
 
     CNode::CNode(){
         this->prior = 0.0;
+        this->action = 0;
         this->action_num = 0;
         this->best_action = -1;
 
@@ -66,8 +67,9 @@ namespace tree{
         this->gumbel_rng=0.0;
     }
 
-    CNode::CNode(float prior, int select_child_using_chance, std::vector<CNode>* ptr_node_pool){
+    CNode::CNode(int action, float prior, int select_child_using_chance, std::vector<CNode>* ptr_node_pool){
         this->prior = prior;
+        this->action = action;
         this->action_num = 0;
         this->select_child_using_chance = select_child_using_chance;
 
@@ -127,7 +129,49 @@ namespace tree{
             prior = policy[a] / policy_sum;
             int index = ptr_node_pool->size();
             this->children_index.push_back(index);
-            ptr_node_pool->push_back(CNode(prior, ch, ptr_node_pool));
+            ptr_node_pool->push_back(CNode(a, prior, ch, ptr_node_pool));
+        }
+    }
+
+    void CNode::expand_as_root(int to_play, int hidden_state_index_x, int hidden_state_index_y, float value_prefix, float value, const std::vector<float> &policy_logits, const std::vector<int> &action_mapping){
+        this->to_play = to_play;
+        this->hidden_state_index_x = hidden_state_index_x;
+        this->hidden_state_index_y = hidden_state_index_y;
+        this->value_prefix = value_prefix;
+        this->raw_value = value;
+
+        this->action_num = static_cast<int>(policy_logits.size());
+        if(this->select_child_using_chance){}
+        else{
+        this->gumbel = generate_gumbel(this->gumbel_scale, this->gumbel_rng, this->action_num);
+        }
+        
+        int action_num = this->action_num;
+        float temp_policy;
+        float policy_sum = 0.0;
+        //float* policy = new float[action_num];
+        std::vector<float> policy(action_num);
+        float policy_max = FLOAT_MIN;
+        for(int a = 0; a < action_num; ++a){
+            if(policy_max < policy_logits[a]){
+                policy_max = policy_logits[a];
+            }
+        }
+
+        for(int a = 0; a < action_num; ++a){
+            temp_policy = exp(policy_logits[a] - policy_max);
+            policy_sum += temp_policy;
+            policy[a] = temp_policy;
+        }
+
+        float prior;
+        int ch = 1 - this->select_child_using_chance;        
+        std::vector<CNode>* ptr_node_pool = this->ptr_node_pool;
+        for(int a = 0; a < action_num; ++a){
+            prior = policy[a] / policy_sum;
+            int index = ptr_node_pool->size();
+            this->children_index.push_back(index);
+            ptr_node_pool->push_back(CNode(action_mapping[a], prior, ch, ptr_node_pool));
         }
     }
 
@@ -317,24 +361,24 @@ namespace tree{
             this->node_pools.push_back(std::vector<CNode>());
             this->node_pools[i].reserve(pool_size);
 
-            this->roots.push_back(CNode(0, 0, &this->node_pools[i]));
+            this->roots.push_back(CNode(0, 0, 0, &this->node_pools[i]));
         }
     }
 
     CRoots::~CRoots(){}
 
-    void CRoots::prepare(float root_exploration_fraction, const std::vector<std::vector<float>> &noises, const std::vector<float> &value_prefixs, const std::vector<float> &values, const std::vector<std::vector<float>> &policies){
+    void CRoots::prepare(float root_exploration_fraction, const std::vector<std::vector<float>> &noises, const std::vector<float> &value_prefixs, const std::vector<float> &values, const std::vector<std::vector<float>> &policies, const std::vector<std::vector<int>> &action_mappings){
         for(int i = 0; i < this->root_num; ++i){
-            this->roots[i].expand(0, 0, i, value_prefixs[i], values[i], policies[i]);
+            this->roots[i].expand_as_root(0, 0, i, value_prefixs[i], values[i], policies[i], action_mappings[i]);
             this->roots[i].add_exploration_noise(root_exploration_fraction, noises[i]);
 
             this->roots[i].visit_count += 1;
         }
     }
 
-    void CRoots::prepare_no_noise(const std::vector<float> &value_prefixs, const std::vector<float> &values, const std::vector<std::vector<float>> &policies){
+    void CRoots::prepare_no_noise(const std::vector<float> &value_prefixs, const std::vector<float> &values, const std::vector<std::vector<float>> &policies, const std::vector<std::vector<int>> &action_mappings){
         for(int i = 0; i < this->root_num; ++i){
-            this->roots[i].expand(0, 0, i, value_prefixs[i], values[i], policies[i]);
+            this->roots[i].expand_as_root(0, 0, i, value_prefixs[i], values[i], policies[i], action_mappings[i]);
 
             this->roots[i].visit_count += 1;
         }
@@ -573,7 +617,7 @@ namespace tree{
         return action;
     }
 
-    int cselect_root_child(CNode* root, float discount_factor, int num_simulations, int max_num_considered_actions)
+    std::pair<int, int> cselect_root_child(CNode* root, float discount_factor, int num_simulations, int max_num_considered_actions)
     {
         /*
         Overview:
@@ -586,6 +630,7 @@ namespace tree{
         Outputs:
             - action: the action to select.
         */
+        int max_child_num = 0;
         int max_action = 0;
         if (root->select_child_using_chance) {
         
@@ -596,7 +641,8 @@ namespace tree{
                 CNode* child = root->get_child(a);
                 prior_sum += child->prior;
                 if (roll <= res * prior_sum) {
-                    max_action = a;
+                    max_child_num = a;
+                    max_action = child->action;
                     break;
                 }
 
@@ -630,12 +676,14 @@ namespace tree{
             for(int a = 0; a < root->action_num; ++a){
                 if(score[index] > argmax){
                     argmax = score[index];
-                    max_action = a;
+                    max_child_num = a;
+                    CNode* child = root->get_child(a);
+                    max_action = child->action;
                 }
                 index += 1;
             }
         }
-        return max_action;    
+        return std::pair<int, int>(max_child_num, max_action);    
     }
 
     int cselect_interior_child(CNode* root, float discount_factor)
@@ -748,11 +796,15 @@ namespace tree{
 
             while(node->expanded()){
                 int action;
-                if(is_root){
-                    action = cselect_root_child(node, discount, num_simulations, max_num_considered_actions);
+                int child_idx;
+                if(is_root){                    
+                    std::pair<int, int> result = cselect_root_child(node, discount, num_simulations, max_num_considered_actions);
+                    child_idx = result.first;
+                    action = result.second;
                     }
                 else{
                     action = cselect_interior_child(node, discount);
+                    child_idx = action;
                     }
                     
                 //float mean_q = node->get_mean_q(is_root, parent_q, discount);
@@ -760,9 +812,9 @@ namespace tree{
                 //parent_q = mean_q;
 
                 //int action = cselect_child(node, min_max_stats_lst->stats_lst[i], pb_c_base, pb_c_init, discount, mean_q);
-                node->best_action = action;
+                node->best_action = child_idx;
                 // next
-                node = node->get_child(action);
+                node = node->get_child(child_idx);
                                
                 last_action = action;
                 results.search_paths[i].push_back(node);

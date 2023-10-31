@@ -31,8 +31,8 @@ cdef extern from "cnode.cpp":
 cdef extern from "cnode.h" namespace "tree":
     cdef cppclass CNode:
         CNode() except +
-        CNode(float prior, int select_child_using_chance, vector[CNode]* ptr_node_pool) except +
-        int visit_count, to_play, action_num, hidden_state_index_x, hidden_state_index_y, best_action, is_reset, select_child_using_chance
+        CNode(int action, float prior, int select_child_using_chance, vector[CNode]* ptr_node_pool) except +
+        int visit_count, to_play, action, action_num, hidden_state_index_x, hidden_state_index_y, best_action, is_reset, select_child_using_chance
         float value_prefix, raw_value, prior, value_sum, gumbel_scale, gumbel_rng
         vector[int] children_index
         vector[CNode]* ptr_node_pool
@@ -41,6 +41,7 @@ cdef extern from "cnode.h" namespace "tree":
         void print_out()
 
         void expand(int to_play, int hidden_state_index_x, int hidden_state_index_y, float value_prefixs, float value, vector[float] policy_logits)
+        void expand_as_root(int to_play, int hidden_state_index_x, int hidden_state_index_y, float value_prefixs, float value, vector[float] policy_logits, vector[int] action_mapping)
         void add_exploration_noise(float exploration_fraction, vector[float] noises)
         float get_mean_q(int isRoot, float parent_q, float discount)
 
@@ -61,8 +62,8 @@ cdef extern from "cnode.h" namespace "tree":
         vector[CNode] roots
         vector[vector[CNode]] node_pools
 
-        void prepare(float root_exploration_fraction, const vector[vector[float]] &noises, const vector[float] &value_prefixs, const vector[float] &values, const vector[vector[float]] &policies)
-        void prepare_no_noise(const vector[float] &value_prefixs, const vector[float] &values, const vector[vector[float]] &policies)
+        void prepare(float root_exploration_fraction, const vector[vector[float]] &noises, const vector[float] &value_prefixs, const vector[float] &values, const vector[vector[float]] &policies, const vector[vector[int]] &action_mappings)
+        void prepare_no_noise(const vector[float] &value_prefixs, const vector[float] &values, const vector[vector[float]] &policies, const vector[vector[int]] &action_mappings)
         void clear()
         vector[vector[int]] get_trajectories()
         vector[vector[int]] get_distributions()

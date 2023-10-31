@@ -44,7 +44,7 @@ class Player:
         #self.ai = PlayerAI(self)
         self.similarity_scorer = SimilarityScorer(self)
         self.similarity_score = 0
-        self.similarity_coeff = 0.8
+        self.similarity_coeff = 0.5
         self.max_similarity_reward = 300
         
 
@@ -195,7 +195,7 @@ class Player:
 
     def score(self):
         new_score = self.similarity_scorer.score()
-        reward = (new_score - self.similarity_score) * self.max_similarity_reward
+        reward = (new_score - self.similarity_score) * self.max_similarity_reward * self.similarity_coeff
         if reward:
             self.print("{} reward for board similarity".format(round(reward, 2)))
         self.reward += reward
@@ -462,6 +462,7 @@ class Player:
                 success = self.buy_champion(a_champion)
                 self.print("champions in play: "+str(self.num_units_in_play))
             if success:
+                #self.reward += 1
                 self.shop[x_shop] = None
         elif 10 <= x <= 12:
             x_itembench = (x-10) * 4 + y - 2
@@ -2590,7 +2591,7 @@ class SimilarityScorer:
         self.comps.append(Comp(champs, positions, desired_items, ['shade']))
         
         
-        '''
+        
         champs = ['irelia',
                 'jax',
                 'warwick',
@@ -2909,7 +2910,7 @@ class SimilarityScorer:
                          ]
         self.comps.append(Comp(champs, positions, desired_items, ['mage']))
         
-        '''
+        
         
         
         
