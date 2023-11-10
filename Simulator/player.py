@@ -44,7 +44,7 @@ class Player:
         #self.ai = PlayerAI(self)
         self.similarity_scorer = SimilarityScorer(self)
         self.similarity_score = 0
-        self.similarity_coeff = 0.5
+        self.similarity_coeff = 0.0
         self.max_similarity_reward = 300
         
 
@@ -142,7 +142,7 @@ class Player:
         self.item_reward = 0
         self.won_game_reward = 10
         self.prev_rewards = 0
-        self.damage_reward = 1
+        self.damage_reward = 0
         self.excess_gold_reward = 0
 
         # Everyone shares the pool object.
@@ -484,14 +484,6 @@ class Player:
         elif x == 13 and y == 3:
             self.pass_action() 
         self.actions_taken_this_round += 1
-        '''
-        elif x == 5 and y == 6 and self.round > 1:
-            exp_to_level = 0
-            if self.level < self.max_level:
-                exp_to_level = self.level_costs[self.level] - self.exp
-                num_buys = math.ceil(exp_to_level / self.exp_per_buy)
-                self.buy_exp(num_buys) 
-        '''
             
     def generate_action_mask_single(self):
         mask = np.zeros((14, 4, 38))
@@ -801,7 +793,7 @@ class Player:
     Inputs      - Azir's x and y coordinates
     Outputs     - Two sets of coordinates
     """
-    def find_azir_sandguards(self, azir_x, azir_y):
+    def find_azir_sandguards(self, overlord, azir_x, azir_y):
         coords_candidates = self.find_free_squares(azir_x, azir_y)
         x = 6
         y = 3
@@ -815,9 +807,10 @@ class Player:
                 x = 6
                 y -= 1
 
-        for x in range(2):
-            self.board[coords_candidates[x][0]][coords_candidates[x][1]] = champion.champion('sandguard',
-                                    kayn_form=self.kayn_form, target_dummy=True)
+        for i in range(2):
+            x, y = coords_candidates[i]
+            self.board[x][y] = champion.champion('sandguard', x=x, y=y,
+                                    kayn_form=self.kayn_form, target_dummy=True, overlord=overlord)
         coords = [coords_candidates[0], coords_candidates[1]]
         return coords
 
@@ -841,7 +834,7 @@ class Player:
         for c in directions[parity]:
             nY = c[0] + y
             nX = c[1] + x
-            if (0 <= nY < 4 and 0 <= nX < 7) and not self.board[x][y]:
+            if (0 <= nY < 4 and 0 <= nX < 7) and not self.board[nX][nY]:
                 neighbors.append([nX, nY])
         return neighbors
 
@@ -947,6 +940,11 @@ class Player:
     
     def update_opponent_observations(self):
         self.opponent_public_obs = self.simulator.get_opponent_observations(self)
+    
+    def empty_observation(self):
+        item_encoding_size = 10
+        champ_encoding_size = 22
+        return np.zeros((14, 4, item_encoding_size*3 + champ_encoding_size + 2)).astype('uint8')
     
     def observation(self, private=False):
         
@@ -1177,7 +1175,7 @@ class Player:
             a = self.action_history[-1]
             x, y, z = a // 38 // 4, a // 38 % 4, a % 38
             action_obs[x*4 + y, 0] = 255
-            if x >= 4 and y >= 4:
+            if x >= 13:
                 dest_x, dest_y = x, y
             else:
                 if z < 28:
@@ -1186,7 +1184,7 @@ class Player:
                     x_bench = z - 28
                     dest_x, dest_y = x_bench // 4 + 7, x_bench % 4                   
                 else:
-                    dest_x, dest_y = -1, 2
+                    dest_x, dest_y = 13, 2
             action_obs[dest_x*4 + dest_y, 1] = 255
         action_obs = np.reshape(action_obs, (14, 4, 2))
             
@@ -1508,14 +1506,15 @@ class Player:
                             if self.bench[bench_x].items[0] == 'thieves_gloves':
                                 self.thieves_gloves_loc_update(board_x, board_y, bench_x, -1)
                         if self.bench[bench_x].name == 'azir':
-                            coords = self.bench[bench_x].sandguard_overlord_coordinates
                             self.bench[bench_x].overlord = False
-                            for coord in coords:
+                            for coord in self.bench[bench_x].overlord_coordinates:
                                 self.board[coord[0]][coord[1]] = None
+                            self.bench[bench_x].overlord_coordinates = None
                         added_log = ", and moved {} from board [{}, {}] to bench {}".format(self.bench[bench_x].name, 
                                                                                             board_x, board_y, bench_x)
                     else:
                         added_log = ", but was unable to complete move because the board position was occupied by a non-champion"
+                        return False
                         m_champion = self.board[board_x][board_y]
                 else:
                     self.bench[bench_x] = None
@@ -1527,11 +1526,11 @@ class Player:
                 if len(m_champion.items) > 0:
                     if m_champion.items[0] == 'thieves_gloves':
                         self.thieves_gloves_loc_update(bench_x, -1, board_x, board_y)
-                if m_champion.name == 'azir':
+                if self.board[board_x][board_y].name == 'azir':
                     # There should never be a situation where the board is to fill to fit the sand guards.
-                    sand_coords = self.find_azir_sandguards(board_x, board_y)
+                    sand_coords = self.find_azir_sandguards(m_champion, board_x, board_y)
                     self.board[board_x][board_y].overlord = True
-                    self.board[board_x][board_y].sandguard_overlord_coordinates = sand_coords                
+                    self.board[board_x][board_y].overlord_coordinates = sand_coords                
                 #self.generate_bench_vector()
                 #self.generate_board_vector()
                 self.print("moved {} from bench {} to board [{}, {}]".format(self.board[board_x][board_y].name,
@@ -1561,13 +1560,18 @@ class Player:
                 if self.board[x][y]:
                     self.bench[x_bench] = self.board[x][y]
                     if self.board[x][y].name == 'azir':
-                        coords = self.board[x][y].sandguard_overlord_coordinates
                         self.board[x][y].overlord = False
-                        for coord in coords:
+                        for coord in self.board[x][y].overlord_coordinates:
                             self.board[coord[0]][coord[1]] = None
+                        self.board[x][y].overlord_coordinates = None
                     self.board[x][y] = s_champion
                     self.board[x][y].x = x
                     self.board[x][y].y = y
+                    if self.board[x][y].name == 'azir':
+                        # There should never be a situation where the board is to fill to fit the sand guards.
+                        sand_coords = self.find_azir_sandguards(s_champion, x, y)
+                        self.board[x][y].overlord = True
+                        self.board[x][y].overlord_coordinates = sand_coords 
                     self.bench[x_bench].x = x_bench
                     self.bench[x_bench].y = -1
                     if self.bench[x_bench].items and self.bench[x_bench].items[0] == 'thieves_gloves':
@@ -1587,10 +1591,10 @@ class Player:
                 if self.board[x][y] and not self.board[x][y].target_dummy:
                     # Dealing with edge case of azir
                     if self.board[x][y].name == 'azir':
-                        coords = self.board[x][y].sandguard_overlord_coordinates
                         self.board[x][y].overlord = False
-                        for coord in coords:
+                        for coord in self.board[x][y].overlord_coordinates:
                             self.board[coord[0]][coord[1]] = None
+                        self.board[x][y].overlord_coordinates = None
                     self.bench[x_bench] = self.board[x][y]
                     if self.board[x][y]:
                         self.print("moved {} from board [{}, {}] to bench".format(self.board[x][y].name, x, y))
@@ -1632,18 +1636,16 @@ class Player:
                 self.board[x1][y1].y = y1
                 self.board[x2][y2].x = x2
                 self.board[x2][y2].y = y2
-                if self.board[x1][y1].name == 'sandguard' or self.board[x2][y2].name == 'sandguard':
-                    for x in range(7):
-                        for y in range(4):
-                            if self.board[x][y] and self.board[x][y].name == 'azir':
-                                if [x1, y1] in self.board[x][y].sandguard_overlord_coordinates and \
-                                        [x2, y2] not in self.board[x][y].sandguard_overlord_coordinates:
-                                    self.board[x][y].sandguard_overlord_coordinates.remove([x1, y1])
-                                    self.board[x][y].sandguard_overlord_coordinates.append([x2, y2])
-                                elif [x2, y2] in self.board[x][y].sandguard_overlord_coordinates and \
-                                        [x1, y1] not in self.board[x][y].sandguard_overlord_coordinates:
-                                    self.board[x][y].sandguard_overlord_coordinates.remove([x2, y2])
-                                    self.board[x][y].sandguard_overlord_coordinates.append([x1, y1])
+                if self.board[x1][y1].name == 'sandguard':
+                    old_coords = [x2, y2]
+                    new_coords = [x1, y1]
+                    self.board[x1][y1].overlord.overlord_coordinates.remove(old_coords)
+                    self.board[x1][y1].overlord.overlord_coordinates.append(new_coords)
+                if self.board[x2][y2].name == 'sandguard':
+                    old_coords = [x1, y1]
+                    new_coords = [x2, y2]
+                    self.board[x2][y2].overlord.overlord_coordinates.remove(old_coords)
+                    self.board[x2][y2].overlord.overlord_coordinates.append(new_coords)
                 self.print("moved {} and {} from board [{}, {}] to board [{}, {}]"
                            .format(self.board[x1][y1].name, self.board[x2][y2].name, x1, y1, x2, y2))
                 #self.generate_board_vector()
@@ -1656,12 +1658,10 @@ class Player:
                 self.board[x2][y2].x = x2
                 self.board[x2][y2].y = y2
                 if self.board[x2][y2].name == 'sandguard':
-                    for x in range(7):
-                        for y in range(4):
-                            if self.board[x][y] and self.board[x][y].name == 'azir':
-                                if [x1, y1] in self.board[x][y].sandguard_overlord_coordinates:
-                                    self.board[x][y].sandguard_overlord_coordinates.remove([x1, y1])
-                                    self.board[x][y].sandguard_overlord_coordinates.append([x2, y2])
+                    old_coords = [x1, y1]
+                    new_coords = [x2, y2]
+                    self.board[x2][y2].overlord.overlord_coordinates.remove(old_coords)
+                    self.board[x2][y2].overlord.overlord_coordinates.append(new_coords)
                 self.print("moved {} from board [{}, {}] to board [{}, {}]".format(self.board[x2][y2].name, x1, y1, x2, y2))
                 #self.generate_board_vector()
                 return True
@@ -2146,6 +2146,9 @@ class Player:
             self.chosen = False
         if s_champion.x != -1 and s_champion.y != -1:
             self.board[s_champion.x][s_champion.y] = None
+            if s_champion.name == 'azir':
+                for coord in s_champion.overlord_coordinates:
+                    self.board[coord[0]][coord[1]] = None
             #self.generate_board_vector()
         if field:
             self.num_units_in_play -= 1
@@ -2227,7 +2230,7 @@ class Player:
         #self.ai.reset_phase()
         self.selection = None
         if log:
-            self.print("total similarity score: {}".format(round(self.similarity_score, 4)))
+            #self.print("total similarity score: {}".format(round(self.similarity_score, 4)))
             self.printComp()
             self.printBench()
             self.printItemBench()
@@ -2620,7 +2623,7 @@ class SimilarityScorer:
                          []
                          ]
         self.comps.append(Comp(champs, positions, desired_items, ['divine','adept','hunter']))
-        
+        '''
         champs = ['vayne',
                 'thresh',
                 'lillia',
@@ -2909,7 +2912,7 @@ class SimilarityScorer:
                          ['ludens_echo','ludens_echo','quicksilver']
                          ]
         self.comps.append(Comp(champs, positions, desired_items, ['mage']))
-        
+        '''
         
         
         

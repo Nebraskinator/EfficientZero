@@ -178,7 +178,6 @@ def update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_r
 
                 # obtain the oracle hidden states and chance outcomes from representation function
                 _, _, _, presentation_state, _, chance_token_onehot, chance_token_softmax = model.initial_inference(torch.reshape(obs_target_batch[:, step_i:step_i+config.stacked_observations, :, :, :, :], (obs_batch_ori.shape[0],config.stacked_observations*obs_batch_ori.shape[2], *obs_batch_ori.shape[3:])))
-                
                 #chance_token_onehot, chance_token_softmax = model.encoder_network(torch.reshape(obs_target_batch[:, i:i+config.stacked_observations, :, :, :, :], (obs_batch_ori.shape[0],config.stacked_observations*obs_batch_ori.shape[2], *obs_batch_ori.shape[3:])))
 
                 # predict the state
@@ -433,7 +432,7 @@ def _train(models, target_models, replay_buffers, shared_storage, mcts_storage, 
     # recent_weights is the param of the target model
     recent_weights = [model.get_weights() for model in models]
     
-    training_models = [i for i in range(config.num_models) if i not in config.freeze_models]
+    training_models = [i for i in range(config.num_models)]
     curr_model = training_models[0]
     # while loop
     while any([step_counts[m] < config.training_steps + config.last_steps for m in range(config.num_models)]):
@@ -495,9 +494,7 @@ def _train(models, target_models, replay_buffers, shared_storage, mcts_storage, 
         if step_counts[curr_model] % config.save_ckpt_interval == 0:
             model_path = os.path.join(config.model_dir, 'model_{}_{}.p'.format(step_counts[curr_model], curr_model))
             torch.save(models[curr_model].state_dict(), model_path)
-            
-        if step_counts[curr_model] % config.prev_model_update_interval == 0:
-            shared_storage.update_previous_models.remote(curr_model)
+
             
         if step_counts[curr_model] % config.model_switch_interval == 0:
             idx = training_models.index(curr_model)
@@ -527,7 +524,6 @@ def train(config, summary_writer, model_path=None):
     """
     models = [config.get_uniform_network() for _ in range(config.num_models)]
     target_models = [config.get_uniform_network() for _ in range(config.num_models)]
-    prev_models = [config.get_uniform_network() for _ in range(config.num_prev_models)]
     counter_init = 0
     if model_path:
         for i, path in enumerate(model_path):
@@ -536,20 +532,18 @@ def train(config, summary_writer, model_path=None):
     
             models[i].load_state_dict(weights)
             target_models[i].load_state_dict(weights)
-            for m in prev_models:
-                m.load_state_dict(weights)
             try:
                 counter_init = int(path.split('_')[-2])
             except:
                 continue
 
-    storage = SharedStorage.remote(models, target_models, prev_models, counter_init=counter_init)
+    storage = SharedStorage.remote(models, target_models, [], counter_init=counter_init)
     # prepare the batch and mctc context storage
     batch_storage = Queue(maxsize=config.batch_queue_size, actor_options={"num_cpus": 3})
     mcts_storage = Queue(maxsize=config.batch_queue_size, actor_options={"num_cpus": 3})
     #batch_storage = QueueStorage(int(config.batch_queue_size - 1), config.batch_queue_size)
     #mcts_storage = QueueStorage(int(config.mcts_queue_size - 1), config.mcts_queue_size)
-    replay_buffers = [ReplayBuffer.remote(config=config) if i not in config.freeze_models else None for i in range(config.num_models)]
+    replay_buffers = [ReplayBuffer.remote(config=config) for i in range(config.num_models)]
 
     # other workers
     workers = []
@@ -575,3 +569,26 @@ def train(config, summary_writer, model_path=None):
     print('Training over...')
 
     return models, final_weights
+
+def inverse_scalar_transform(logits, scalar_support):
+    """ Reference from MuZerp: Appendix F => Network Architecture
+    & Appendix A : Proposition A.2 in https://arxiv.org/pdf/1805.11593.pdf (Page-11)
+    """
+    delta = scalar_support.delta
+    value_probs = logits
+    value_support = torch.ones(value_probs.shape)
+    value_support[:, :] = torch.from_numpy(np.array([x for x in scalar_support.range]))
+    value_support = value_support.to(device=value_probs.device)
+    value = (value_support * value_probs).sum(1, keepdim=True) / delta
+
+    epsilon = 0.001
+    sign = torch.ones(value.shape).float().to(value.device)
+    sign[value < 0] = -1.0
+    output = (((torch.sqrt(1 + 4 * epsilon * (torch.abs(value) + 1 + epsilon)) - 1) / (2 * epsilon)) ** 2 - 1)
+    output = sign * output * delta
+
+    nan_part = torch.isnan(output)
+    output[nan_part] = 0.
+    output[torch.abs(output) < epsilon] = 0.
+    #print((value, output, sum(value)))
+    return output

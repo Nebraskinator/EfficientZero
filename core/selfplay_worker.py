@@ -80,25 +80,25 @@ class DataWorker(object):
         self.pool_size = 1
         self.device = self.config.device
         self.gap_step = self.config.num_unroll_steps + self.config.td_steps
-        self.last_model_index = [-1 for _ in range(self.config.num_models)]
+        self.last_model_index = -1
 
-    def put(self, data, curr_model):
+    def put(self, data, curr_model=0):
         # put a game history into the pool
         self.trajectory_pools[curr_model].append(data)
 
-    def len_pool(self, curr_model):
+    def len_pool(self, curr_model=0):
         # current pool size
         return len(self.trajectory_pools[curr_model])
 
-    def free(self, curr_model):
+    def free(self, curr_model=0):
         # save the game histories and clear the pool
-        if curr_model not in self.config.freeze_models and self.len_pool(curr_model) >= self.pool_size: 
+        if self.len_pool(curr_model) >= self.pool_size: 
             #print('saving for model '+str(curr_model))
             self.replay_buffers[curr_model].save_pools.remote(self.trajectory_pools[curr_model], self.gap_step)
             #print('saving memory: '+str(ray.get(self.replay_buffers[curr_model].size.remote())))
         del self.trajectory_pools[curr_model][:]
 
-    def put_last_trajectory(self, player, last_game_histories, last_game_priorities, game_histories, curr_model):
+    def put_last_trajectory(self, player, last_game_histories, last_game_priorities, game_histories, curr_model=0):
         """put the last game history into the pool if the current game is finished
         Parameters
         ----------
@@ -152,556 +152,271 @@ class DataWorker(object):
     def run(self):
         
         # number of parallel mcts
-        env_nums = 1 #self.config.p_mcts_num
-        models = [self.config.get_uniform_network() for _ in range(self.config.num_models)]
-        #prev_models = [self.config.get_uniform_network() for _ in range(self.config.num_prev_models)]
+        env_nums = self.config.p_mcts_num
+        model = self.config.get_uniform_network() 
         if self.config.resume_training:
-            for i, model in enumerate(models):
-                print("Self-Play with Stored Weights")
-                weights = ray.get(self.storage.get_weights.remote(i))
-                weights_copy = copy.deepcopy(weights)
-                model.set_weights(weights_copy)
-                del weights
-                gc.collect()
-            #prev_weights = ray.get(self.storage.get_previous_models_weights.remote())
-            #for model, weights in zip(prev_models, prev_weights):
-            #    model.set_weights(weights)
-            #    model.to(self.device)
-            #    model.eval()
-        [model.to(self.device) for model in models]
-        [model.eval() for model in models]
-        #[model.to(self.device) for model in prev_models]
-        #[model.eval() for model in prev_models]
-        start_training = [False for _ in range(self.config.num_models)]
-        env = self.config.new_game(seed=self.config.seed, log=self.log) 
+            print("Self-Play with Stored Weights")
+           
+        weights = ray.get(self.storage.get_weights.remote(0))
+        weights_copy = copy.deepcopy(weights)
+        model.set_weights(weights_copy)
+        del weights
+        gc.collect()
+        model.to(self.device)
+        model.eval()
+
+        start_training = False
+        envs = [self.config.new_game(seed=self.config.seed, log=(i==0 and self.log)) for i in range(env_nums)] 
         epsilon = 1 / self.config.action_space_size
         def _get_max_entropy(action_space):
             p = 1.0 / action_space
             ep = - action_space * p * np.log2(p)
             return ep
         max_visit_entropy = _get_max_entropy(self.config.action_space_size)
-        # 100k benchmark
-        total_transitions = 0
-        # max transition to collect for this data worker
-        max_transitions = self.config.total_transitions // self.config.num_actors
         mcts = MCTS(self.config)
         learned_agent_actions_start = self.config.learned_agent_actions_start
         value_training_start = learned_agent_actions_start
         #snap_0 = tracemalloc.take_snapshot()
         with torch.no_grad():
-            for _ in range(2):
+            for _ in range(10):
                 gc.collect()
-                #snap_1 = tracemalloc.take_snapshot()
-                #stats = snap_1.compare_to(snap_0, 'lineno')
-                #for s in stats[:10]:
-                #    print(s)
                 print("self play: new game")
-                #if prev_models:
-                #    prev_weights = ray.get(self.storage.get_previous_models_weights.remote())
-                #    for model, weights in zip(prev_models, prev_weights):
-                #       model.set_weights(weights)
-                #        model.to(self.device)
-                #        model.eval()
-                trained_steps = [ray.get(self.storage.get_counter.remote(i)) for i in range(self.config.num_models)]
+                trained_steps = ray.get(self.storage.get_counter.remote(0))
                 # training finished
-                if all([s >= self.config.training_steps + self.config.last_steps for s in trained_steps]):
+                if trained_steps >= self.config.training_steps + self.config.last_steps:
                     time.sleep(30)
                     break
-
-                init_obses, taking_actions, action_masks = env.reset()
-                             
-                num_actors = len(env.live_agents)
-                if all([s >= learned_agent_actions_start for s in trained_steps]):
-                    num_random_actors = self.config.num_random_actors
-                else:
-                    num_random_actors = 0
-                    #num_random_actors = 1
-                #live_actors = env.live_agents[:-self.config.num_random_actors - self.config.num_prev_models]
-                if num_random_actors:
-                    live_actors = env.live_agents[:-num_random_actors]
-                    random_actors = env.live_agents[-num_random_actors:]
-                else:
-                    live_actors = list(env.live_agents)
-                    random_actors = []
-                dead_actors = []
-                #prev_actors = env.live_agents[-self.config.num_random_actors - self.config.num_prev_models : -self.config.num_random_actors]
                 
-                rewards = {p: [] for p in live_actors}
-                actor_model_dict = {i: [] for i in range(self.config.num_models)}
-                for i, actor in enumerate(live_actors):
-                    actor_model_dict[i % self.config.num_models].append(actor)                  
-                dones = {p:False for p in live_actors}
-                #prev_game_histories = {p: GameHistory(env.action_space_size(), env.obs_shape, max_length=self.config.history_length,
-                #                             config=self.config) for p in prev_actors}
-                game_histories = {p: GameHistory(env.action_space_size(), env.obs_shape, max_length=self.config.history_length,
-                                              config=self.config) for p in live_actors}
-                last_game_histories = {p: None for p in live_actors}
-                last_game_priorities = {p: None for p in live_actors}
+                game_histories = []
+                last_game_histories = []
+                last_game_priorities = []
+                stack_obs_windows = []
+                taking_actions = []
+                action_masks = []
+                search_values_lst = []
+                pred_values_lst = []
+                for i, env in enumerate(envs):
+                    init_obses, acting, action_mask = env.reset()
+                    taking_actions.append(acting)
+                    action_masks.append(action_mask)
 
-                # stack observation windows in boundary: s398, s399, s400, current s1 -> for not init trajectory
-                #stack_obs_windows = {p: [] for p in live_actors + prev_actors}
-                stack_obs_windows = {p: [] for p in live_actors}
+                    game_histories.append({p: GameHistory(env.action_space_size(), env.obs_shape, max_length=self.config.history_length,
+                                                  config=self.config) for p in env.live_agents})
+                    last_game_histories.append({p: None for p in env.live_agents})
+                    last_game_priorities.append({p: None for p in env.live_agents})
 
-                for p in live_actors:
-                    stack_obs_windows[p] = [init_obses[p] for _ in range(self.config.stacked_observations)]
-                    game_histories[p].init(stack_obs_windows[p])
-                #for p in prev_actors:
-                #    stack_obs_windows[p] = [init_obses[p] for _ in range(self.config.stacked_observations)]
-                #    prev_game_histories[p].init(stack_obs_windows[p])
+                    sw = {}
 
-                # for priorities in self-play
-                search_values_lst = {p: [] for p in live_actors}
-                pred_values_lst = {p: [] for p in live_actors}
-
-                # some logs
-                eps_ori_reward_lst, eps_reward_lst, eps_steps_lst, visit_entropies_lst = 0, 0, 0, 0
-                step_counter = 0
-
-                self_play_rewards = 0.
-                self_play_ori_rewards = 0.
-                self_play_moves = 0.
-                self_play_episodes = 0.
-
-                self_play_rewards_max = - np.inf
-                self_play_moves_max = 0
-
-                self_play_visit_entropy = []
-                other_dist = {}
-                #prev_pred_values = {}
-                #prev_search_values = {}
-                done_cnt = 0
-                # play games until max moves
-                while done_cnt < num_actors and (step_counter <= self.config.max_moves):
+                    for p in env.live_agents:
+                        sw[p] = [init_obses[p] for _ in range(self.config.stacked_observations)]
+                        game_histories[i][p].init(sw[p])
+                    stack_obs_windows.append(sw)
                     
-                    live_actors = [p for p in env.live_agents if p in live_actors and p not in dead_actors]
-                    #prev_actors = [p for p in env.live_agents if p in prev_actors]
-                    random_actors = [p for p in env.live_agents if p in random_actors and p not in dead_actors]
-                    step_acting_agents = [i for i in live_actors if taking_actions[i]]
-                    #prev_acting_agents = [i for i in prev_actors if taking_actions[i]]
-                    if not all(start_training):
-                        for i, start in enumerate(start_training):
-                            if not start:
-                                start_training[i] = ray.get(self.storage.get_start_signal.remote(i))
+                    # for priorities in self-play
+                    search_values_lst.append({p: [] for p in env.live_agents})
+                    pred_values_lst.append({p: [] for p in env.live_agents})
+
+                num_agents = [len(env.live_agents) for env in envs]
+                step_counter = 0
+                env_done_cnt = [0 for _ in range(env_nums)]
+                dones = [False for _ in range(env_nums)]
+                # play games until max moves
+                while sum(dones) < env_nums and (step_counter <= self.config.max_moves):
+
+                    if not start_training:
+                        start_training = ray.get(self.storage.get_start_signal.remote(0))
                     
                     # get model
-                    trained_steps = [ray.get(self.storage.get_counter.remote(i)) for i in range(self.config.num_models)]
+                    trained_steps = ray.get(self.storage.get_counter.remote(0))
                     # training finished
-                    if all([s >= self.config.training_steps + self.config.last_steps for s in trained_steps]):
+                    if trained_steps >= self.config.training_steps + self.config.last_steps:
                         time.sleep(30)
                         break
-                    '''
-                    if start_training and (total_transitions / max_transitions) > (trained_steps / self.config.training_steps):
-                        # self-play is faster than training speed or finished
-                        print("waiting")
-                        time.sleep(1)
-                        continue
-                    '''
-
-
-                    # update the models in self-play every checkpoint_interval
-                    for i in range(self.config.num_models):
-                        new_model_index = trained_steps[i] // self.config.checkpoint_interval
-                        if new_model_index > self.last_model_index[i]:
-                            self.last_model_index[i] = new_model_index
-                            # update model
-                            weights = ray.get(self.storage.get_weights.remote(i))
-                            weights_copy = copy.deepcopy(weights)
-                            models[i].set_weights(weights_copy)
-                            models[i].to(self.device)
-                            models[i].eval()
-                            del weights
-                            del weights_copy
-                            gc.collect()
-
-                        '''
-                        # log if more than 1 env in parallel because env will reset in this loop.
-                        if env_nums > 1:
-                            if len(self_play_visit_entropy) > 0:
-                                visit_entropies = np.array(self_play_visit_entropy).mean()
-                                visit_entropies /= max_visit_entropy
-                            else:
-                                visit_entropies = 0.
-
-                            if self_play_episodes > 0:
-                                log_self_play_moves = self_play_moves / self_play_episodes
-                                log_self_play_rewards = self_play_rewards / self_play_episodes
-                                log_self_play_ori_rewards = self_play_ori_rewards / self_play_episodes
-                            else:
-                                log_self_play_moves = 0
-                                log_self_play_rewards = 0
-                                log_self_play_ori_rewards = 0
-
-                            self.storage.set_data_worker_logs.remote(log_self_play_moves, self_play_moves_max,
-                                                                            log_self_play_ori_rewards, log_self_play_rewards,
-                                                                            self_play_rewards_max, _temperature.mean(),
-                                                                            visit_entropies, 0,
-                                                                            other_dist)
-                            self_play_rewards_max = - np.inf
-                        '''
-
+                    new_model_index = trained_steps // self.config.checkpoint_interval
+                    if new_model_index > self.last_model_index:
+                        self.last_model_index = new_model_index
+                        # update model
+                        weights = ray.get(self.storage.get_weights.remote(0))
+                        weights_copy = copy.deepcopy(weights)
+                        model.set_weights(weights_copy)
+                        model.to(self.device)
+                        model.eval()
+                        del weights
+                        del weights_copy
+                        gc.collect()
                     step_counter += 1
-                    action, visit_entropy, dists, vals, tokens = {}, {}, {}, {}, {}
-                    # stack obs for model inference
                     
-                    for curr_model, model in enumerate(models):
-                        model_acting_agents = [p for p in actor_model_dict[curr_model] if p in step_acting_agents]
-                        if model_acting_agents:
+                    step_acting_agents = []
+                    for i, env in enumerate(envs):
+                        if not dones[i]:
+                            step_acting_agents.append([p for p in env.live_agents if taking_actions[i][p]])
+                        else:
+                            step_acting_agents.append([])
+                        
+                    tokens, temperatures = {}, []
+                    # stack obs for model inference
+                    obs_to_stack = []
+                    for i, env in enumerate(envs):
+                        if step_acting_agents[i]:
                             # set temperature for distributions
-                            _temperature = np.array(
-                                [self.config.visit_softmax_temperature_fn(num_moves=0, trained_steps=trained_steps[curr_model]) for player in
-                                 model_acting_agents])
-                            stack_obs = np.array([np.concatenate(game_histories[p].step_obs(), 0) for p in model_acting_agents])
-                            #stack_obs = np.moveaxis(stack_obs, -1, -3).astype(float) / 255.
-                            stack_obs = torch.from_numpy(stack_obs).float().to(self.device)
-                            if self.config.amp_type == 'torch_amp':
-                                with autocast():
-                                    network_output = model.initial_inference(stack_obs.float())
-                            else:                        
-                                network_output = model.initial_inference(stack_obs.float())
-                                                            
-                            hidden_state_roots = network_output.hidden_state
-                            #reward_hidden_roots = network_output.reward_hidden
-                            value_prefix_pool = network_output.value_prefix
-                            value_pool = network_output.value.reshape(-1).tolist()
-                            chance_token_pool = network_output.chance_token_onehot.detach().cpu()
-                            #policy_logits_pool = np.array([np.exp(x - np.max(x)) / np.exp(x - np.max(x)).sum() for x in network_output.policy_logits])
-                            #policy_logits_pool = (network_output.policy_logits * np.array([action_masks[p] for p in model_acting_agents])).astype(np.float32).tolist()
-                            #policy_logits_pool = (network_output.policy_logits * np.array([action_masks[p] for p in model_acting_agents])).astype(np.float32).tolist()
-                            tree_nodes = 1
-                            if ((start_training[curr_model] or self.config.resume_training) and all([s >= value_training_start for s in trained_steps])):
-                                tree_nodes = self.config.num_simulations
-                            pool_size = self.config.action_space_size * (tree_nodes + 2)
-                            roots = cytree.Roots(len(model_acting_agents), pool_size)
-                            policy_logits_pool = []
-                            noises = []
-                            action_mappings = []
-                            for i, p in enumerate(model_acting_agents):
-                                tokens[p] = chance_token_pool[i]
-                                #noise = np.zeros(self.config.action_space_size)
-                                #noise[np.flatnonzero(action_masks[p])] = np.random.dirichlet([self.config.root_dirichlet_alpha] * np.sum(action_masks[p]).astype(int))
-                                #noises.append(noise.astype(np.float32).tolist())  
-                                noises.append(np.random.dirichlet([self.config.root_dirichlet_alpha] * np.sum(action_masks[p]).astype(int)).astype(np.float32).tolist())
-                                policy_logits_pool.append(network_output.policy_logits[i, np.flatnonzero(action_masks[p])].astype(np.float32).tolist())
-                                action_mappings.append(np.flatnonzero(action_masks[p]).tolist())
-                            #noises = [(np.random.dirichlet([self.config.root_dirichlet_alpha] * np.sum(action_masks[p]))).astype(np.float32).tolist() for p in step_acting_agents]
-                            #print((noises, policy_logits_pool))
-                            roots.prepare(self.config.root_exploration_fraction, noises, value_prefix_pool, value_pool, policy_logits_pool, action_mappings)
-                            # do MCTS for a policy
-                            mcts.search(roots, model, hidden_state_roots, training_start=((start_training[curr_model] or self.config.resume_training) and all([s >= value_training_start for s in trained_steps])))
-        
-                            #roots_distributions = roots.get_distributions()
-                            roots_values = roots.get_values()
-                            roots_completed_values = roots.get_children_values(self.config.discount)
-                            roots_improved_policy_probs = roots.get_policies(self.config.discount) # new policy constructed with completed Q in gumbel muzero
-                            
-                            
-                            for i, p in enumerate(model_acting_agents):
-                                
-                                if self.config.use_priority and not self.config.use_max_priority and start_training[curr_model]:
-                                    pred_values_lst[p].append(network_output.value[i].item())
-                                    search_values_lst[p].append(roots_values[i])
-                                    #search_values_lst[p].append(0)
-                                #deterministic = False                                
-                                if (start_training[curr_model] or self.config.resume_training) and all([s >= learned_agent_actions_start for s in trained_steps]):
-                                    search_stats, value, temperature = roots_improved_policy_probs[i], float(np.max(roots_completed_values[i])), float(_temperature[i])
-                                    #distributions, value, temperature = np.ones(self.config.action_space_size), 0., 0.3
+                            temperatures.append({p: self.config.visit_softmax_temperature_fn(num_moves=0, 
+                                                                                             trained_steps=trained_steps) for p in step_acting_agents[i]})
+                            obs_to_stack += [np.concatenate(game_histories[i][p].step_obs(), 0) for p in step_acting_agents[i]]
+                        else:
+                            temperatures.append({})
+
+                    if obs_to_stack:
+                        stack_obs = torch.from_numpy(np.array(obs_to_stack)).float().to(self.device)
+                        if self.config.amp_type == 'torch_amp':
+                            with autocast():
+                                network_output = model.initial_inference(stack_obs)
+                        else:                        
+                            network_output = model.initial_inference(stack_obs.float())
+                                                                
+                        hidden_state_roots = network_output.hidden_state
+                        #reward_hidden_roots = network_output.reward_hidden
+                        value_prefix_pool = network_output.value_prefix
+                        value_pool = network_output.value.reshape(-1).tolist()
+                        chance_token_pool = network_output.chance_token_onehot.detach().cpu()
+                        tree_nodes = 1
+                        if ((start_training or self.config.resume_training) and trained_steps >= value_training_start):
+                            tree_nodes = self.config.num_simulations
+                        pool_size = self.config.action_space_size * (tree_nodes + 2)
+                        roots = cytree.Roots(len(obs_to_stack), pool_size)
+                        policy_logits_pool = []
+                        #noises = []
+                        action_mappings = []
+                        idx = 0
+                        for i, env in enumerate(envs):
+                            for p in step_acting_agents[i]:
+                                if i == 0:
+                                    tokens[p] = chance_token_pool[idx] # for logging
+                                a_mask = np.flatnonzero(action_masks[i][p])
+                                #noises.append(np.random.dirichlet([self.config.root_dirichlet_alpha] * np.sum(action_masks[p]).astype(int)).astype(np.float32).tolist())
+                                policy_logits_pool.append(network_output.policy_logits[idx, a_mask].astype(np.float32).tolist())
+                                action_mappings.append(a_mask.tolist())
+                                idx += 1
+                        #roots.prepare(self.config.root_exploration_fraction, noises, value_prefix_pool, value_pool, policy_logits_pool, action_mappings)
+                        roots.prepare_no_noise(value_prefix_pool, value_pool, policy_logits_pool, action_mappings)
+    
+                        # do MCTS for a policy
+                        mcts.search(roots, model, hidden_state_roots, training_start=((start_training or self.config.resume_training) and trained_steps >= value_training_start))
+    
+                        #roots_distributions = roots.get_distributions()
+                        roots_values = roots.get_values()
+                        roots_completed_values = roots.get_children_values(self.config.discount)
+                        roots_improved_policy_probs = roots.get_policies(self.config.discount) # new policy constructed with completed Q in gumbel muzero
+                    idx = 0
+                    for i, env in enumerate(envs):
+                        if not dones[i]:                            
+                            action, dists, vals = {}, {}, {}
+                            for p in step_acting_agents[i]:    
+                                if self.config.use_priority and not self.config.use_max_priority and start_training:
+                                    pred_values_lst[i][p].append(network_output.value[idx].item())
+                                    search_values_lst[i][p].append(roots_values[idx])                              
+                                if (start_training or self.config.resume_training) and trained_steps >= learned_agent_actions_start:
+                                    search_stats, value, temperature = roots_improved_policy_probs[idx], float(np.max(roots_completed_values[idx])), float(temperatures[i][p])
                                     distributions = np.zeros(self.config.action_space_size)
-                                    distributions[np.flatnonzero(action_masks[p])] = search_stats
-                                    #distributions = distributions.astype(float)
+                                    distributions[np.flatnonzero(action_masks[i][p])] = search_stats
                                     action[p] = np.argmax(distributions)
-                                    #action[p], visit_entropy[p] = select_action(distributions, temperature=temperature, deterministic=deterministic)
+                                    if step_counter % 4 == 0:
+                                        action[p], _ = select_action(distributions, temperature=temperature, deterministic=False)
                                 else:
                                     # before starting training, use random policy
-                                    if (start_training[curr_model] or self.config.resume_training) and all([s >= value_training_start for s in trained_steps]):
-                                        value, temperature = float(roots_values[i]), float(_temperature[i])
+                                    if (start_training or self.config.resume_training) and trained_steps >= value_training_start:
+                                        value, temperature = float(roots_values[idx]), float(temperatures[i][p])
                                     else:
                                         value, temperature = 0., 0.3
-                                    distributions = action_masks[p].copy()
-                                    #distributions = np.zeros(self.config.action_space_size).astype(float)
-                                    #distributions *= action_masks[p]
-                                    #a = env.PLAYERS[p].ai.get_action()
-                                    #distributions[a] = 1    
-                                    #distributions_select[a] = 10  
+                                    distributions = action_masks[i][p].copy()
                                     action[p] = np.random.choice(np.flatnonzero(distributions))
-                                    #action[p], visit_entropy[p] = select_action(distributions_select, temperature=temperature, deterministic=deterministic)
-                                #if np.sum(distributions) == 0:
-                                #    distributions[1976] = 1 
                                 dists[p] = distributions
                                 vals[p] = value
-                                #print((np.min(policy_logits_pool[i]), np.max(policy_logits_pool[i])))
-                                #print((np.min(distributions), np.max(distributions)))
-                                #prev_pred_values[p] = network_output.value[i].item()
-                                #prev_search_values[p] = value
+                                idx += 1
+                            
+    
+                            for p in env.live_agents:
+                                if p not in step_acting_agents[i]:
+                                    action[p] = 2090
+                            if i == 0:
+                                self.config.record_tokens(tokens, env)
+                                self.config.record_best_actions(action, dists, env)                                       
+                            obs, ori_reward, taking_action, done, action_mask = env.step(action)
+                            taking_actions[i] = taking_action
+                            action_masks[i] = action_mask
+                            for p in step_acting_agents[i]:
+                                # clip the reward
+                                if self.config.clip_reward:
+                                    clip_reward = np.sign(ori_reward[p])
+                                else:
+                                    clip_reward = ori_reward[p]
+                                game_histories[i][p].store_search_stats(dists[p].copy(), float(vals[p]))
+                                if p not in obs:
+                                    obs[p] = np.zeros(env.obs_shape).astype(int)
+                                game_histories[i][p].append(int(action[p]), obs[p].copy(), float(clip_reward))
+            
+                                # fresh stack windows
+                                del stack_obs_windows[i][p][0]
+                                stack_obs_windows[i][p].append(obs[p].copy())
                                 
-                                #action[p], visit_entropy[p] = select_action(distributions, temperature=temperature, deterministic=deterministic)
-                            del roots
-                    
-                    
-                    '''
-                    for p, model in zip(prev_actors, prev_models):
-                        if taking_actions[p]:
-                            # set temperature for distributions
-                            _temperature = np.array(
-                                [self.config.visit_softmax_temperature_fn(num_moves=0, trained_steps=trained_steps[0])])
-                            stack_obs = np.array([np.concatenate(prev_game_histories[p].step_obs(), 0)])
-                            stack_obs = np.moveaxis(stack_obs, -1, -3).astype(float) / 255.
-                            stack_obs = torch.from_numpy(stack_obs).to(self.device).float()
-                            if self.config.amp_type == 'torch_amp':
-                                with autocast():
-                                    network_output = model.initial_inference(stack_obs.float())
-                            else:                        
-                                network_output = model.initial_inference(stack_obs.float())
-                            hidden_state_roots = network_output.hidden_state
-                            reward_hidden_roots = network_output.reward_hidden
-                            value_prefix_pool = network_output.value_prefix
-                            policy_logits_pool = (network_output.policy_logits * np.array([action_masks[p]])).tolist()
-                            roots = cytree.Roots(1, self.config.action_space_size, self.config.num_simulations)
-                            noises = []
-                            noise = np.zeros(self.config.action_space_size)
-                            noise[np.flatnonzero(action_masks[p])] = np.random.dirichlet([self.config.root_dirichlet_alpha] * np.sum(action_masks[p]).astype(int))
-                            noises.append(noise.astype(np.float32).tolist())                           
-                            #noises = [(np.random.dirichlet([self.config.root_dirichlet_alpha] * np.sum(action_masks[p]))).astype(np.float32).tolist() for p in step_acting_agents]
-                            roots.prepare(self.config.root_exploration_fraction, noises, value_prefix_pool, policy_logits_pool)
-                            # do MCTS for a policy
-                            MCTS(self.config).search(roots, model, hidden_state_roots, reward_hidden_roots, training_start=(start_training or self.config.load_model))
-                    
-                            roots_distributions = roots.get_distributions()
-                            roots_values = roots.get_values()
-                            #print((np.array(roots_distributions).shape, np.array(roots_values).shape, np.array(_temperature).shape))
-                            if start_training or self.config.resume_training:
-                                distributions, value, temperature = roots_distributions[0], roots_values[0], _temperature[0]
-                            else:
-                                # before starting training, use random policy
-                                value, temperature = roots_values[0], _temperature[0]
-                                distributions = np.ones(self.config.action_space_size)
-                            distributions *= action_masks[p]
-                            if np.sum(distributions) == 0:
-                                distributions[1976] = 1 
-                                
-                            action[p], visit_entropy[p] = select_action(distributions, temperature=temperature, deterministic=deterministic)
-                        else:
-                            action[p] = 1976
-                    '''
-                    for p in live_actors:
-                        if p not in step_acting_agents:
-                            action[p] = 2090
-                    
-                    self.config.record_tokens(tokens, env)
-                    self.config.record_best_actions(action, dists, env)                    
-                    
-                    for p in random_actors:
-                        action[p] = np.random.choice(np.flatnonzero(action_masks[p]))
-                        #action[p] = env.PLAYERS[p].ai.get_action()
-                    
-                    '''
-                    for p in live_actors:
-                        action[p] = np.random.choice(np.where(action_masks[p])[0].tolist())
-                        dists[p] = np.ones(env.action_space_size())
-                        vals[p] = 0
-                        visit_entropy[p] = 0
-                    '''
-                        
-                    obs, ori_reward, taking_actions, dones, action_masks = env.step(action)
-
-                    for p in live_actors:
-                        rewards[p].append(ori_reward[p])
-
-                    for p in step_acting_agents:
-                        # clip the reward
-                        if self.config.clip_reward:
-                            clip_reward = np.sign(ori_reward[p])
-                        else:
-                            clip_reward = ori_reward[p]
-                        #if env.log and p == 'player_0':
-                        #    print("search stats -- action: {}, val: {}, reward: {}".format(int(action[p]), float(vals[p]), float(clip_reward)))
-                        # store data
-                        game_histories[p].store_search_stats(dists[p].copy(), float(vals[p]))
-                        if p not in obs:
-                            obs[p] = np.zeros(env.obs_shape).astype(int)
-                        game_histories[p].append(int(action[p]), obs[p].copy(), float(clip_reward))
-
-                        eps_reward_lst += clip_reward
-                        eps_ori_reward_lst += ori_reward[p]
-
-                        #visit_entropies_lst += visit_entropy[p]
-
-                        eps_steps_lst += 1
-                        total_transitions += 1
-
-                        # fresh stack windows
-                        del stack_obs_windows[p][0]
-                        stack_obs_windows[p].append(obs[p].copy())
-                        
-                        # if game history is full;
-                        # we will save a game history if it is the end of the game or the next game history is finished.
-                        if game_histories[p].is_full():
-                            # pad over last block trajectory
-                            if last_game_histories[p] is not None:
-                                self.put_last_trajectory(p, last_game_histories, last_game_priorities, game_histories)
-
-                            # calculate priority
-                            priorities = self.get_priorities(p, pred_values_lst, search_values_lst)
-
-                            # save block trajectory
-                            last_game_histories[p] = game_histories[p]
-                            last_game_priorities[p] = priorities
-
-                            # new block trajectory
-                            game_histories[p] = GameHistory(env.action_space_size(), max_length=self.config.history_length,
-                                                            config=self.config)
-                            game_histories[p].init(stack_obs_windows[p])
-                    '''
-                    for p in prev_acting_agents:
-                        # clip the reward
-                        if dones[p]:
-                            obs[p] = np.zeros(env.obs_shape).astype(int)
-                        prev_game_histories[p].append(action[p], obs[p], clip_reward)
-                        total_transitions += 1
-
-                        # fresh stack windows
-                        del stack_obs_windows[p][0]
-                        stack_obs_windows[p].append(obs[p])
-                    '''    
-                    for player in list(dones.keys()):
-                        # reset env if finished
-                        if dones[player] and player in live_actors and player not in dead_actors:
-                            dead_actors.append(player)
-                            done_cnt += 1
-                            for m_num, player_list in actor_model_dict.items():
-                                if player in player_list:
-                                    curr_model = m_num
-                                    break
-                            # pad over last block trajectory
-                            if last_game_histories[player] is not None:
-                                self.put_last_trajectory(player, last_game_histories, last_game_priorities, game_histories, curr_model)
-                                
-                            # store current block trajectory
-                            priorities = self.get_priorities(player, pred_values_lst, search_values_lst)
-                                                  
-                            game_histories[player].game_over()
-                            #print((game_histories[player].rewards, len(game_histories[player].obs_history), len(game_histories[player].rewards),  len(game_histories[player].actions)))
-
-                            self.put([game_histories[player], priorities], curr_model)
-                            #print('rank ' + str(self.rank) + ', saving match from ' + player + ', for model ' + str(curr_model) + ', dones count ' + str(done_cnt))
-                            self.free(curr_model)
-                            
-                            del game_histories[player]
-                        #if player in prev_actors and dones[player]:
-                        #    del prev_game_histories[player]
-                        #    done_cnt += 1
-                        if player in random_actors and dones[player] and player not in dead_actors:
-                            done_cnt += 1
-                    gc.collect()
-                if self.config.num_models > 1:
-                    print_rewards = ""
-                    for m_num, ps in actor_model_dict.items():
-                        res = []
-                        for p in ps:
-                            res.append(np.sum(rewards[p]))
-                        print_rewards = print_rewards + "model {}: {}, ".format(m_num, np.mean(res))
-                        
-                    print("rank: {}, ".format(self.rank)+print_rewards)
-                if env.log and (start_training[curr_model] or self.config.resume_training) and all([s >= value_training_start for s in trained_steps]) and os.path.isfile("log.txt"):
-                    subdir = "./logs"
-                    prev = [int(i.split("_")[0]) for i in os.listdir(subdir) if i.endswith("txt")]
-                    idx = 0
-                    if prev:
-                        idx = max(prev) + 1
-                    idx = str(idx).zfill(6)
-                    win = 'W'
-                    if env.PLAYERS['player_0'].health < 1:
-                        win = 'L'
-                    m = 0
-                    c = 'None'
-                    for k, v in env.PLAYERS['player_0'].team_tiers.items():
-                        if v:
-                            if v == m:
-                                c = c + k
-                            if v > m:
-                                m = v
-                                c = k
-                    shutil.copy("log.txt", "./logs/{}_{}_{}.txt".format(idx, win, c))
-                    
-                    
-
-                '''
-                            # reset the finished env and new a env
-                            envs[i].close()
-                            init_obs = envs[i].reset()
-                            game_histories[i] = GameHistory(env.env.action_space, max_length=self.config.history_length,
-                                                            config=self.config)
-                            
-                            last_game_histories[player] = None
-                            last_game_priorities[player] = None
-                            stack_obs_windows[i] = [init_obs for _ in range(self.config.stacked_observations)]
-                            game_histories[i].init(stack_obs_windows[i])
-                            
-                            # log
-                            self_play_rewards_max = max(self_play_rewards_max, eps_reward_lst[i])
-                            self_play_moves_max = max(self_play_moves_max, eps_steps_lst[i])
-                            self_play_rewards += eps_reward_lst[i]
-                            self_play_ori_rewards += eps_ori_reward_lst[i]
-                            self_play_visit_entropy.append(visit_entropies_lst[i] / eps_steps_lst[i])
-                            self_play_moves += eps_steps_lst[i]
-                            self_play_episodes += 1
-
-                            pred_values_lst[i] = []
-                            search_values_lst[i] = []
-                            # end_tags[i] = False
-                            eps_steps_lst[i] = 0
-                            eps_reward_lst[i] = 0
-                            eps_ori_reward_lst[i] = 0
-                            visit_entropies_lst[i] = 0
-                            
-                '''
-
-                '''
-                for p in step_live_agents:
-
-                    if False: #dones[i]:
-                        # pad over last block trajectory
-                        if last_game_histories[p] is not None:
-                            self.put_last_trajectory(p, last_game_histories, last_game_priorities, game_histories)
-
-                        # store current block trajectory
-                        priorities = self.get_priorities(p, pred_values_lst, search_values_lst)
-                        game_histories[p].game_over()
-
-                        self.put((game_histories[p], priorities))
-                        self.free()
-
-                        
-                        self_play_rewards_max = max(self_play_rewards_max, eps_reward_lst[i])
-                        self_play_moves_max = max(self_play_moves_max, eps_steps_lst[i])
-                        self_play_rewards += eps_reward_lst[i]
-                        self_play_ori_rewards += eps_ori_reward_lst[i]
-                        self_play_visit_entropy.append(visit_entropies_lst[i] / eps_steps_lst[i])
-                        self_play_moves += eps_steps_lst[i]
-                        self_play_episodes += 1
-                        
-                    else:
-                        # if the final game history is not finished, we will not save this data.
-                        total_transitions -= len(game_histories[i])
-                '''
-                '''
-                # logs
-                visit_entropies = np.array(self_play_visit_entropy).mean()
-                visit_entropies /= max_visit_entropy
-
-                if self_play_episodes > 0:
-                    log_self_play_moves = self_play_moves / self_play_episodes
-                    log_self_play_rewards = self_play_rewards / self_play_episodes
-                    log_self_play_ori_rewards = self_play_ori_rewards / self_play_episodes
-                else:
-                    log_self_play_moves = 0
-                    log_self_play_rewards = 0
-                    log_self_play_ori_rewards = 0
-
-                other_dist = {}
-                # send logs
-                self.storage.set_data_worker_logs.remote(log_self_play_moves, self_play_moves_max,
-                                                                log_self_play_ori_rewards, log_self_play_rewards,
-                                                                self_play_rewards_max, _temperature.mean(),
-                                                                visit_entropies, 0,
-                                                                other_dist)
-                '''
+                                # if game history is full;
+                                # we will save a game history if it is the end of the game or the next game history is finished.
+                                if game_histories[i][p].is_full():
+                                    # pad over last block trajectory
+                                    if last_game_histories[i][p] is not None:
+                                        self.put_last_trajectory(p, last_game_histories[i], last_game_priorities[i], game_histories[i])
+        
+                                    # calculate priority
+                                    priorities = self.get_priorities(p, pred_values_lst[i], search_values_lst[i])
+        
+                                    # save block trajectory
+                                    last_game_histories[i][p] = game_histories[i][p]
+                                    last_game_priorities[i][p] = priorities
+        
+                                    # new block trajectory
+                                    game_histories[i][p] = GameHistory(env.action_space_size(), max_length=self.config.history_length,
+                                                                    config=self.config)
+                                    game_histories[i][p].init(stack_obs_windows[i][p])
+                            for p in done.keys():
+                                # reset env if finished
+                                if done[p]:
+                                    env_done_cnt[i] += 1
+    
+                                    # pad over last block trajectory
+                                    if last_game_histories[i][p] is not None:
+                                        self.put_last_trajectory(p, last_game_histories[i], last_game_priorities[i], game_histories[i])
+                                        
+                                    # store current block trajectory
+                                    priorities = self.get_priorities(p, pred_values_lst[i], search_values_lst[i])
+                                                          
+                                    game_histories[i][p].game_over()
+        
+                                    self.put([game_histories[i][p], priorities])
+                                    self.free()
+                                    
+                                    del game_histories[i][p]
+                            gc.collect()
+    
+                            if env_done_cnt[i] >= num_agents[i]:
+                                dones[i] = True
+                                if i==0 and self.log and (start_training or self.config.resume_training) and trained_steps >= value_training_start and os.path.isfile("log.txt"):
+                                    subdir = "./logs"
+                                    prev = [int(x.split("_")[0]) for x in os.listdir(subdir) if x.endswith("txt")]
+                                    save_idx = 0
+                                    if prev:
+                                        save_idx = max(prev) + 1
+                                    save_idx = str(save_idx).zfill(6)
+                                    win = 'W'
+                                    if env.PLAYERS['player_0'].health < 1:
+                                        win = 'L'
+                                    m = 0
+                                    c = 'None'
+                                    for k, v in env.PLAYERS['player_0'].team_tiers.items():
+                                        if v:
+                                            if v == m:
+                                                c = c + k
+                                            if v > m:
+                                                m = v
+                                                c = k
+                                    shutil.copy("log.txt", "./logs/{}_{}_{}.txt".format(save_idx, win, c))
+                    del roots
+                print(ray.get(self.replay_buffers[0].size.remote()))

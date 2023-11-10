@@ -25,9 +25,9 @@ class TFTConfig(BaseConfig):
             discount=0.997,
             dirichlet_alpha=0.3,
             value_delta_max=0.01,
-            num_simulations=32,
-            max_moves_considered=16,
-            batch_size=256,
+            num_simulations=160,
+            max_moves_considered=32,
+            batch_size=128,
             td_steps=5,
             num_actors=1,
             # network initialization/ & normalization
@@ -41,12 +41,12 @@ class TFTConfig(BaseConfig):
             lr_warm_up=0.001,
             lr_init=0.001,
             lr_decay_rate=0.1,
-            lr_decay_steps=100000,
+            lr_decay_steps=1000000,
             auto_td_steps_ratio=0.3,
             # replay window
-            start_transitions=2e4,
+            start_transitions=5e4,
             total_transitions=100 * 1000,
-            transition_num=5e5,
+            transition_num=1.5e5,
             # frame skip & stack observation
             gray_scale=False,
             frame_skip=1,
@@ -56,7 +56,7 @@ class TFTConfig(BaseConfig):
             value_loss_coeff=1,
             policy_loss_coeff=1,
             consistency_coeff=1,
-            commitment_loss_coeff=1,
+            commitment_loss_coeff=2,
             chance_loss_coeff=1,
             # reward sum
             lstm_hidden_size=128,
@@ -70,14 +70,11 @@ class TFTConfig(BaseConfig):
         self.max_moves //= self.frame_skip
         self.test_max_moves //= self.frame_skip
         self.num_models = 1
-        self.freeze_models = [1, 2]
-        self.model_switch_interval = 5000000
+        self.model_switch_interval = 5000000000
         self.num_random_actors = 0
-        self.num_prev_models = 0
-        self.prev_model_update_interval = 15000
         
-        self.num_chance_tokens = 32
-        self.learned_agent_actions_start = 2000
+        self.num_chance_tokens = 4
+        self.learned_agent_actions_start = 1
 
         self.start_transitions = self.start_transitions // self.frame_skip
         self.start_transitions = max(1, self.start_transitions)

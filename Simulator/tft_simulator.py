@@ -13,7 +13,7 @@ from pettingzoo.utils.env import AECEnv
 from pettingzoo.utils import wrappers, agent_selector
 from pettingzoo.utils.conversions import parallel_wrapper_fn
 
-
+'''
 def env():
     """
     The env function often wraps the environment in wrappers by default.
@@ -26,7 +26,7 @@ def env():
     # Strongly recommended
     local_env = wrappers.OrderEnforcingWrapper(local_env)
     return local_env
-
+'''
 
 #parallel_env = parallel_wrapper_fn(env)
 
@@ -421,7 +421,7 @@ class TFT_Simulator(AECEnv):
                 if self.PLAYERS[p].is_alive:
                     ret[p] = self.PLAYERS[p].observation(False)
                 else:
-                    ret[p] = self.PLAYERS[player].empty_observation()
+                    ret[p] = player.empty_observation()
         return ret            
 
     def make_observation(self, player):
@@ -436,16 +436,20 @@ class TFT_Simulator(AECEnv):
         return obs
 
     def step(self, action):
+        live_agents_temp = [i for i in self.live_agents]
         for player in list(action.keys()):
             if self.PLAYERS[player].is_alive and self.PLAYERS[player].taking_actions:
                 self.PLAYERS[player].take_action_single(action[player])
         self.actions_taken_this_round += 1
-        dones = {p: False for p in self.live_agents}
+        #for player in self.PLAYERS.values():
+        #    player.score()
+        dones = {p: False for p in live_agents_temp}
         if self.actions_taken_this_round >= self.max_actions_per_round:
             self.actions_taken_this_round = 0
             self.game_round.play_game_round()
-            self.public_observations = {player: self.PLAYERS[player].observation() for player in self.live_agents}
-            for p in self.live_agents:
+            self.public_observations = {player: self.PLAYERS[player].observation() for player in live_agents_temp}
+            for p in live_agents_temp:
+                self.PLAYERS[p].update_opponent_observations()
                 if self.PLAYERS[p].health <= 0:
                     self.PLAYERS[p].is_alive = False
                     self.live_agents.remove(p)
@@ -453,23 +457,22 @@ class TFT_Simulator(AECEnv):
                     self.PLAYERS[p].taking_actions = False
                     dones[p] = True
                 else:
-                    self.PLAYERS[p].taking_actions = True
-                    self.PLAYERS[p].update_opponent_observations()
+                    self.PLAYERS[p].taking_actions = True                    
             if any(dones.values()):
                 self.game_round.update_players({p: agent for p, agent in self.PLAYERS.items() if p in self.live_agents})
             self.game_round.start_round()
-        for player in self.PLAYERS.values():
-            player.score()
-        obs_dict = {player: self.make_observation(player) for player in self.live_agents}
+
+        obs_dict = {player: self.make_observation(player) for player in live_agents_temp}
         if len(self.live_agents) <= 1:
             for p in self.live_agents:
                 dones[p] = True
+                self.PLAYERS[p].taking_actions = False
                 self.PLAYERS[p].won_game()
-        rewards_dict = {player: self.PLAYERS[player].reward for player in list(self.PLAYERS.keys())}
+        rewards_dict = {player: self.PLAYERS[player].reward for player in live_agents_temp}
         for p in list(self.PLAYERS.keys()):
             self.PLAYERS[p].reward = 0
-        taking_actions_dict = {player: self.PLAYERS[player].taking_actions for player in list(self.PLAYERS.keys())}
-        action_masks = {p: self.PLAYERS[p].generate_action_mask_single() for p in list(self.PLAYERS.keys())}
+        taking_actions_dict = {player: self.PLAYERS[player].taking_actions for player in live_agents_temp}
+        action_masks = {p: self.PLAYERS[p].generate_action_mask_single() for p in live_agents_temp}
         return obs_dict, rewards_dict, taking_actions_dict, dones, action_masks
             
             
