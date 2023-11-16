@@ -56,19 +56,18 @@ def blue_buff(champion):
         change_stat(champion, 'mana', 20)
 
 
-bramble_vest_list = []
 def bramble_vest(champion):
-    millis = champion_functions.MILLIS()
+    millis = champion_functions.MILLIS(champion.cv)
 
     if('bramble_vest' in champion.items):
         item_amount = len(list(filter(lambda x: x == 'bramble_vest', champion.items)))
 
-        last_activation = list(filter(lambda x: x[0] == champion, bramble_vest_list))
+        last_activation = list(filter(lambda x: x[0] == champion, champion.cv.bramble_vest_list))
         last_activation = sorted(last_activation, key=lambda x: x[1], reverse=True)
         if(len(last_activation) == 0 or (millis - last_activation[0][1]) > item_stats.cooldown['bramble_vest']):
         
-            bramble_vest_list.append([champion, millis])
-            neighboring_enemies = field.enemies_in_distance(champion, champion.y, champion.x, 1)
+            champion.cv.bramble_vest_list.append([champion, millis])
+            neighboring_enemies = field.enemies_in_distance(champion, champion.y, champion.x, 1, champion.cv)
             for i in range(0, item_amount):
                 for n in neighboring_enemies:
                     champion.spell(n, item_stats.damage['bramble_vest'][champion.stars], 0, True)
@@ -78,7 +77,7 @@ def chalice_of_power(champion):
     units = champion.own_team() + champion.enemy_team()
     holders = list(filter(lambda x: 'chalice_of_power' in x.items, units))
 
-    coords = field.coordinates
+    coords = champion.cv.coordinates
     for holder in holders:
         item_amount = len(list(filter(lambda x: x == 'chalice_of_power', holder.items)))
 
@@ -94,32 +93,30 @@ def chalice_of_power(champion):
 
 #adding stack whenever dealing damage to a target
 #at the same time checking if any of the old stacked enemies are dead. if so, add x AD
-deathblade_list = []
 def deathblade(champion, target):
     if('deathblade' in champion.items):
         item_amount = len(list(filter(lambda x: x == 'deathblade', champion.items)))
 
-        old_list = list(filter(lambda x: x[0] == champion, deathblade_list))
+        old_list = list(filter(lambda x: x[0] == champion, champion.cv.deathblade_list))
         for t in old_list:
             if(t[1].health <= 0):
                 change_stat(champion, 'AD', champion.AD + item_stats.AD['deathblade'] * item_amount)
-                deathblade_list.remove([champion, t[1]])
+                champion.cv.deathblade_list.remove([champion, t[1]])
 
-        if([champion, target] not in deathblade_list):
-            deathblade_list.append([champion, target])
+        if([champion, target] not in champion.cv.deathblade_list):
+            champion.cv.deathblade_list.append([champion, target])
 
 
-frozen_heart_list = []
 def frozen_heart(champion):
     units = champion.own_team() + champion.enemy_team()
 
     #if a unit has died and they had some enemies affected, clear those debuffs
     for i in range(0, 5):
-        for u in frozen_heart_list:
+        for u in champion.cv.frozen_heart_list:
             if(u[0] not in units):
                 for c in u[1]:
                     change_stat(c, 'AS', c.AS / item_stats.item_as_decrease['frozen_heart'])
-                frozen_heart_list.remove(u)
+                champion.cv.frozen_heart_list.remove(u)
 
     has_item = list(filter(lambda x: 'frozen_heart' in x.items, units))
 
@@ -129,7 +126,7 @@ def frozen_heart(champion):
         for i in c.items:
             if(i == 'frozen_heart'): items += 1
 
-        c_in_list = list(filter(lambda x: x[0] == c, frozen_heart_list))
+        c_in_list = list(filter(lambda x: x[0] == c, champion.cv.frozen_heart_list))
         units_in_c_list = []
         new_c_list = []
 
@@ -140,7 +137,7 @@ def frozen_heart(champion):
 
         #if current neighbors are not on the list, debuff
         #if they are on the list, keep them on it
-        current_neighbors = field.enemies_in_distance(c, c.y, c.x, items)
+        current_neighbors = field.enemies_in_distance(c, c.y, c.x, items, champion.cv)
         for n in current_neighbors:
             if(n not in units_in_c_list):
                 change_stat(n, 'AS', n.AS * item_stats.item_as_decrease['frozen_heart'])
@@ -156,19 +153,16 @@ def frozen_heart(champion):
 
         #if there are no entries of this unit's list, append one
         if(len(c_in_list) == 0):
-            frozen_heart_list.append([c, new_c_list])
+            champion.cv.frozen_heart_list.append([c, new_c_list])
         #otherwise just replace the list of affected enemy units
         else:
-            for u in frozen_heart_list:
+            for u in champion.cv.frozen_heart_list:
                 if(u[0] == c):
                     u[1] = new_c_list
                     break
 
 
-gargoyle_stoneplate_list = []
-
-
-def gargoyle_stoneplate(target):
+def gargoyle_stoneplate(champion, target):
     if 'gargoyle_stoneplate' in target.items:
         item_amount = len(list(filter(lambda x: x == 'gargoyle_stoneplate', target.items)))
         
@@ -178,15 +172,15 @@ def gargoyle_stoneplate(target):
         old_targeters = 0
 
         # old targeters when looking at the list. if the list regarding this unit is empty, the value is zero
-        holder_list = list(filter(lambda x: x[0] == target, gargoyle_stoneplate_list))
+        holder_list = list(filter(lambda x: x[0] == target, champion.cv.gargoyle_stoneplate_list))
         if len(holder_list) > 0:
 
             # store the old value and replace it with the new one
             old_targeters = holder_list[0][1]
-            for g in gargoyle_stoneplate_list:
+            for g in champion.cv.gargoyle_stoneplate_list:
                 if g[0] == target: g[1] = new_targeters
         else:
-            gargoyle_stoneplate_list.append([target, new_targeters])
+            champion.cv.gargoyle_stoneplate_list.append([target, new_targeters])
 
         # calculate the difference and adjust the MR and armor -values
         difference = new_targeters - old_targeters
@@ -230,9 +224,6 @@ def hand_of_justice(champion):
                 change_stat(h, 'lifesteal_spells', h.lifesteal_spells + item_stats.lifesteal_spells['hand_of_justice'])
 
 
-hextech_gunblade_list = []
-
-
 def hextech_gunblade(champion, damage):
     if 'hextech_gunblade' in champion.items:
         item_amount = len(list(filter(lambda x: x == 'hextech_gunblade', champion.items)))
@@ -256,7 +247,7 @@ def hextech_gunblade(champion, damage):
 
             # if there is an old shield, get the identifier from 'hextech_gunblade_list' which uses the following syntax:
             # [champion, identifier]
-            old_shield_identifier = list(filter(lambda x: x[0] == champion, hextech_gunblade_list))
+            old_shield_identifier = list(filter(lambda x: x[0] == champion, champion.cv.hextech_gunblade_list))
 
             # now get that shield (if it still exists) from the champion's shield list using the identifier
             # those unique identifiers were a clever idea
@@ -281,7 +272,7 @@ def hextech_gunblade(champion, damage):
             # PROBABLY COULD'VE JUST MODIFIED THE OLD SHIELD THO
             # when I rly think about it
             
-            shield_identifier = round(champion_functions.MILLIS() * heal)
+            shield_identifier = round(champion_functions.MILLIS(champion.cv) * heal)
             # setting these shields to expire a long long time after the battle is over.
             # this way we can just remove the old shield here.
             champion.add_que('shield', 0, None, None, {'amount': heal, 'identifier': shield_identifier,
@@ -290,11 +281,11 @@ def hextech_gunblade(champion, damage):
 
             # if there's no entries in the list, add one. otherwise just replace the list's identifier
             if len(old_shield_identifier) == 0:
-                hextech_gunblade_list.append([champion, shield_identifier])
+                champion.cv.hextech_gunblade_list.append([champion, shield_identifier])
             else:
-                for i, h in enumerate(hextech_gunblade_list):
+                for i, h in enumerate(champion.cv.hextech_gunblade_list):
                     if h[0] == champion:
-                        hextech_gunblade_list[i][1] = shield_identifier
+                        champion.cv.hextech_gunblade_list[i][1] = shield_identifier
 
 
 def infinity_edge(champion):
@@ -313,8 +304,6 @@ def infinity_edge(champion):
 
 
 # how many ionic spark holding enemies are in the range
-ionic_spark_list = []
-
 
 def ionic_spark(champion):
     units = champion.own_team() + champion.enemy_team()
@@ -322,7 +311,7 @@ def ionic_spark(champion):
         old_counter = u.ionic_sparked
 
         counter = 0
-        enemies_in_distance = field.enemies_in_distance(u, u.y, u.x, item_stats.item_range['ionic_spark'])
+        enemies_in_distance = field.enemies_in_distance(u, u.y, u.x, item_stats.item_range['ionic_spark'], champion.cv)
         for e in enemies_in_distance:
             if e and 'ionic_spark' in e.items:
                 counter += 1
@@ -334,13 +323,12 @@ def ionic_spark(champion):
             change_stat(u, 'MR', u.MR / item_stats.item_mr_decrease['ionic_spark'])
 
 
-last_whisper_list = [] #[target, ms]
 def last_whisper(champion, target):
-    millis = champion_functions.MILLIS()
+    millis = champion_functions.MILLIS(champion.cv)
 
     if('last_whisper' in champion.items):
 
-        last_activation = list(filter(lambda x: x[0] == target, last_whisper_list))
+        last_activation = list(filter(lambda x: x[0] == target, champion.cv.last_whisper_list))
         last_activation = sorted(last_activation, key=lambda x: x[1], reverse=True)
 
         length = item_stats.item_change_length['last_whisper']
@@ -349,13 +337,13 @@ def last_whisper(champion, target):
 
             #using old logic which was needed last time at vi's ult
             target.add_que('change_stat', length, None, 'armor', None, {'vi': item_stats.item_armor_decrease['last_whisper']})
-            last_whisper_list.append([target, millis])
+            champion.cv.last_whisper_list.append([target, millis])
 
 def locket_of_the_iron_solari(champion):
     units = champion.own_team() + champion.enemy_team()
     holders = list(filter(lambda x: 'locket_of_the_iron_solari' in x.items, units))
 
-    coords = field.coordinates
+    coords = champion.cv.coordinates
     for holder in holders:
         item_amount = len(list(filter(lambda x: x == 'locket_of_the_iron_solari', holder.items)))
 
@@ -371,7 +359,7 @@ def locket_of_the_iron_solari(champion):
             if(h and h.team == holder.team and h.champion):
                 shield_size = item_stats.shield['locket_of_the_iron_solari'][holder.stars] * item_amount
 
-                shield_identifier = round(champion_functions.MILLIS() * shield_size + holder.armor)
+                shield_identifier = round(champion_functions.MILLIS(champion.cv) * shield_size + holder.armor)
                 shield_length = item_stats.item_change_length['locket_of_the_iron_solari']
                 h.add_que('shield', -1, None, None, {'amount': shield_size, 'identifier': shield_identifier, 'applier': holder, 'original_amount': shield_size}, {'increase': True, 'expires': shield_length})
 
@@ -385,7 +373,7 @@ def ludens_echo(champion, target):
         champion.spell_has_used_ludens = True
 
         # find the enemies in range and sort out the proper amount. always include the target
-        enemies_in_range = field.enemies_in_distance(champion, target.y, target.x, item_stats.item_range['ludens_echo'])
+        enemies_in_range = field.enemies_in_distance(champion, target.y, target.x, item_stats.item_range['ludens_echo'], champion.cv)
         if target in enemies_in_range:
             enemies_in_range.remove(target)
 
@@ -483,7 +471,7 @@ def shroud_of_stillness(champion):
                     affected_hexes.append([i, j])
                     
 
-        coords = field.coordinates
+        coords = champion.cv.coordinates
         for h in affected_hexes:
             c = coords[h[0]][h[1]]
             if(c and c.team != champion.team and c.champion):
@@ -507,24 +495,23 @@ def spear_of_shojin(champion):
 
 
 
-statikk_shiv_list = []
 def statikk_shiv(champion, target):
     if('statikk_shiv' in champion.items):
         item_amount = len(list(filter(lambda x: x == 'statikk_shiv', champion.items)))
 
         inx = -1
-        for i, s in enumerate(statikk_shiv_list):
+        for i, s in enumerate(champion.cv.statikk_shiv_list):
                 if(s[0] == champion): inx = i
 
 
 
         if(inx == -1):
-            statikk_shiv_list.append([champion, 1])
+            champion.cv.statikk_shiv_list.append([champion, 1])
         else:
-            statikk_shiv_list[inx][1] += 1
-            current_count = statikk_shiv_list[inx][1]
+            champion.cv.statikk_shiv_list[inx][1] += 1
+            current_count = champion.cv.statikk_shiv_list[inx][1]
             if(current_count == item_stats.item_activate_every_x_attacks['statikk_shiv']):
-                statikk_shiv_list[inx][1] = 0
+                champion.cv.statikk_shiv_list[inx][1] = 0
 
                 #find all enemy units except current target and randomize the list
                 enemy_team = champion.enemy_team() 
@@ -554,7 +541,7 @@ def sunfire_cape(champion, data = {'loop': False}):
         champion.add_que('execute_function', 1, [sunfire_cape, {'loop': True}])
     else:
 
-        enemies = field.enemies_in_distance(champion, champion.y, champion.x, item_stats.item_range['sunfire_cape'])
+        enemies = field.enemies_in_distance(champion, champion.y, champion.x, item_stats.item_range['sunfire_cape'], champion.cv)
         random.shuffle(enemies)
         if(len(enemies) > 0):
             target = enemies[0]
@@ -568,7 +555,6 @@ def sunfire_cape(champion, data = {'loop': False}):
 def thieves_gloves(champion):
     ...
 
-titans_resolve_list = [] #[champion, stacks, maxxed]
 def titans_resolve(champion, target, crit):
 
     # attacker in spells and physical attacks
@@ -584,11 +570,11 @@ def titans_resolve(champion, target, crit):
 
 
 def titans_resolve_helper(unit):
-    current_stacks = list(filter(lambda x: x[0] == unit, titans_resolve_list))
+    current_stacks = list(filter(lambda x: x[0] == unit, unit.cv.titans_resolve_list))
     maxxed = False
     if len(current_stacks) == 0:
         current_stacks = 0
-        titans_resolve_list.append([unit, 0, False])
+        unit.cv.titans_resolve_list.append([unit, 0, False])
     else: 
         maxxed = current_stacks[0][2]
         current_stacks = current_stacks[0][1]
@@ -597,16 +583,16 @@ def titans_resolve_helper(unit):
         increase = item_stats.item_deal_increased_damage_increase['titans_resolve']
         change_stat(unit, 'deal_increased_damage', unit.deal_increased_damage + increase)
 
-        for i, t in enumerate(titans_resolve_list):
-            if t[0] == unit: titans_resolve_list[i][1] += 1
+        for i, t in enumerate(unit.cv.titans_resolve_list):
+            if t[0] == unit: unit.cv.titans_resolve_list[i][1] += 1
         current_stacks += 1
     
     if current_stacks == 25 and not maxxed:
         change_stat(unit, 'MR', unit.MR + item_stats.armor['titans_resolve'])
         change_stat(unit, 'armor', unit.armor + item_stats.MR['titans_resolve'])
-        for i, t in enumerate(titans_resolve_list):
+        for i, t in enumerate(unit.cv.titans_resolve_list):
             if t[0] == unit:
-                titans_resolve_list[i][2] = True
+                unit.cv.titans_resolve_list[i][2] = True
 
     
 # see item notes
@@ -629,7 +615,7 @@ def zekes_herald(champion):
     units = champion.own_team() + champion.enemy_team()
     holders = list(filter(lambda x: 'zekes_herald' in x.items, units))
 
-    coords = field.coordinates
+    coords = champion.cv.coordinates
     for holder in holders:
         item_amount = len(list(filter(lambda x: x == 'zekes_herald', holder.items)))
 
@@ -650,7 +636,7 @@ def zephyr(champion):
     units = champion.own_team() + champion.enemy_team()
     holders = list(filter(lambda x: 'zephyr' in x.items, units))
 
-    coords = field.coordinates
+    coords = champion.cv.coordinates
     for holder in holders:
         item_amount = len(list(filter(lambda x: x == 'zephyr', holder.items)))
 
@@ -677,7 +663,7 @@ def zzrot_portal(champion):
     for holder in holders:
 
         # taunting
-        neighbor_enemies = field.enemies_in_distance(champion, champion.y, champion.x, 1)
+        neighbor_enemies = field.enemies_in_distance(champion, champion.y, champion.x, 1, champion.cv)
         for n in neighbor_enemies:
             old_target = n.target
             n.add_que('change_target', -1, None, None, champion)
@@ -690,7 +676,7 @@ def zzrot_portal_helper(champion):
     item_amount = len(list(filter(lambda x: x == 'zzrot_portal', champion.items)))
     spawn_hexes = field.hexes_in_distance(champion.y, champion.x, 3)
 
-    coords = field.coordinates
+    coords = champion.cv.coordinates
 
     for i, s in enumerate(spawn_hexes):
         d = field.distance({'y': s[0], 'x': s[1]}, {'y': champion.y, 'x': champion.x}, False)
@@ -704,52 +690,52 @@ def zzrot_portal_helper(champion):
 
     for s in spawn_hexes:
         champion.print(' zzrot_portal spawns a construct at {}'.format([s[0], s[1]]))
-        champion.spawn('construct', champion.stars, s[0], s[1])
+        champion.spawn('construct', champion.stars, s[0], s[1], cv=champion.cv)
 
 
 def duelists_zeal(champion):
     if champion.team:
-        origin_class.amounts['duelist'][champion.team] += \
+        champion.cv.amounts['duelist'][champion.team] += \
             len(list(filter(lambda x: x == 'duelists_zeal', champion.items)))
 
 
 def elderwood_heirloom(champion):
     if champion.team:
-        origin_class.amounts['elderwood'][champion.team] += \
+        champion.cv.amounts['elderwood'][champion.team] += \
             len(list(filter(lambda x: x == 'elderwood_heirloom', champion.items)))
 
 
 def mages_cap(champion):
     if champion.team:
-        origin_class.amounts['mage'][champion.team] += \
+        champion.cv.amounts['mage'][champion.team] += \
             len(list(filter(lambda x: x == 'mages_cap', champion.items)))
 
 
 def mantle_of_dusk(champion):
     if champion.team:
-        origin_class.amounts['dusk'][champion.team] += \
+        champion.cv.amounts['dusk'][champion.team] += \
             len(list(filter(lambda x: x == 'mantle_of_dusk', champion.items)))
 
 
 def sword_of_the_divine(champion):
     if champion.team:
-        origin_class.amounts['divine'][champion.team] +=\
+        champion.cv.amounts['divine'][champion.team] +=\
             len(list(filter(lambda x: x == 'sword_of_the_divine', champion.items)))
 
 
 def vanguards_cuirass(champion):
     if champion.team:
-        origin_class.amounts['vanguard'][champion.team] += \
+        champion.cv.amounts['vanguard'][champion.team] += \
             len(list(filter(lambda x: x == 'vanguards_cuirass', champion.items)))
 
 
 def warlords_banner(champion):
     if champion.team:
-        origin_class.amounts['warlord'][champion.team] += \
+        champion.cv.amounts['warlord'][champion.team] += \
             len(list(filter(lambda x: x == 'warlords_banner', champion.items)))
 
 
 def youmuus_ghostblade(champion):
     if champion.team:
-        origin_class.amounts['assassin'][champion.team] += \
+        champion.cv.amounts['assassin'][champion.team] += \
             len(list(filter(lambda x: x == 'youmuus_ghostblade', champion.items)))

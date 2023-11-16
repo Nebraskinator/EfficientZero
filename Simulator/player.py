@@ -152,9 +152,9 @@ class Player:
         # Boolean for fought this round or not
         self.combat = False
         # List of team compositions
-        self.team_composition = origin_class.game_compositions[self.player_num]
+        self.team_composition = origin_class.team_traits.copy()
         # List of tiers of each trait.
-        self.team_tiers = origin_class.game_comp_tiers[self.player_num]
+        self.team_tiers = origin_class.team_traits.copy()
 
         # An array to record match history
         self.match_history = []
@@ -233,9 +233,9 @@ class Player:
         bench_loc = self.bench_vacancy()
         self.bench[bench_loc] = a_champion
         a_champion.bench_loc = bench_loc
-        if a_champion.chosen:
-            self.print("Adding chosen champion {} of type {}".format(a_champion.name, a_champion.chosen))
-            self.chosen = a_champion.chosen
+        #if a_champion.chosen:
+        #    self.print("Adding chosen champion {} of type {}".format(a_champion.name, a_champion.chosen))
+        #    self.chosen = a_champion.chosen
         self.print("Adding champion {} with items {} to bench".format(a_champion.name, a_champion.items))
         if self.bench[bench_loc].items and self.bench[bench_loc].items[0] == 'thieves_gloves':
             self.thieves_gloves_loc.append([bench_loc, -1])
@@ -707,6 +707,8 @@ class Player:
             self.print("Spending gold on champion {}".format(a_champion.name) + " with cost = " +
                        str(cost_star_values[a_champion.cost - 1][a_champion.stars - 1])
                        + ", remaining gold " + str(self.gold) + " and chosen = " + str(a_champion.chosen))
+            if a_champion.chosen:
+                self.chosen = a_champion.chosen
             #self.generate_player_vector()
         # else:
         #     if self.player_num == 0:
@@ -1535,15 +1537,17 @@ class Player:
                 #self.generate_board_vector()
                 self.print("moved {} from bench {} to board [{}, {}]".format(self.board[board_x][board_y].name,
                                                                              bench_x, board_x, board_y) + added_log)
-                self.update_team_tiers()
+                
             else:
                 self.reward += self.mistake_reward
+            self.update_team_tiers()
             return True
         self.reward += self.mistake_reward
         self.print("Outside board range, bench: {}, board: {}, {}".format(bench_x, board_x, board_y))
 
         if DEBUG:
             print(f"Outside board range, bench: {self.bench[bench_x]}, board: {self.board[board_x][board_y]}, bench_x: {bench_x}, board_x: {board_x}, board_y: {board_y}")
+        self.update_team_tiers()
         return False
 
     """
@@ -1586,6 +1590,7 @@ class Player:
                     self.reward += self.mistake_reward
                 if DEBUG:
                     print("Unit not on board slot")
+                self.update_team_tiers()
                 return False
             else:
                 if self.board[x][y] and not self.board[x][y].target_dummy:
@@ -1612,6 +1617,7 @@ class Player:
         self.reward += self.mistake_reward
         if DEBUG:
             print(f"Move board to bench outside board limits: {x}, {y}")
+        self.update_team_tiers()
         return False
 
     """
@@ -1701,7 +1707,7 @@ class Player:
             if self.item_bench[xBench] == 'champion_duplicator':
                 if COST[champ.name] != 0:
                     if not self.bench_full():
-                        self.add_to_bench(champion.champion(champ.name, chosen=champ.chosen, kayn_form=champ.kayn_form))
+                        self.add_to_bench(champion.champion(champ.name, chosen=False, kayn_form=champ.kayn_form))
                         self.item_bench[xBench] = None
                         #self.generate_item_vector()
                         return True
@@ -1709,12 +1715,14 @@ class Player:
             if self.item_bench[xBench] == 'magnetic_remover':
                 if len(champ.items) > 0:
                     if not self.item_bench_full(len(champ.items)):
-                        while len(champ.items) > 0:
-                            self.item_bench[self.item_bench_vacancy()] = champ.items[0]
-                            if champ.items[0] in trait_items.values():
-                                champ.origin.pop(-1)
+                        for item in champ.items:
+                            self.item_bench[self.item_bench_vacancy()] = item
+                            if item in trait_items.values():
+                                for ori, it in trait_items.items():
+                                    if item == it:
+                                        champ.origin.remote(ori)
                                 self.update_team_tiers()
-                            champ.items.pop(0)
+                            champ.items.remove(item)
                         self.item_bench[xBench] = None
                         #self.generate_item_vector()
                         #self.decide_vector_generation(board)
@@ -2033,7 +2041,10 @@ class Player:
                     # Each item in possession
                     for item in a_champion.items:
                         if item in trait_items.values():
-                            a_champion.origin.pop(-1)
+                            for ori, it in trait_items.items():
+                                if it == item:
+                                    a_champion.origin.remove(ori)
+                                    break
                             self.update_team_tiers()
                         self.item_bench[self.item_bench_vacancy()] = item
                         self.print("returning " + item + " to the item bench")
@@ -2131,8 +2142,8 @@ class Player:
     # TODO: Varify that the bench / board vectors are being updated somewhere in the same operation as this method call.
     def sell_champion(self, s_champion, golden=False, field=True) -> bool:
         # Need to add the behavior that on carousel when bench is full, add to board.
-        if not (self.remove_triple_catalog(s_champion, golden=golden) and self.return_item(s_champion) and not
-                s_champion.target_dummy):
+        if not (self.remove_triple_catalog(s_champion, golden=golden) and not
+                s_champion.target_dummy) and self.return_item(s_champion):
             self.reward += self.mistake_reward
             self.print("Could not sell champion " + s_champion.name)
             if DEBUG:
@@ -2142,8 +2153,6 @@ class Player:
             self.gold += cost_star_values[s_champion.cost - 1][s_champion.stars - 1]
             self.pool_obj.update_pool(s_champion, 1)
             #self.generate_player_vector()
-        if s_champion.chosen:
-            self.chosen = False
         if s_champion.x != -1 and s_champion.y != -1:
             self.board[s_champion.x][s_champion.y] = None
             if s_champion.name == 'azir':
@@ -2152,8 +2161,11 @@ class Player:
             #self.generate_board_vector()
         if field:
             self.num_units_in_play -= 1
+        if s_champion.chosen:
+            self.chosen = False
         self.print("selling champion " + s_champion.name + " with stars = " + str(s_champion.stars) + " from position ["
                    + str(s_champion.x) + ", " + str(s_champion.y) + "]")
+        self.update_team_tiers()
         return True
 
     """
@@ -2231,6 +2243,7 @@ class Player:
         self.selection = None
         if log:
             #self.print("total similarity score: {}".format(round(self.similarity_score, 4)))
+            #self.update_team_tiers()
             self.printComp()
             self.printBench()
             self.printItemBench()
@@ -2344,8 +2357,8 @@ class Player:
     """
     def update_team_tiers(self):
         self.team_composition = origin_class.team_origin_class(self)
-        if self.chosen in self.team_composition.keys():
-            self.team_composition[self.chosen] += 1
+        #if self.chosen in self.team_composition.keys():
+        #    self.team_composition[self.chosen] += 1
         for trait in self.team_composition:
             counter = 0
             while self.team_composition[trait] >= tiers[trait][counter]:
@@ -2353,7 +2366,7 @@ class Player:
                 if counter >= len(tiers[trait]):
                     break
             self.team_tiers[trait] = counter
-        origin_class.game_comp_tiers[self.player_num] = self.team_tiers
+        #origin_class.game_comp_tiers[self.player_num] = self.team_tiers
 
     """
     Description - Method for keeping track of which units are golden
@@ -2369,6 +2382,7 @@ class Player:
                 entry["num"] += 1
                 if entry["num"] == 3:
                     self.golden(a_champion)
+                    self.update_team_tiers()
                     return True, True
                 return False, True
         if a_champion.stars > 3:

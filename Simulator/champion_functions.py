@@ -7,56 +7,42 @@ from math import ceil
 from Simulator import ability, active, field, item_stats, items
 from Simulator.stats import *
 
-MILLISECONDS = 0
+def MILLIS(cv):
+    return cv.MILLISECONDS
 
 
-def MILLIS():
-    return MILLISECONDS
+def MILLISECONDS_INCREASE(cv):
+    cv.MILLISECONDS += 10
 
 
-def MILLISECONDS_INCREASE():
-    global MILLISECONDS
-    MILLISECONDS += 10
 
-
-damage_dealt = []
-damage_dealt_teams = {'blue': 0, 'red': 0}
-
-
-def get_damage_dealt():
-    return damage_dealt
-
-
-galio_spawned = {'blue': False, 'red': False}
-
+def get_damage_dealt(champion):
+    return champion.cv.damage_dealt
 
 def add_damage_dealt(champion, damage, target):
-    global damage_dealt
-    global damage_dealt_teams
-    global galio_spawned
     added = False
 
     if champion.team == 'blue':
-        damage_dealt_teams['blue'] += damage
+        champion.cv.damage_dealt_teams['blue'] += damage
     if champion.team == 'red':
-        damage_dealt_teams['red'] += damage
+        champion.cv.damage_dealt_teams['red'] += damage
 
     # cultists galio spawning
     teams = [['blue', 'red'], ['red', 'blue']]
     for t in teams:
-        if (not galio_spawned[t[0]] and origin_class.amounts['cultist'][t[0]]
+        if (not champion.cv.galio_spawned[t[0]] and champion.cv.amounts['cultist'][t[0]]
                 >= origin_class_stats.tiers['cultist'][0]):
-            if damage_dealt_teams[t[1]] > origin_class.total_health_teams[t[0]] * config.GALIO_TEAM_HEALTH_PERCENTAGE:
-                galio_spawned[t[0]] = True
-                origin_class.cultist(target, t[0])
+            if champion.cv.damage_dealt_teams[t[1]] > champion.cv.total_health_teams[t[0]] * config.GALIO_TEAM_HEALTH_PERCENTAGE:
+                champion.cv.galio_spawned[t[0]] = True
+                origin_class.cultist(target, t[0], champion.cv)
 
-    for d in damage_dealt:
+    for d in champion.cv.damage_dealt:
         if d['champion'] == champion:
             d['damage'] += damage
             added = True
             break
     if not added:
-        damage_dealt.append({'champion': champion, 'damage': damage})
+        champion.cv.damage_dealt.append({'champion': champion, 'damage': damage})
 
 
 def reset_stat(champion, stat):
@@ -69,7 +55,7 @@ def reset_stat(champion, stat):
 def attack(champion, target, bonus_dmg=0, item_attack=False, trait_attack='', set_ad=None):
     attackable_enemies = list(filter(lambda x: (x.champion and x.health > 0), champion.enemy_team()))
     if not target and len(attackable_enemies) > 0:
-        field.find_target(champion)
+        field.find_target(champion, champion.cv)
         target = champion.target
         # allow forced attacks (xinzhao spin etc.)
     if (champion.idle or bonus_dmg or item_attack or trait_attack) and target:
@@ -83,7 +69,7 @@ def attack(champion, target, bonus_dmg=0, item_attack=False, trait_attack='', se
         crit_random = random.randint(1, 100) / 100
 
         items.deathblade(champion, target)  # deathblade (needs to take effect before AD is used)
-        items.gargoyle_stoneplate(target)  # gargoyle_stoneplate (needs to take effect before armor or MR is used)
+        items.gargoyle_stoneplate(champion, target)  # gargoyle_stoneplate (needs to take effect before armor or MR is used)
 
         if (not item_attack and not trait_attack) or trait_attack == 'hunter':
             items.runaans_hurricane(champion, target)  # runaans_hurricane
@@ -201,7 +187,7 @@ def attack(champion, target, bonus_dmg=0, item_attack=False, trait_attack='', se
                             target.shield_amount()), crit_string, dodge_string, item_string, trait_string))
                     # dealing the damage and killing the enemy if necessary
                     target.health -= damage
-                    if (MILLIS() > target.castMS + target.manalock
+                    if (MILLIS(champion.cv) > target.castMS + target.manalock
                             and not target.ability_active and target.maxmana > 0):
                         if not target.name == 'riven' or ability.riven_helper(target, {}):
                             old_mana = target.mana
@@ -219,21 +205,21 @@ def attack(champion, target, bonus_dmg=0, item_attack=False, trait_attack='', se
                             origin_class_stats.threshold['the_boss']):
                         if target.health <= 0:
                             target.health = 1
-                        origin_class.the_boss(target)
+                        origin_class.the_boss(target, champion.cv)
 
-                    origin_class.duelist_helper(champion)  # duelist -trait
+                    origin_class.duelist_helper(champion, champion.cv)  # duelist -trait
 
                     if target.health <= 0:
                         target.die()
                     elif not item_attack:
-                        origin_class.divine(champion, target, True)  # divine -trait
+                        origin_class.divine(champion, target, True, champion.cv)  # divine -trait
 
                     # sharpshooter -trait
                     if not item_attack and not trait_attack:
-                        origin_class.sharpshooter(champion, target, None, bonus_dmg, False)
+                        origin_class.sharpshooter(champion, target, None, bonus_dmg, False, champion.cv)
 
                 # apply manalock. only give mana of the attack if it has been 1000ms since the last ability cast
-                if (champion.champion and MILLIS() > champion.castMS + champion.manalock
+                if (champion.champion and MILLIS(champion.cv) > champion.castMS + champion.manalock
                         and not champion.ability_active and champion.maxmana > 0
                         and not item_attack and not trait_attack):
                     if not champion.name == 'riven' or ability.riven_helper(champion, {}):
@@ -245,7 +231,7 @@ def attack(champion, target, bonus_dmg=0, item_attack=False, trait_attack='', se
 
                 # aphelios turret triggering aphelios's shojins
                 if champion.name == 'aphelios_turret' and \
-                        MILLIS() > champion.overlord.castMS + champion.overlord.manalock and not trait_attack:
+                        MILLIS(champion.cv) > champion.overlord.castMS + champion.overlord.manalock and not trait_attack:
                     old_mana = champion.overlord.mana
                     champion.overlord.mana += (items.spear_of_shojin(champion) * champion.overlord.mana_generation)
                     # spear of shojin -item
@@ -267,12 +253,12 @@ def attack(champion, target, bonus_dmg=0, item_attack=False, trait_attack='', se
                                               {'underlord': champion})
 
         else:
-            origin_class.cultist_helper(champion, damage, target)
+            origin_class.cultist_helper(champion, damage, target, champion.cv)
         if (not item_attack and not trait_attack) or champion.name == 'ashe':
             champion.idle = False
             champion.clear_que_idle()
             champion.add_que('clear_idle', 1 / champion.AS * 1000)
-            origin_class.shade_helper(champion)
+            origin_class.shade_helper(champion, champion.cv)
 
 
 def die(champion):
@@ -284,7 +270,7 @@ def die(champion):
     if not champion.will_revive[0][0] and not champion.will_revive[1][0]:
 
         # free the coordinates
-        field.coordinates[champion.y][champion.x] = None
+        champion.cv.coordinates[champion.y][champion.x] = None
         # Ran into a bug with this being removed. I'll look into where own_team is defined later
         if champion in champion.own_team():
             champion.own_team().remove(champion)
@@ -303,7 +289,7 @@ def die(champion):
             for c in enemy_team:
                 if c.target == u:
                     c.target = None
-            field.coordinates[u.y][u.x] = None
+            champion.cv.coordinates[u.y][u.x] = None
             if u.name == 'aphelios_turret' or (u.name == 'sandguard' and u.health >= 0):
                 if u in champion.own_team():
                     champion.own_team().remove(u)

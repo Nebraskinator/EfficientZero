@@ -26,7 +26,7 @@ from math import ceil, floor
 
 def default_ability_calls(champion):
     if not champion.target:
-        field.find_target(champion)
+        field.find_target(champion, champion.cv)
     if not (champion.name == 'galio' and champion.stars == 1):
         champion.print(' ability triggered ')
 
@@ -38,13 +38,13 @@ def default_ability_calls(champion):
 
     # spirit -trait
     if origin_class.is_trait(champion, 'spirit'):
-        origin_class.spirit(champion)
+        origin_class.spirit(champion, champion.cv)
 
     champion.spell_has_used_ludens = False  # ludens_echo helper
 
     champion.mana_cost_increased = False
     champion.mana = 0
-    champion.castMS = champion_functions.MILLIS()
+    champion.castMS = champion_functions.MILLIS(champion.cv)
 
 
 # treat the ult as an attack --> apply cooldown
@@ -65,7 +65,7 @@ def aatrox(champion):
 
     champion.add_que('change_stat', stats.ABILITY_LENGTH[champion.name], None, 'ability_active', False)
 
-    enemies = field.find_enemies(champion)
+    enemies = field.find_enemies(champion, champion.cv)
 
     enemy_amount = len(enemies)
     enemies_pulled = stats.ABILITY_TARGETS[champion.name][champion.stars]
@@ -79,7 +79,7 @@ def aatrox(champion):
         target_neighbors = field.find_neighbors(champion.target.y, champion.target.x)
 
         for n in target_neighbors:
-            c = field.coordinates[n[0]][n[1]]
+            c = champion.cv.coordinates[n[0]][n[1]]
             if c is None:
                 free_hexes.append(n)
 
@@ -102,7 +102,7 @@ def aatrox_ability(champion, data):
     neighbors = field.find_neighbors(data['y'], data['x'])
     neighbors.append([data['y'], data['x']])
 
-    c = field.coordinates
+    c = champion.cv.coordinates
     for n in neighbors:
         if c[n[0]][n[1]] and c[n[0]][n[1]].team != champion.team and c[n[0]][n[1]].champion:
             champion.spell(c[n[0]][n[1]], stats.ABILITY_DMG[champion.name][champion.stars])
@@ -126,7 +126,7 @@ def ahri_ability(champion, data):
     if champion.stunned or champion.health <= 0:
         radius = stats.ABILITY_RADIUS[champion.name] - 1
 
-    enemies = field.enemies_in_distance(champion, data['y'], data['x'], radius)
+    enemies = field.enemies_in_distance(champion, data['y'], data['x'], radius, champion.cv)
     for e in enemies:
         champion.spell(e, stats.ABILITY_DMG[champion.name][champion.stars])
 
@@ -206,14 +206,14 @@ def annie(champion):
     neighbors = field.find_neighbors(cone_center[0], cone_center[1])
     neighbors.append(cone_center)
     for n in neighbors:
-        if n != leave_out and n[0] >= 0 and n[1] >= 0 and n[0] < 8 and n[1] < 7 and field.coordinates[n[0]][n[1]] \
-                and field.coordinates[n[0]][n[1]].team != champion.team and field.coordinates[n[0]][n[1]].champion:
-            champion.spell(field.coordinates[n[0]][n[1]], stats.ABILITY_DMG[champion.name][champion.stars])
+        if n != leave_out and n[0] >= 0 and n[1] >= 0 and n[0] < 8 and n[1] < 7 and champion.cv.coordinates[n[0]][n[1]] \
+                and champion.cv.coordinates[n[0]][n[1]].team != champion.team and champion.cv.coordinates[n[0]][n[1]].champion:
+            champion.spell(champion.cv.coordinates[n[0]][n[1]], stats.ABILITY_DMG[champion.name][champion.stars])
 
     apply_attack_cooldown(champion)
     shield_amount = stats.SHIELD_AMOUNT[champion.name][champion.stars] * champion.SP
     champion.add_que('shield', 0, None, None,
-                     {'amount': shield_amount, 'identifier': champion_functions.MILLIS() * shield_amount,
+                     {'amount': shield_amount, 'identifier': champion_functions.MILLIS(champion.cv) * shield_amount,
                       'applier': champion, 'original_amount': shield_amount},
                      {'increase': True, 'expires': stats.SHIELD_LENGTH[champion.name]})
 
@@ -225,10 +225,10 @@ def aphelios(champion):
     while c is None:
         y = random.randint(0, 7)
         x = random.randint(0, 6)
-        if y == 0 or y == 7 and x == 0 or x == 6 and field.coordinates[y][x] is None:
+        if y == 0 or y == 7 and x == 0 or x == 6 and champion.cv.coordinates[y][x] is None:
             c = [y, x]
 
-    turret = champion.spawn('aphelios_turret', champion.stars, c[0], c[1], champion.team, False)
+    turret = champion.spawn('aphelios_turret', champion.stars, c[0], c[1], champion.team, False, cv=champion.cv)
     champion.underlords.append(turret)
     champion.add_que('kill', stats.ABILITY_LENGTH[champion.name][champion.stars] * champion.SP, None, None, turret)
 
@@ -255,7 +255,7 @@ def ashe_helper(champion, data):
     items.runaans_hurricane(champion, target)  # runaans_hurricane
 
     if target.health < 0:
-        field.find_target(champion)
+        field.find_target(champion, champion.cv)
         target = champion.target
     for i in range(0, stats.ABILITY_SLICES[champion.name]):
         if target:
@@ -282,7 +282,7 @@ def azir(champion):
             # if some line is longer, skip the rest of the iterations regarding this line
             if len(affected_hexes[j]) > i:
                 # current coordinate
-                c = field.coordinates[affected_hexes[j][i][0]][affected_hexes[j][i][1]]
+                c = champion.cv.coordinates[affected_hexes[j][i][0]][affected_hexes[j][i][1]]
                 if c and c.team != champion.team and c.champion and c not in already_targeted:
 
                     # if this coordinate is within the pushing range, find a new coordinate for the minion
@@ -291,7 +291,7 @@ def azir(champion):
                         push_counter = 1
                         while not push_coordinates:
                             if i + push_counter < len(affected_hexes[j]):
-                                if field.coordinates[affected_hexes[j][i + push_counter][0]][
+                                if champion.cv.coordinates[affected_hexes[j][i + push_counter][0]][
                                                      affected_hexes[j][i + push_counter][1]] is None:
                                     push_coordinates = [affected_hexes[j][i + push_counter][0],
                                                         affected_hexes[j][i + push_counter][1]]
@@ -435,13 +435,13 @@ def cassiopeia(champion):
     # deal the damage and stun the targets etc
     already_targeted = []
     for c in cone:
-        coords = field.coordinates
+        coords = champion.cv.coordinates
         if 7 >= c[0] >= 0 <= c[1] <= 6:
             h = coords[c[0]][c[1]]
             if h and h.team != champion.team and h.champion and h not in already_targeted:
                 # h.add_que('change_stat', -1, None, 'stunned', True)
                 # adding this when creating 'quicksilver' but seems like we had a reason to stun them here locally
-                if not ('quicksilver' in h.items and champion_functions.MILLIS() <=
+                if not ('quicksilver' in h.items and champion_functions.MILLIS(champion.cv) <=
                         item_stats.item_change_length['quicksilver']):
                     h.print(' {} {} --> {}'.format('stunned', h.stunned, True))
                     h.stunned = True
@@ -470,7 +470,7 @@ def diana(champion):
     default_ability_calls(champion)
     champion.add_que('change_stat', -1, None, 'ability_active', True)
 
-    shield_identifier = champion_functions.MILLIS() * stats.SHIELD_AMOUNT[champion.name][champion.stars] * champion.SP
+    shield_identifier = champion_functions.MILLIS(champion.cv) * stats.SHIELD_AMOUNT[champion.name][champion.stars] * champion.SP
     shield_amount = stats.SHIELD_AMOUNT[champion.name][champion.stars] * champion.SP
     champion.add_que('shield', 0, None, None, {'amount': shield_amount, 'identifier': shield_identifier,
                                                'applier': champion, 'original_amount': shield_amount},
@@ -495,7 +495,7 @@ def diana_ability(champion, data):
     turn_speed_per_hex = 1500 / 6
 
     # hit the enemy if there's someone in the orb's coordinates
-    c = field.coordinates[data['y']][data['x']]
+    c = champion.cv.coordinates[data['y']][data['x']]
     if c and c.team != champion.team and c.champion:
 
         if data in data['orbs']:
@@ -511,7 +511,7 @@ def diana_ability(champion, data):
                         ' {} {} --> {}'.format('shield', ceil(shield_before), ceil(champion.shield_amount())))
                     break
 
-            shield_identifier = champion_functions.MILLIS() * stats.SHIELD_AMOUNT[champion.name][
+            shield_identifier = champion_functions.MILLIS(champion.cv) * stats.SHIELD_AMOUNT[champion.name][
                 champion.stars] * champion.SP
             shield_amount = stats.SHIELD_AMOUNT[champion.name][champion.stars] * champion.SP
 
@@ -567,7 +567,7 @@ def evelynn(champion):
     target_x = champion.target.x
 
     # find a bunch of close by targets and deal the dmg
-    enemies_around_target = field.enemies_in_distance(champion, champion.target.y, champion.target.x, 1)
+    enemies_around_target = field.enemies_in_distance(champion, champion.target.y, champion.target.x, 1, champion.cv)
     if champion.target in enemies_around_target:
         enemies_around_target.remove(champion.target)
     enemies_around_target.insert(0, champion.target)
@@ -637,7 +637,7 @@ def ezreal_ability(champion, data):
             # if some line is longer, skip the rest of the iterations regarding this line
             if len(affected_hexes[j]) > i:
                 # current coordinate
-                c = field.coordinates[affected_hexes[j][i][0]][affected_hexes[j][i][1]]
+                c = champion.cv.coordinates[affected_hexes[j][i][0]][affected_hexes[j][i][1]]
                 if c and c.team != champion.team and c.champion and c not in already_targeted:
                     champion.spell(c, stats.ABILITY_DMG[champion.name][champion.stars])
 
@@ -674,7 +674,7 @@ def fiora(champion):
 
 def fiora_ability(champion, data):
     if not champion.target:
-        field.find_target(champion)
+        field.find_target(champion, champion.cv)
 
     if champion.target:
         champion.target.add_que('change_stat', -1, None, 'stunned', True)
@@ -710,7 +710,7 @@ def garen_ability(champion, data):
     team = champion.team
     enemies_around = []
     for n in neighbors:
-        c = field.coordinates[n[0]][n[1]]
+        c = champion.cv.coordinates[n[0]][n[1]]
         if c and c.team != team and c.champion:
             enemies_around.append(c)
 
@@ -733,7 +733,7 @@ def hecarim(champion):
 def hecarim_ability(champion, data):
     neighbors = field.find_neighbors(champion.y, champion.x)
 
-    coords = field.coordinates
+    coords = champion.cv.coordinates
     for n in neighbors:
         c = coords[n[0]][n[1]]
         if c and c.team != champion.team and c.champion:
@@ -763,7 +763,7 @@ def irelia(champion):
 
             # if some line is longer, skip the rest of the iterations regarding this line
             if len(affected_hexes[j]) > i:
-                c = field.coordinates[affected_hexes[j][i][0]][affected_hexes[j][i][1]]
+                c = champion.cv.coordinates[affected_hexes[j][i][0]][affected_hexes[j][i][1]]
                 if c and c.team != champion.team and c.champion and c not in already_targeted:
                     champion.spell(c, stats.ABILITY_DMG[champion.name][champion.stars])
 
@@ -799,7 +799,7 @@ def janna(champion):
                     a.print(' {} {} --> {}'.format('shield', ceil(shield_before), ceil(a.shield_amount())))
                     break
 
-        identifier = champion_functions.MILLIS() * stats.SHIELD_AMOUNT[champion.name][champion.stars]
+        identifier = champion_functions.MILLIS(champion.cv) * stats.SHIELD_AMOUNT[champion.name][champion.stars]
         shield_amount = stats.SHIELD_AMOUNT[champion.name][champion.stars] * champion.SP
         a.add_que('shield', -1, None, None, {'amount': shield_amount, 'identifier': identifier, 'applier': champion,
                                              'original_amount': shield_amount},
@@ -829,7 +829,7 @@ def jarvaniv(champion):
 
     # find the hex where jarvan moves to (closest free hex to the target)
     hexes = []
-    coords = field.coordinates
+    coords = champion.cv.coordinates
     for i in range(0, 8):
         for j in range(0, 7):
             distance = field.distance({'y': i, 'x': j}, {'y': target.y, 'x': target.x}, False)
@@ -883,7 +883,7 @@ def jax(champion):
 
 
 def jax_ability(champion, data):
-    enemy_neighbors = field.enemies_in_distance(champion, champion.y, champion.x, 1)
+    enemy_neighbors = field.enemies_in_distance(champion, champion.y, champion.x, 1, champion.cv)
 
     for e in enemy_neighbors:
         e.add_que('change_stat', -1, None, 'stunned', True)
@@ -895,7 +895,7 @@ def jax_ability(champion, data):
 def jinx(champion):
     default_ability_calls(champion)
 
-    targets = field.enemies_in_distance(champion, champion.target.y, champion.target.x, 1)
+    targets = field.enemies_in_distance(champion, champion.target.y, champion.target.x, 1, champion.cv)
     for t in targets:
         champion.spell(t, stats.ABILITY_DMG[champion.name][champion.stars])
 
@@ -922,7 +922,7 @@ def katarina(champion):
 
 
 def katarina_ability(champion, data):
-    enemies_in_range = field.enemies_in_distance(champion, champion.y, champion.x, 3)
+    enemies_in_range = field.enemies_in_distance(champion, champion.y, champion.x, 3, champion.cv)
     enemies_in_range = enemies_in_range[:3]
 
     if not champion.stunned:
@@ -936,7 +936,7 @@ def katarina_ability(champion, data):
 def kayn(champion, data={'redash': False}):
     if not champion.stunned:
         if not champion.target:
-            field.find_target(champion)
+            field.find_target(champion, champion.cv)
             if champion.target:
                 champion.print(
                     ' has a new target: ' + '{:<8}'.format(champion.target.team) + '{:<8}'.format(champion.target.name))
@@ -950,7 +950,7 @@ def kayn(champion, data={'redash': False}):
         if ((distance > 1 or r > 50) and not data['redash']) or (r > 50 and data['redash']):
             target_neighbors = field.find_neighbors(champion.target.y, champion.target.x)
             empty_neighbors = []
-            coords = field.coordinates
+            coords = champion.cv.coordinates
             for n in target_neighbors:
                 if not coords[n[0]][n[1]]:
                     empty_neighbors.append(n)
@@ -960,13 +960,13 @@ def kayn(champion, data={'redash': False}):
                         dash_coords = empty_neighbors[0]
                     champion.move(dash_coords[0], dash_coords[1], True)
 
-        enemies_in_range = field.enemies_in_distance(champion, champion.y, champion.x, 1)
+        enemies_in_range = field.enemies_in_distance(champion, champion.y, champion.x, 1, champion.cv)
 
         for e in enemies_in_range:
             ability_dmg = stats.ABILITY_DMG[champion.name][champion.stars]
 
             if champion.kayn_form == 'shadow_assassin' \
-                    and champion_functions.MILLIS() < stats.ABILITY_EXTRA_DAMAGE_LENGTH[champion.name]:
+                    and champion_functions.MILLIS(champion.cv) < stats.ABILITY_EXTRA_DAMAGE_LENGTH[champion.name]:
                 ability_dmg *= stats.ABILITY_EXTRA_DAMAGE[champion.name][champion.stars]
 
             champion.spell(e, ability_dmg)
@@ -1003,12 +1003,8 @@ def kayn(champion, data={'redash': False}):
             champion.add_que('execute_function', 350, [kayn, {'redash': True}])
 
 
-kennen_hits = []
-
-
 def kennen(champion):
-    global kennen_hits
-    kennen_hits = list(filter(lambda x: x[0] != champion, kennen_hits))
+    champion.cv.kennen_hits = list(filter(lambda x: x[0] != champion, champion.cv.kennen_hits))
 
     # for kenny not to ult when there's no targets in range
     # brings some extra cpu load
@@ -1024,8 +1020,7 @@ def kennen(champion):
 
 
 def kennen_ability(champion, data):
-    global kennen_hits
-    targets = field.enemies_in_distance(champion, champion.y, champion.x, stats.ABILITY_RADIUS[champion.name])
+    targets = field.enemies_in_distance(champion, champion.y, champion.x, stats.ABILITY_RADIUS[champion.name], champion.cv)
 
     if not champion.stunned:
         for e in targets:
@@ -1034,32 +1029,32 @@ def kennen_ability(champion, data):
             found = False
             index = -1
             target = e
-            if len(kennen_hits) > 0:
-                for i, v in enumerate(kennen_hits):
+            if len(champion.cv.kennen_hits) > 0:
+                for i, v in enumerate(champion.cv.kennen_hits):
                     if v[0] == champion and v[1] == target:
                         found = True
                         index = i
                         break
 
             if found:
-                kennen_hits[index][2] += 1
+                champion.cv.kennen_hits[index][2] += 1
             else:
-                kennen_hits.append([champion, target, 1])
-                index = len(kennen_hits) - 1
+                champion.cv.kennen_hits.append([champion, target, 1])
+                index = len(champion.cv.kennen_hits) - 1
 
-            if kennen_hits[index][2] >= 3:
+            if champion.cv.kennen_hits[index][2] >= 3:
                 e.add_que('change_stat', 0, None, 'stunned', True)
                 e.clear_que_stunned_removal()
                 e.add_que('change_stat', stats.ABILITY_STUN_DURATION[champion.name][champion.stars], None, 'stunned',
                           False)
-                kennen_hits[index][2] = 0
+                champion.cv.kennen_hits[index][2] = 0
 
 
 def kindred(champion):
     default_ability_calls(champion)
 
     if not champion.target:
-        field.find_target(champion)
+        field.find_target(champion, champion.cv)
         champion.print(
             ' has a new target: ' + '{:<8}'.format(champion.target.team) + '{:<8}'.format(champion.target.name))
 
@@ -1075,7 +1070,7 @@ def kindred(champion):
 
     # find all hexes that are within 3 distance of kindred and log the distance from target to all those hexes
     potential_hexes = []
-    coords = field.coordinates
+    coords = champion.cv.coordinates
     for i in range(0, 7):
         for j in range(0, 6):
             distance_to_champion = field.distance({'y': champion.y, 'x': champion.x}, {'y': i, 'x': j}, False)
@@ -1102,7 +1097,7 @@ def leesin(champion):
     default_ability_calls(champion)
     # draw a line from lee to target and continue it until it hits an edge
     if not champion.target:
-        field.find_target(champion)
+        field.find_target(champion, champion.cv)
     if len(champion.enemy_team()) > 0:
         line_to_wall_behind_target = field.rectangle_from_champion_to_wall_behind_target(champion, 1, champion.target.y,
                                                                                          champion.target.x)
@@ -1138,7 +1133,7 @@ def leesin(champion):
                 else:
                     end_point[1] = 6
 
-        coords = field.coordinates
+        coords = champion.cv.coordinates
         kick_coords = None
         kick_out = False
         deal = False
@@ -1148,7 +1143,7 @@ def leesin(champion):
         # if 3 star, just kill the target and other enemies strictly around it
         # Its a fun way of doing things but sure.
         if champion.stars == 3:
-            ttt = field.enemies_in_distance(champion, t.y, t.x, 1)
+            ttt = field.enemies_in_distance(champion, t.y, t.x, 1, champion.cv)
             for tt in ttt:
                 tt.die()
         else:
@@ -1366,7 +1361,7 @@ def lissandra(champion):
     dagger_path = field.line({'y': champion.y, 'x': champion.x}, {'y': target.y, 'x': target.x})
 
     dagger_target = None
-    coords = field.coordinates
+    coords = champion.cv.coordinates
     for d in dagger_path:
         if 0 <= d[0] < 8 and 0 <= d[1] < 7:
             # print("IN LISSANDRA ABILITY")
@@ -1440,14 +1435,11 @@ def lissandra(champion):
 
     champion.spell(dagger_target, stats.ABILITY_DMG[champion.name][champion.stars])
 
-    coords = field.coordinates
+    coords = champion.cv.coordinates
     for c in cone:
         hex_data = coords[c[0]][c[1]]
         if hex_data and champion.team != hex_data.team and hex_data.champion:
             champion.spell(hex_data, stats.ABILITY_SECONDARY_DMG[champion.name][champion.stars])
-
-
-lulu_targeted = []
 
 
 def lulu(champion):
@@ -1461,18 +1453,18 @@ def lulu(champion):
     own_team_hp = sorted(own_team_hp, key=lambda x: x[1])
 
     for o in own_team_hp:
-        targeted = len(list(filter(lambda x: (x[0] == champion and x[1] == o[0]), lulu_targeted)))
+        targeted = len(list(filter(lambda x: (x[0] == champion and x[1] == o[0]), champion.cv.lulu_targeted)))
         hp_amount = stats.ABILITY_HEALTH_GAIN_TOTAL[champion.name][champion.stars] * champion.SP
         if targeted != 0:
             o[0].add_que('change_stat', -1, None, 'max_health', o[0].max_health + hp_amount)
         o[0].add_que('heal', -1, None, None, hp_amount)
 
-        neighbors = field.enemies_in_distance(o[0], o[0].y, o[0].x, 1)
+        neighbors = field.enemies_in_distance(o[0], o[0].y, o[0].x, 1, champion.cv)
         for n in neighbors:
             n.add_que('change_stat', -1, None, 'stunned', True)
             n.clear_que_stunned_removal()
             n.add_que('change_stat', stats.ABILITY_STUN_DURATION[champion.name][champion.stars], None, 'stunned', False)
-        lulu_targeted.append([champion, o[0]])
+        champion.cv.lulu_targeted.append([champion, o[0]])
 
         break
 
@@ -1480,7 +1472,7 @@ def lulu(champion):
 def lux(champion):
     default_ability_calls(champion)
     if len(champion.enemy_team()) > 0:
-        enemies = field.enemies_in_distance(champion, champion.y, champion.x, 20)
+        enemies = field.enemies_in_distance(champion, champion.y, champion.x, 20, champion.cv)
         distances = []
         for e in enemies:
             d = field.distance(champion, e, True)
@@ -1497,7 +1489,7 @@ def lux(champion):
                 path = field.line({'y': champion.y, 'x': champion.x}, {'y': target.y, 'x': target.x})
             except AttributeError or ValueError:
                 path = field.line({'y': champion.y, 'x': champion.x}, {'y': 0, 'x': 0})
-            coords = field.coordinates
+            coords = champion.cv.coordinates
             for p in path:
                 if 0 <= p[0] < 8 and 0 <= p[1] < 7:
                     # print("IN LUX ABILITY")
@@ -1555,7 +1547,7 @@ def maokai(champion):
         if len(two_away) > 0:
             targeted_hexes.append([two_away[0][0], two_away[0][1]])
 
-    coords = field.coordinates
+    coords = champion.cv.coordinates
     for t in targeted_hexes:
         if 0 <= t[0] <= 7 and 0 <= t[1] <= 6:
             c = coords[t[0]][t[1]]
@@ -1578,10 +1570,10 @@ def morgana(champion):
     enemies = champion.enemy_team()
     random.shuffle(enemies)
 
-    circle0 = field.enemies_in_distance(champion, enemies[0].y, enemies[0].x, stats.ABILITY_RADIUS[champion.name])
+    circle0 = field.enemies_in_distance(champion, enemies[0].y, enemies[0].x, stats.ABILITY_RADIUS[champion.name], champion.cv)
     circle1 = []
     if len(enemies) > 1:
-        circle1 = field.enemies_in_distance(champion, enemies[1].y, enemies[1].x, stats.ABILITY_RADIUS[champion.name])
+        circle1 = field.enemies_in_distance(champion, enemies[1].y, enemies[1].x, stats.ABILITY_RADIUS[champion.name], champion.cv)
     target = [enemies[0].y, enemies[0].x]
 
     if len(circle1) > len(circle0):
@@ -1592,24 +1584,20 @@ def morgana(champion):
         champion.add_que('execute_function', current_ms, [morgana_ability, {'coordinates': target, 'ms': current_ms}])
 
 
-morgana_MR_list = []
-
-
 def morgana_ability(champion, data):
-    global morgana_MR_list
     targets = field.enemies_in_distance(champion, data['coordinates'][0], data['coordinates'][1],
-                                        stats.ABILITY_RADIUS[champion.name])
+                                        stats.ABILITY_RADIUS[champion.name], champion.cv)
 
     for t in targets:
         # if that unit hasn't been targeted by this morgana yet
-        if len(list(filter(lambda x: (x[0] == champion and x[1] == t), morgana_MR_list))) == 0:
+        if len(list(filter(lambda x: (x[0] == champion and x[1] == t), champion.cv.morgana_MR_list))) == 0:
             ms_left = stats.ABILITY_LENGTH[champion.name] - data['ms']
 
             t.print(' {} {} --> {}'.format('MR', t.MR, t.MR * stats.ABILITY_MR_DECREASE[champion.name]))
             t.MR *= stats.ABILITY_MR_DECREASE[champion.name]
             t.add_que('change_stat', ms_left, None, 'MR', None, {'morgana': stats.ABILITY_MR_DECREASE[champion.name]})
 
-            morgana_MR_list.append([champion, t])
+            champion.cv.morgana_MR_list.append([champion, t])
 
         champion.spell(t, stats.ABILITY_DMG[champion.name][champion.stars] / stats.ABILITY_SLICES[champion.name])
 
@@ -1623,7 +1611,7 @@ def morgana_ability(champion, data):
     # clear the list at the end of the last slice
     if (data['ms'] == stats.ABILITY_LENGTH[champion.name] - (
             stats.ABILITY_LENGTH[champion.name] / stats.ABILITY_SLICES[champion.name])):
-        morgana_MR_list = list(filter(lambda x: (x[0] != champion), morgana_MR_list))
+        champion.cv.morgana_MR_list = list(filter(lambda x: (x[0] != champion), champion.cv.morgana_MR_list))
 
 
 def nami(champion):
@@ -1658,7 +1646,7 @@ def nidalee(champion):
            1:]
     dmg = stats.ABILITY_DMG[champion.name][champion.stars]
 
-    coords = field.coordinates
+    coords = champion.cv.coordinates
     for p in path:
         dmg *= (1 + stats.ABILITY_DAMAGE_ADDITION_PERCENTAGE[champion.name])
         if 0 < p[0] < 8 and 0 < p[1] < 7:
@@ -1707,7 +1695,7 @@ def pyke(champion):
     target_neighbor_distances = sorted(target_neighbor_distances, key=lambda x: x[1], reverse=True)
 
     dash_target = None
-    coords = field.coordinates
+    coords = champion.cv.coordinates
     for t in target_neighbor_distances:
         if not coords[t[0][0]][t[0][1]]:
             dash_target = t[0]
@@ -1769,7 +1757,7 @@ def pyke(champion):
 
 
 def pyke_ability(champion, data):
-    coords = field.coordinates
+    coords = champion.cv.coordinates
     for p in data['path']:
         if 0 <= p[0] <= 7 and 0 <= p[1] <= 6:
             c = coords[p[0]][p[1]]
@@ -1779,46 +1767,40 @@ def pyke_ability(champion, data):
                 c.add_que('change_stat', stats.ABILITY_STUN_DURATION[champion.name][champion.stars], None, 'stunned', False)
                 champion.spell(c, stats.ABILITY_DMG[champion.name][champion.stars])
 
-
-riven_counter = []
-riven_identifier_list = []
-
-
 def riven(champion):
     if riven_helper(champion, {}):
 
-        global riven_counter
         default_ability_calls(champion)
         # riven_counter needs to sustain multiple rivens on the field,
         # so there's gonna be every riven's data on the same array
         found = False
         index = -1
-        if len(riven_counter) > 0:
-            for i, v in enumerate(riven_counter):
+        if len(champion.cv.riven_counter) > 0:
+            for i, v in enumerate(champion.cv.riven_counter):
                 if v[0] == champion:
                     found = True
                     index = i
                     break
 
         if found:
-            riven_counter[index][1] += 1
+            champion.cv.riven_counter[index][1] += 1
         else:
-            riven_counter.append([champion, 1])
-            index = len(riven_counter) - 1
+            champion.cv.riven_counter.append([champion, 1])
+            index = len(champion.cv.riven_counter) - 1
 
         if len(champion.enemy_team()) > 0:
             if not champion.target:
-                field.find_target(champion)
+                field.find_target(champion, champion.cv)
             # target neighbors and their distances to champion
             target_neighbors = field.find_neighbors(champion.target.y, champion.target.x, True)
             for i, t in enumerate(target_neighbors):
                 d = field.distance({'y': champion.y, 'x': champion.x}, {'y': t[0], 'x': t[1]}, False)
                 target_neighbors[i] = [t, d]
 
-            coords = field.coordinates
+            coords = champion.cv.coordinates
 
             # the wave of damage
-            if riven_counter[index][1] == 3:
+            if champion.cv.riven_counter[index][1] == 3:
 
                 # target_hex = [[champion.target.y, champion.target.x]]
                 corner_neighbors = []
@@ -1849,7 +1831,7 @@ def riven(champion):
                             if c and c.team != champion.team and c.champion:
                                 champion.spell(c, stats.ABILITY_SECONDARY_DMG[champion.name][champion.stars])
 
-                riven_counter[index][1] = 0
+                champion.cv.riven_counter[index][1] = 0
 
             # first dash to a furthest free neighboring hex of the target
             # then get a shield / reset the shield
@@ -1867,16 +1849,16 @@ def riven(champion):
                             champion.move(t[0], t[1], True)
                             break
 
-                shield_identifier = champion_functions.MILLIS() * stats.SHIELD_AMOUNT[champion.name][
+                shield_identifier = champion_functions.MILLIS(champion.cv) * stats.SHIELD_AMOUNT[champion.name][
                     champion.stars] * champion.SP
                 shield_amount = stats.SHIELD_AMOUNT[champion.name][champion.stars] * champion.SP
-                if shield_identifier in riven_identifier_list:
+                if shield_identifier in champion.cv.riven_identifier_list:
                     champion.add_que('shield', 0, None, None,
                                      {'amount': shield_amount + 0.001, 'identifier': shield_identifier,
                                       'applier': champion, 'original_amount': shield_amount + 0.001},
                                      {'increase': True})
 
-                riven_identifier_list.append(shield_identifier)
+                champion.cv.riven_identifier_list.append(shield_identifier)
 
                 champion.add_que('shield', 0, None, None,
                                  {'amount': shield_amount, 'identifier': shield_identifier, 'applier': champion,
@@ -1926,7 +1908,7 @@ def sejuani(champion):
 
 def sejuani_ability(champion, data):
     target_hexes = field.hexes_in_distance(data['target'][0], data['target'][1], stats.ABILITY_RADIUS[champion.name])
-    coords = field.coordinates
+    coords = champion.cv.coordinates
     for t in target_hexes:
         c = coords[t[0]][t[1]]
         if (c and c.team != champion.team and c.champion):
@@ -1941,7 +1923,7 @@ def sett(champion):
     default_ability_calls(champion)
     if len(champion.enemy_team()) > 0:
         if not champion.target:
-            field.find_target(champion)
+            field.find_target(champion, champion.cv)
 
         # add the slamming time (assumed 1000ms)
         champion.add_que('change_stat', -1, None, 'ability_active', True)
@@ -1986,7 +1968,7 @@ def sett(champion):
 
             # go through the possibilities and try to find a free hex
             free_hex = None
-            coords = field.coordinates
+            coords = champion.cv.coordinates
             for s in smash_targets:
                 if s[0] >= 0 and s[0] <= 7 and s[1] >= 0 and s[1] <= 6:
                     c = coords[s[0]][s[1]]
@@ -2007,7 +1989,7 @@ def sett(champion):
         target_dmg = champion.target.max_health * stats.ABILITY_DMG[champion.name][champion.stars]
         secondary_target_dmg = champion.target.max_health * stats.ABILITY_SECONDARY_DMG[champion.name][champion.stars]
         champion.spell(champion.target, target_dmg)
-        coords = field.coordinates
+        coords = champion.cv.coordinates
         for d in damaged_hexes:
             c = coords[d[0]][d[1]]
             if c and c.team != champion.team and c.champion:
@@ -2030,7 +2012,7 @@ def shen(champion):
     # if there are no free hexes, stay at the current hex
     dash_target = [champion.y, champion.x]
 
-    coords = field.coordinates
+    coords = champion.cv.coordinates
     for t in target_neighbors:
         t = t[0]
         c = coords[t[0]][t[1]]
@@ -2041,14 +2023,14 @@ def shen(champion):
     if dash_target != [champion.y, champion.x]:
         champion.move(dash_target[0], dash_target[1], True)
 
-    shield_identifier = champion_functions.MILLIS() * stats.SHIELD_AMOUNT[champion.name][champion.stars] * champion.SP
+    shield_identifier = champion_functions.MILLIS(champion.cv) * stats.SHIELD_AMOUNT[champion.name][champion.stars] * champion.SP
     shield_amount = stats.SHIELD_AMOUNT[champion.name][champion.stars] * champion.SP
     champion.add_que('shield', 0, None, None,
                      {'amount': shield_amount, 'identifier': shield_identifier, 'applier': champion,
                       'original_amount': shield_amount},
                      {'increase': True, 'expires': stats.ABILITY_LENGTH[champion.name][champion.stars]})
 
-    neighbor_enemies = field.enemies_in_distance(champion, champion.y, champion.x, 1)
+    neighbor_enemies = field.enemies_in_distance(champion, champion.y, champion.x, 1, champion.cv)
 
     for n in neighbor_enemies:
         old_target = n.target
@@ -2082,7 +2064,7 @@ def sylas(champion):
 
             # print("SYLAS ABILITY SMASH LINE")
             # print(smash_line)
-            coords = field.coordinates
+            coords = champion.cv.coordinates
             for s in smash_line:
                 # print("IN SYLAS ABILITY")
                 # print(coords)
@@ -2130,7 +2112,7 @@ def talon(champion):
     default_ability_calls(champion)
 
     if not champion.target:
-        field.find_target(champion)
+        field.find_target(champion, champion.cv)
     original_target = champion.target
 
     champion.spell(champion.target, stats.ABILITY_DMG[champion.name][champion.stars])
@@ -2171,7 +2153,7 @@ def talon_ability(champion, data):
         target_neighbors = field.find_neighbors(data['target'].y, data['target'].x)
         random.shuffle(target_neighbors)
         jump_target = None
-        coords = field.coordinates
+        coords = champion.cv.coordinates
         for t in target_neighbors:
             c = coords[t[0]][t[1]]
             if not c:
@@ -2182,7 +2164,7 @@ def talon_ability(champion, data):
             champion.print(' leaps')
             for e in champion.enemy_team():
                 if e.target == champion:
-                    field.find_target(e)
+                    field.find_target(e, champion.cv)
 
             champion.move(jump_target[0], jump_target[1], True)
             champion.clear_que_idle()
@@ -2201,11 +2183,11 @@ def teemo(champion):
     enemies = sorted(enemies, key=lambda x: x[1], reverse=True)
     target = enemies[0][0]
 
-    targets = field.enemies_in_distance(champion, target.y, target.x, 1)
+    targets = field.enemies_in_distance(champion, target.y, target.x, 1, champion.cv)
 
     # if two teemo ults will be active at the same time, just fill the spell deals back to 6 (teemo's ability slices)
     # if teemo is a mage, just let him double cast and deal the full damage
-    if not ((origin_class.get_origin_class_tier(champion.team, 'mage') > 0
+    if not ((origin_class.get_origin_class_tier(champion.team, 'mage', champion.cv) > 0
              and origin_class.is_trait(champion, 'mage'))):
         for i in range(0, 5):
             que = champion.que_return()
@@ -2250,7 +2232,7 @@ def thresh(champion):
 
     shielded_allies = [target]
 
-    coords = field.coordinates
+    coords = champion.cv.coordinates
     for t in target_neighbors:
         c = coords[t[0]][t[1]]
         if c and c.team == champion.team and c.champion:
@@ -2265,7 +2247,7 @@ def thresh(champion):
                     a.print(' {} {} --> {}'.format('shield', ceil(shield_before), ceil(a.shield_amount())))
                     break
 
-        identifier = champion_functions.MILLIS() * stats.SHIELD_AMOUNT[champion.name][champion.stars] * champion.SP
+        identifier = champion_functions.MILLIS(champion.cv) * stats.SHIELD_AMOUNT[champion.name][champion.stars] * champion.SP
         shield_amount = stats.SHIELD_AMOUNT[champion.name][champion.stars] * champion.SP
         a.add_que('shield', -1, None, None, {'amount': shield_amount, 'identifier': identifier, 'applier': champion,
                                              'original_amount': shield_amount},
@@ -2320,7 +2302,7 @@ def twistedfate(champion):
                 all_hit_hexes.append(side_line1)
 
         already_targeted = []
-        coords = field.coordinates
+        coords = champion.cv.coordinates
         for a in all_hit_hexes:
             for h in a:
                 c = coords[h[0]][h[1]]
@@ -2411,8 +2393,6 @@ def veigar(champion):
         champion.print(' {} {} --> {}'.format('SP', round(start_value, 2), round(champion.SP, 2)))
 
 
-vi_armor_list = []
-
 
 def vi(champion):
     default_ability_calls(champion)
@@ -2438,7 +2418,7 @@ def vi(champion):
 
         affected_hexes = field.hexes_in_distance(x_away[0][0], x_away[0][1], 1)
 
-        coords = field.coordinates
+        coords = champion.cv.coordinates
         for a in affected_hexes:
             c = coords[a[0]][a[1]]
             if c and c.team != champion.team and c.champion:
@@ -2447,14 +2427,14 @@ def vi(champion):
                 # check how long ago the target's armor was reduced last time by this vi
                 # the armor list elements are of syntax: [reducer, target, milliseconds_when_last_reduced]
                 # search for target entries
-                armor_history = (list(filter(lambda x: x[1] == c, vi_armor_list)))
+                armor_history = (list(filter(lambda x: x[1] == c, champion.cv.vi_armor_list)))
                 can_be_changed = False
                 for ar in armor_history:
                     # there can be multiple vis, so make sure that this entry was done by the current vi
                     if ar[0] == champion:
 
                         # amount of ms when reduced last time
-                        diff = champion_functions.MILLIS() - ar[2]
+                        diff = champion_functions.MILLIS(champion.cv) - ar[2]
                         # if more than reduction length, allow new reduction
                         if diff > stats.ABILITY_LENGTH[champion.name]:
                             can_be_changed = True
@@ -2471,7 +2451,7 @@ def vi(champion):
                     c.add_que('change_stat', stats.ABILITY_LENGTH[champion.name], None, 'armor', None,
                               {'vi': stats.ABILITY_ARMOR_DECREASE[champion.name][champion.stars]})
 
-                    vi_armor_list.append([champion, c, champion_functions.MILLIS()])
+                    champion.cv.vi_armor_list.append([champion, c, champion_functions.MILLIS(champion.cv)])
 
                 champion.spell(c, stats.ABILITY_DMG[champion.name][champion.stars])
 
@@ -2502,7 +2482,7 @@ def wukong(champion):
 def xinzhao(champion):
     default_ability_calls(champion)
 
-    enemies = field.enemies_in_distance(champion, champion.y, champion.x, 1)
+    enemies = field.enemies_in_distance(champion, champion.y, champion.x, 1, champion.cv)
     bonus_dmg = champion.AD * (stats.ABILITY_DAMAGE_MULTIPLIER[champion.name][champion.stars] * champion.SP - 1)
     for e in enemies:
         champion.attack(bonus_dmg, e)
@@ -2545,7 +2525,7 @@ def yasuo(champion):
 #               add to list and sort the list by distances to yasuo
 def yasuo_ability(champion, data):
     hexes = field.hexes_in_distance(0, 0, 20)
-    coords = field.coordinates
+    coords = champion.cv.coordinates
 
     possible_hexes = []
 
@@ -2576,28 +2556,18 @@ def yasuo_ability(champion, data):
     possible_hexes = sorted(possible_hexes, key=lambda x: x[1])
     return (possible_hexes)
 
-
-yone_list = []
-yone_checking = False
-
-
-# welcome to the loop city
-# the sir lord mayor is named 'for'
-# dude's a dick tho
 def yone(champion):
-    global yone_list
-    global yone_checking
     default_ability_calls(champion)
 
-    if (not yone_checking):
+    if (not champion.cv.yone_checking):
         champion.add_que('execute_function', 0, [yone_ability, {'loop': True}])
-        yone_checking = True
+        champion.cv.yone_checking = True
 
-    coords = field.coordinates
+    coords = champion.cv.coordinates
 
     # Seal Fate
     if (champion.maxmana == stats.MAXMANA[champion.name]):
-        if (not champion.target): field.find_target(champion)
+        if (not champion.target): field.find_target(champion, champion.cv)
         path = field.rectangle_from_champion_to_wall_behind_target(champion, stats.ABILITY_RADIUS[champion.name],
                                                                    champion.target.y, champion.target.x)
         for i, p in enumerate(path):
@@ -2667,7 +2637,7 @@ def yone(champion):
                         already_targeted.append(c)
                         champion.spell(c, damage_per_enemy)
                         if (c.health > 0):
-                            yone_list.append([champion, c])
+                            champion.cv.yone_list.append([champion, c])
             if (yone_helper(champion) > 0):
                 champion.print(
                     ' {} {} --> {}'.format('maxmana', champion.maxmana, stats.SECONDARY_MAXMANA[champion.name]))
@@ -2683,7 +2653,7 @@ def yone(champion):
         # sort the marked enemies by hp and check their neighboring hexes
         # whichever has the first free hex, is going to be the dash target
         marked_enemies = []
-        for y in yone_list:
+        for y in champion.cv.yone_list:
             if (y[0] == champion):
                 marked_enemies.append([y[1], y[1].health])
         marked_enemies = sorted(marked_enemies, key=lambda x: x[1])
@@ -2718,10 +2688,8 @@ def yone(champion):
 
 # check if someone on the list has died
 def yone_ability(champion, data):
-    global yone_list
-
     old_length = yone_helper(champion)
-    yone_list = list(filter(lambda x: x[1].health > 0, yone_list))
+    champion.cv.yone_list = list(filter(lambda x: x[1].health > 0, champion.cv.yone_list))
     new_length = yone_helper(champion)
     if (new_length != old_length):
         champion.print(' list length {} --> {}'.format(old_length, new_length))
@@ -2735,9 +2703,8 @@ def yone_ability(champion, data):
 
 
 def yone_helper(champion):
-    global yone_list
     counter = 0
-    for y in yone_list:
+    for y in champion.cv.yone_list:
         if (y[0] == champion):
             counter += 1
     return counter
@@ -2789,7 +2756,7 @@ def yuumi(champion):
         second_target = team_distances[0][0]
 
         # find the closest free coordinate next to the second target
-        coords = field.coordinates
+        coords = champion.cv.coordinates
         possible_targets = field.hexes_in_distance(second_target.y, second_target.x, 2)
         for i, p in enumerate(possible_targets):
             d = field.distance({'y': p[0], 'x': p[1]}, {'y': second_target.y, 'x': second_target.x}, False)
@@ -2859,7 +2826,7 @@ def galio(champion):
         champion.add_que('change_stat', 0, None, 'receive_decreased_damage', new_damage_receiving)
 
         # taunting
-        neighbor_enemies = field.enemies_in_distance(champion, champion.y, champion.x, 1)
+        neighbor_enemies = field.enemies_in_distance(champion, champion.y, champion.x, 1, champion.cv)
         for n in neighbor_enemies:
             old_target = n.target
             n.add_que('change_target', -1, None, None, champion)
@@ -2875,6 +2842,6 @@ def galio_ability(champion, data):
     champion.add_que('change_stat', 0, None, 'receive_decreased_damage', end_damage_receiving)
 
     radius = stats.ABILITY_RADIUS[champion.name]
-    targets = field.enemies_in_distance(champion, champion.y, champion.x, radius)
+    targets = field.enemies_in_distance(champion, champion.y, champion.x, radius, champion.cv)
     for t in targets:
         champion.spell(t, stats.ABILITY_DMG[champion.name][champion.stars])

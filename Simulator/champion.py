@@ -5,6 +5,7 @@ import Simulator.champion_functions as champion_functions
 import time
 import random
 import itertools
+import copy
 
 from math import ceil
 from Simulator.stats import AD, HEALTH, ARMOR, MR, AS, RANGE, MANA, MAXMANA, COST, MANALOCK, ABILITY_REQUIRES_TARGET, \
@@ -12,7 +13,7 @@ from Simulator.stats import AD, HEALTH, ARMOR, MR, AS, RANGE, MANA, MAXMANA, COS
 from Simulator.champion_functions import attack, die, MILLIS, MILLISECONDS_INCREASE, add_damage_dealt
 from Simulator import ability, active, field, item_stats, items
 
-que = []
+#que = []
 log = []
 
 
@@ -31,12 +32,13 @@ test_multiple = {'blue': 0, 'red': 0, 'bugged out': 0, 'draw': 0}
 
 class champion:
     def __init__(self, name, team=None, y=-1, x=-1, stars=1, itemlist=None, overlord=None,
-                 sandguard_overlord_coordinates=None, chosen=False, kayn_form=None, target_dummy=False):
+                 sandguard_overlord_coordinates=None, chosen=False, kayn_form=None, target_dummy=False,
+                 cv=None):
 
         if itemlist is None:
             itemlist = []
         self.champion = True
-
+        self.cv = cv
         self.name = name
         self.stars = stars
 
@@ -117,8 +119,6 @@ class champion:
 
         self.will_revive = [[None], [None]]  # consists of [[zilean_champion], [GA]]
 
-        field.coordinates[y][x] = self
-
         self.idle = True
         self.ability_active = False
 
@@ -132,8 +132,13 @@ class champion:
 
         self.start_time = time.time_ns()
 
-        self.chosen = origin_class.chosen(self, chosen)
-
+        self.chosen = chosen
+        if self.cv:
+            self.que = self.cv.que
+            self.cv.coordinates[y][x] = self
+            if self.chosen:
+                origin_class.chosen(self, self.chosen, self.cv)
+            
         self.kayn_form = kayn_form
 
         self.target_dummy = target_dummy
@@ -146,6 +151,7 @@ class champion:
             # self.cost = cost_star_values[COST[name]][self.stars]
             self.health += 200
             self.max_health += 200
+                
 
         if name != 'aphelios_turret':
             items.initiate(self)
@@ -161,10 +167,10 @@ class champion:
 
         if name == 'galio':
             self.health = HEALTH[name][stars] + HEALTH[name][stars] * config.GALIO_MULTIPLIER * \
-                          origin_class.cultist_stars[team]
+                          self.cv.cultist_stars[team]
             self.max_health = HEALTH[name][stars] + HEALTH[name][stars] * config.GALIO_MULTIPLIER * \
-                              origin_class.cultist_stars[team]
-            self.AD = AD[name][stars] + AD[name][stars] * config.GALIO_MULTIPLIER * origin_class.cultist_stars[team]
+                              self.cv.cultist_stars[team]
+            self.AD = AD[name][stars] + AD[name][stars] * config.GALIO_MULTIPLIER * self.cv.cultist_stars[team]
 
         if name == 'aphelios_turret':
             self.health = 1
@@ -176,7 +182,7 @@ class champion:
         attackable_enemies = list(filter(lambda x: (x.champion and x.health > 0), self.enemy_team()))
         if target or self.target:
             if (not self.target or self.target.health <= 0) and len(attackable_enemies) > 0:
-                field.find_target(self)
+                field.find_target(self, self.cv)
             if not target or target.health <= 0:
                 target = self.target
 
@@ -204,7 +210,7 @@ class champion:
                 true_dmg += dmg
                 dmg = 0
 
-            items.gargoyle_stoneplate(target)  # gargoyle_stoneplate (needs to take effect before armor or MR is used)
+            items.gargoyle_stoneplate(self, target)  # gargoyle_stoneplate (needs to take effect before armor or MR is used)
             if not item_damage:
                 items.morellonomicon(self, target)  # morellonomicon
                 if not self.spell_has_used_ludens:
@@ -252,7 +258,7 @@ class champion:
             # it's long as shit but gets the job done
             if crit_random < self.crit_chance and self != target and not 'bramble_vest' in target.items \
                     and not item_damage and crit_string == '' and origin_class.is_trait(self, 'assassin') \
-                    and origin_class.get_origin_class_tier(self.team, 'assassin') > 0:
+                    and origin_class.get_origin_class_tier(self.team, 'assassin', self.cv) > 0:
                 damage *= self.crit_damage
                 crit_string = 'crit'
 
@@ -269,14 +275,14 @@ class champion:
                 trait_string = ' {}'.format(trait_damage)
 
             # if the target has died to luden's, don't continue
-            if target in eval(enemy_team):
+            if target in getattr(self.cv, enemy_team, False):
 
                 if self.lifesteal_spells > 0 and not item_damage:
                     self.add_que('heal', -1, None, None, damage * self.lifesteal_spells)
 
                 add_damage_dealt(self, damage, target)
 
-                origin_class.dazzler(self, target)  # dazzler -trait
+                origin_class.dazzler(self, target, self.cv)  # dazzler -trait
 
                 # shield
                 shield_old = target.shield_amount()
@@ -301,7 +307,7 @@ class champion:
                            format(ceil(target.health), ceil(target.health - damage), ceil(shield_old),
                                   ceil(target.shield_amount()), crit_string, burn_string, item_string, trait_string))
                 target.health -= damage
-                if MILLIS() > target.castMS + target.manalock and not target.ability_active and target.maxmana > 0:
+                if MILLIS(self.cv) > target.castMS + target.manalock and not target.ability_active and target.maxmana > 0:
                     if not target.name == 'riven' or ability.riven_helper(target, {}):
                         old_mana = target.mana
                         target.mana += min((damage * config.MANA_DAMAGE_GAIN) *
@@ -318,16 +324,16 @@ class champion:
                         and target.health < target.max_health * origin_class_stats.threshold['the_boss']:
                     if target.health <= 0:
                         target.health = 1
-                    origin_class.the_boss(target)
+                    origin_class.the_boss(target, self.cv)
 
                 if target.health <= 0:
                     target.die()
                 else:
-                    origin_class.divine(self, target, False)  # divine -trait
+                    origin_class.divine(self, target, False, self.cv)  # divine -trait
 
                 # sharpshooter -trait
                 if not trait_damage and not item_damage and not burn_damage:
-                    origin_class.sharpshooter(self, target, dmg, true_dmg, True)
+                    origin_class.sharpshooter(self, target, dmg, true_dmg, True, self.cv)
 
         else:
             items.trap_claw(self, target)  # trap_claw
@@ -339,10 +345,10 @@ class champion:
             else:
                 self.print(' moves from ({} , {})   to   ({} , {})        '.format(self.y, self.x, y, x))
 
-            field.coordinates[self.y][self.x] = None
+            self.cv.coordinates[self.y][self.x] = None
             self.x = x
             self.y = y
-            field.coordinates[y][x] = self
+            self.cv.coordinates[y][x] = self
             self.idle = False
             self.add_que('clear_idle', self.movement_delay)
 
@@ -363,22 +369,22 @@ class champion:
         return shield
 
     def enemy_team(self):
-        enemy_team = 'red' if self.team == 'blue' else 'blue'
-        return eval(enemy_team)
+        enemy_team = 'red' if self.team == 'blue' else 'blue'        
+        return getattr(self.cv, enemy_team, False)
 
     def own_team(self):
         try:
-            return eval(self.team)
+            return getattr(self.cv, self.team, False)
         except TypeError:
             return False
 
     def ability(self):
         attackable_enemies = list(filter(lambda x: (x.champion and x.health > 0), self.enemy_team()))
         if not self.target and len(attackable_enemies) > 0:
-            field.find_target(self)
+            field.find_target(self, self.cv)
         if self.target:  # if still no target, the remaining enemies are under GA or zilean revive
             getattr(ability, self.name)(self)
-            if origin_class.get_origin_class_tier(self.team, 'mage') > 0 and origin_class.is_trait(self, 'mage'):
+            if origin_class.get_origin_class_tier(self.team, 'mage', self.cv) > 0 and origin_class.is_trait(self, 'mage'):
                 if len(self.enemy_team()) > 0:
                     getattr(ability, self.name)(self)
 
@@ -395,16 +401,16 @@ class champion:
         if data is None:
             data = {}
         if 'underlord' in data.keys():
-            que.append([action, data['underlord'], MILLIS() + length, function, stat, value, data])
+            self.que.append([action, data['underlord'], MILLIS(self.cv) + length, function, stat, value, data])
         else:
             if action == 'change_stat' and length < 1:
                 change_stat(self, action, length, function, stat, value, data)
             elif action == 'shield' and length < 1:
                 shield(self, action, length, function, stat, value, data)
             else:
-                que.append([action, self, MILLIS() + length, function, stat, value, data])
+                self.que.append([action, self, MILLIS(self.cv) + length, function, stat, value, data])
 
-        que.sort(key=lambda x: x[2])
+        self.que.sort(key=lambda x: x[2])
 
     def burn(self, target):
         target.clear_que_burn_removal()
@@ -421,58 +427,58 @@ class champion:
     def clear_que_idle(self):
         # not very beautiful is it? not trying to impress anyone tho
         for i in range(0, 15):
-            for q in que:
+            for q in self.que:
                 if q[1] is self and q[0] == 'clear_idle':
-                    que.remove(q)
+                    self.que.remove(q)
 
     def clear_que_healing_reduction(self):
-        for q in que:
+        for q in self.que:
             if q[1] is self and q[0] == 'change_stat' and q[4] == 'healing_strength' and q[5] == 1:
-                que.remove(q)
+                self.que.remove(q)
 
     def clear_que_stunned_removal(self):
-        for q in que:
+        for q in self.que:
             if q[1] is self and q[0] == 'change_stat' and q[4] == 'stunned' and not q[5]:
-                que.remove(q)
+                self.que.remove(q)
 
     def clear_que_blinded_removal(self):
-        for q in que:
+        for q in self.que:
             if q[1] is self and q[0] == 'change_stat' and q[4] == 'blinded' and not q[5]:
-                que.remove(q)
+                self.que.remove(q)
 
     def clear_que_armor_removal(self):
-        for q in que:
+        for q in self.que:
             if q[1] is self and q[0] == 'change_stat' and q[4] == 'armor':
-                que.remove(q)
+                self.que.remove(q)
 
     def clear_que_burn_removal(self):
         for i in range(0, 15):
-            for q in que:
+            for q in self.que:
                 if q[0] == 'burn' and q[5] == self:
-                    que.remove(q)
+                    self.que.remove(q)
 
     def clear_que_dazzler(self):
         for i in range(0, 15):
-            for q in que:
+            for q in self.que:
                 if q[1] == self and q[0] == 'change_stat' and 'dazzler' in q[6]:
-                    que.remove(q)
+                    self.que.remove(q)
 
     def red_append(self, champion):
-        red.append(champion)
+        self.cv.red.append(champion)
 
     def blue_append(self, champion):
-        blue.append(champion)
+        self.cv.blue.append(champion)
 
     def red_return(self):
-        return red
+        return self.cv.red
 
     def blue_return(self):
-        return blue
+        return self.cv.blue
 
     def que_return(self):
-        return que
+        return self.que
 
-    def spawn(self, name, stars, y, x, team=None, is_champion=True):
+    def spawn(self, name, stars, y, x, team=None, is_champion=True, cv=None):
         if not team:
             team = self.team
 
@@ -483,24 +489,26 @@ class champion:
             for i in self.items:
                 if i == 'spear_of_shojin':
                     items.append(i)
-        unit = champion(name, stars=stars, team=team, y=y, x=x, itemlist=items, overlord=overlord)
+        unit = champion(name, stars=stars, team=team, y=y, x=x, itemlist=items, overlord=overlord, cv=cv)
         unit.champion = is_champion
-        eval(team).append(unit)
+        getattr(self.cv, team, False).append(unit)
         return unit
 
     def que_replace(self, q):
-        global que
-        que = q
+        self.que = q
 
     def millis(self):
-        return MILLIS()
+        return MILLIS(self.cv)
 
     def print(self, msg):
+        mils = 0
+        if self.cv:
+            mils = MILLIS(self.cv)
         if self.team:
             printt('{:<120}'.format('{:<8}'.format(self.team) + '{:<15}'.format(self.name) + msg)
-                   + '{:<12}'.format(str(MILLIS())) + str(time.time_ns() - self.start_time))
+                   + '{:<12}'.format(str(mils)) + str(time.time_ns() - self.start_time))
         else:
-            printt('{:<120}'.format('team_unassigned' + '{:<15}'.format(self.name) + msg) + str(MILLIS()))
+            printt('{:<120}'.format('team_unassigned' + '{:<15}'.format(self.name) + msg) + str(mils))
 
     def golden(self):
         self.stars += 1
@@ -513,11 +521,11 @@ class champion:
         self.max_health += 200
 
 
-global blue
-global red
+#global blue
+#global red
 
-blue = []
-red = []
+#blue = []
+#red = []
 
 
 # I think I am going to redo parts of this function. 
@@ -525,19 +533,23 @@ red = []
 # This will be an area I will look to optimize on later if need be but for now,
 # I want to keep things as simple as possible.
 def run(champion_q, player_1, player_2, round_damage=0):
-    reset_global_variables()
-
+    #reset_global_variables()
+    combat_variables = Combat_Variables()
+    red, blue = combat_variables.red, combat_variables.blue
+    que, log = combat_variables.que, combat_variables.log
     for x in range(0, 7):
         for y in range(0, 4):
             if player_1.board[x][y]:
                 blue.append(champion_q(player_1.board[x][y].name, 'blue', y, x, player_1.board[x][y].stars,
                                        player_1.board[x][y].items, False, None, player_1.board[x][y].chosen
-                                       , player_1.board[x][y].kayn_form, player_1.board[x][y].target_dummy))
+                                       , player_1.board[x][y].kayn_form, player_1.board[x][y].target_dummy,
+                                       cv = combat_variables))
             if player_2.board[x][y]:
                 # Inverting because the combat system uses the whole board and does not mirror at start.
                 red.append(champion_q(player_2.board[x][y].name, 'red', 7 - y, 6 - x, player_2.board[x][y].stars,
                                       player_2.board[x][y].items, False, None, player_2.board[x][y].chosen,
-                                      player_2.board[x][y].kayn_form, player_2.board[x][y].target_dummy))
+                                      player_2.board[x][y].kayn_form, player_2.board[x][y].target_dummy,
+                                      cv = combat_variables))
 
     printt('Player 1 (Blue) Team')
     for unit in blue:
@@ -560,9 +572,9 @@ def run(champion_q, player_1, player_2, round_damage=0):
             survive_combat(player_2, red)
             return 2, round_damage + DAMAGE_PER_UNIT[len(red)]
 
-    # Not quite sure what is happening in these lines. 
+
     # They are effects that happen at the start of the fight.
-    # But blue[0] feels odd
+
     items.chalice_of_power(blue[0])  # chalice_of_power
     items.zekes_herald(blue[0])  # zekes_herald
     items.frozen_heart(blue[0])  # frozen_heart
@@ -573,8 +585,8 @@ def run(champion_q, player_1, player_2, round_damage=0):
     items.zzrot_portal(blue[0])  # zzrot_portal
     items.zephyr(blue[0])  # zephyr
 
-    origin_class.total_health(blue, red)
-    origin_class.total_origin_class(blue[0], red[0])  # count and execute some traits
+    origin_class.total_health(blue, red, combat_variables)
+    origin_class.total_origin_class(blue[0], red[0], combat_variables)  # count and execute some traits
     # Not sure what changed the length of one of these arrays at this point but this seems to fix the issue
     if len(blue) == 0 or len(red) == 0:
         return 0, round_damage
@@ -583,24 +595,24 @@ def run(champion_q, player_1, player_2, round_damage=0):
     # infinity_edge made sure that the crit damage bonus gets registered after everything else has gone through
 
     while True:
-        if MILLIS() > 150000:
+        if MILLIS(combat_variables) > 150000:
             test_multiple['bugged out'] += 1
             break
-        if MILLIS() > 0 and MILLIS() % origin_class_stats.length['elderwood'] == 0:
-            origin_class.elderwood(blue, red)  # elderwood -trait
-        if MILLIS() > 0 and MILLIS() % \
-                origin_class_stats.threshold['hunter'][origin_class.get_origin_class_tier('blue', 'hunter')] == 0:
-            origin_class.hunter(blue)  # hunter -trait
-        if MILLIS() > 0 and MILLIS() % \
-                origin_class_stats.threshold['hunter'][origin_class.get_origin_class_tier('red', 'hunter')] == 0:
-            origin_class.hunter(red)  # hunter -trait
+        if MILLIS(combat_variables) > 0 and MILLIS(combat_variables) % origin_class_stats.length['elderwood'] == 0:
+            origin_class.elderwood(blue, red, combat_variables)  # elderwood -trait
+        if MILLIS(combat_variables) > 0 and MILLIS(combat_variables) % \
+                origin_class_stats.threshold['hunter'][origin_class.get_origin_class_tier('blue', 'hunter', combat_variables)] == 0:
+            origin_class.hunter(blue, combat_variables)  # hunter -trait
+        if MILLIS(combat_variables) > 0 and MILLIS(combat_variables) % \
+                origin_class_stats.threshold['hunter'][origin_class.get_origin_class_tier('red', 'hunter', combat_variables)] == 0:
+            origin_class.hunter(red, combat_variables)  # hunter -trait
         
         
         for b, o in itertools.zip_longest(blue, red):            
             if b and not b.target_dummy:
-                field.action(b)
+                field.action(b, combat_variables)
             if o and not o.target_dummy:
-                field.action(o)
+                field.action(o, combat_variables)
         '''
         
         for o in red:
@@ -613,7 +625,7 @@ def run(champion_q, player_1, player_2, round_damage=0):
         '''
         
 
-        while len(que) > 0 and MILLIS() > que[0][2]:
+        while len(que) > 0 and MILLIS(combat_variables) > que[0][2]:
             champion_q = que[0][1]
             data = que[0][6]
             # make sure that teemo's poison darts deal damage even after teemo himself has died
@@ -654,7 +666,7 @@ def run(champion_q, player_1, player_2, round_damage=0):
                                              '{:<8}'.format(champion_q.target.name) +
                                              '  [{}, {}]'.format(champion_q.target.y, champion_q.target.x))
                     else:
-                        field.find_target(champion_q)
+                        field.find_target(champion_q, combat_variables)
 
                 if que[0][0] == 'execute_function':
                     if len(que[0][3]) > 1:
@@ -668,7 +680,7 @@ def run(champion_q, player_1, player_2, round_damage=0):
 
             que.pop(0)
 
-        MILLISECONDS_INCREASE()
+        MILLISECONDS_INCREASE(combat_variables)
         if len(blue) == 0 or len(red) == 0:
             if len(red) == 0:
                 printt('BLUE TEAM WON')
@@ -685,7 +697,7 @@ def run(champion_q, player_1, player_2, round_damage=0):
                 survive_combat(player_2, red)
                 return 2, (round_damage + DAMAGE_PER_UNIT[len(red)])
             break
-        if MILLIS() > 150000:
+        if MILLIS(combat_variables) > 150000:
             # print("Round has gone on too long")
             return 0, round_damage
     return 0, round_damage
@@ -736,10 +748,10 @@ def change_stat(a_champion, action, length, function, stat, value, data):
         a_champion.print(' {} {} --> {}'.format('AD', round(start_value, 2), round(a_champion.AD, 2)))
 
     else:
-        if not ('quicksilver' in a_champion.items and MILLIS() <= item_stats.item_change_length['quicksilver'] and
+        if not ('quicksilver' in a_champion.items and MILLIS(a_champion.cv) <= item_stats.item_change_length['quicksilver'] and
                 value and (stat == 'stunned' or stat == 'disarmed' or stat == 'blinded')):
             if not ('rapid_firecannon' in a_champion.items and value and stat == 'blinded'):
-                if not (a_champion.name == 'galio' and (MILLIS() - origin_class.galio_spawn_time[a_champion.team] <=
+                if not (a_champion.name == 'galio' and (MILLIS(a_champion.cv) - a_champion.cv.galio_spawn_time[a_champion.team] <=
                                                         origin_class_stats.cc_immune['cultist'])
                         and (stat == 'stunned' or stat == 'disarmed' or stat == 'blinded')):
                     end_value = value
@@ -770,6 +782,57 @@ def change_stat(a_champion, action, length, function, stat, value, data):
         else:
             a_champion.print(' not {} because wears quicksilver'.format(stat))
 
+class Combat_Variables:
+    def __init__(self):
+        self.blue = []
+        self.red = []
+        self.que = []
+        self.log = []
+
+        self.MILLISECONDS = 0
+        self.damage_dealt = []
+        self.damage_dealt_teams = {'blue': 0, 'red': 0}
+        self.galio_spawned = {'blue': False, 'red': False}
+
+        # global kennen_hits
+        # global l
+        self.kennen_hits = []
+        self.lulu_targeted = []
+        self.morgana_MR_list = []
+        self.riven_counter = []
+        self.riven_identifier_list = []
+        self.vi_armor_list = []
+        self.yone_list = []
+        self.yone_checking = False
+
+        self.jhin_shots = []
+        self.kalista_targets = []
+        self.vayne_targets = []
+        self.zed_counter = []
+
+        self.coordinates = [[None] * 7 for _ in range(8)]
+
+        self.bramble_vest_list = []
+        self.deathblade_list = []
+        self.frozen_heart_list = []
+        self.gargoyle_stoneplate_list = []
+        self.hextech_gunblade_list = []
+        self.ionic_spark_list = []
+        self.last_whisper_list = []
+        self.statikk_shiv_list = []
+        self.titans_resolve_list = []
+
+        self.cultist_stars = {'blue': 0, 'red': 0}
+        self.total_health_teams = {'blue': 0, 'red': 0}
+        self.galio_spawn_time = {'blue': 0, 'red': 0}
+        self.amounts = copy.deepcopy(origin_class.amounts)
+
+        self.divine_attack_list = []
+        self.divine_list = []
+        self.elderwood_list = {'blue': 0, 'red': 0}
+        self.spirit_list = []
+        self.duelist_helper_list = []
+        self.shade_helper_list = []
 
 def reset_global_variables():
     global blue

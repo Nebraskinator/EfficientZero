@@ -2,10 +2,9 @@ import math
 import Simulator.stats as stats
 import Simulator.items as items
 
-coordinates = [[None] * 7 for _ in range(8)]
+#coordinates = [[None] * 7 for _ in range(8)]
 
-
-def action(champion):
+def action(champion, cv):
     if len(champion.enemy_team()) > 0 and not champion.stunned:
 
         # if ability cast is 'global', cast it right away
@@ -20,13 +19,13 @@ def action(champion):
         if champion.idle and len(attackable_enemies) > 0:
             # if not target --> find one
             if champion.target is None:
-                find_target(champion)
+                find_target(champion, cv)
             if champion.target:
                 d = distance(champion, champion.target, True)
                 # chase max one tile. if target is further away than one tile, find a new target
                 # the new target is automatically the closest one
                 if d >= champion.range + 2:
-                    find_target(champion)
+                    find_target(champion, cv)
                 d = distance(champion, champion.target, True)
 
                 # if target is not in range --> move (chase max 1 tile)
@@ -34,7 +33,7 @@ def action(champion):
                     if champion.millis() == 0:
                         pass
                     else:
-                        path = find_path(champion, champion.target.y, champion.target.x)
+                        path = find_path(champion, champion.target.y, champion.target.x, cv)
                         # move only if there's a way to get to the target
                         if path:
                             champion.move(path[0][0], path[0][1])
@@ -42,7 +41,7 @@ def action(champion):
                         # if there's no way to get to the target, but this champion has a longer range
                         # --> move one step closer
                         elif champion.range > 1:
-                            m = find_next_ranged_move(champion)
+                            m = find_next_ranged_move(champion, cv)
                             if m:
                                 champion.move(m[0], m[1])
 
@@ -60,12 +59,12 @@ def action(champion):
 
 # find a tile that takes the champion one step closer to the target
 # doesn't require a clear path to the target (like 'find_path' does)
-def find_next_ranged_move(champion):
+def find_next_ranged_move(champion, cv):
     neighbors_original = find_neighbors(champion.y, champion.x)
     neighbors = []
 
     for n in neighbors_original:
-        if not (coordinates[n[0]][n[1]] and coordinates[n[0]][n[1]] is not champion.target):
+        if not (cv.coordinates[n[0]][n[1]] and cv.coordinates[n[0]][n[1]] is not champion.target):
             neighbors.append(n)
 
     for n in neighbors:
@@ -89,7 +88,7 @@ def find_next_ranged_move(champion):
 # 1. execute using the rules three lines above
 # 2. if there are two neighbor tiles with same distance to the target, use the second one instaed of the first one.
 # this sometimes brings a different, better result. a big clumsy way of doing it, but more or less does the job.
-def find_path(champion, target_y, target_x, use_second=False, secondary_result=[]):
+def find_path(champion, target_y, target_x, cv, use_second=False, secondary_result=[]):
     path = []
     visited = []
     start_y = champion.y
@@ -107,7 +106,7 @@ def find_path(champion, target_y, target_x, use_second=False, secondary_result=[
         neighbors = []
         # add into the neighbor -list if the tile is not visited, it's free or it contains the campion's target
         for n in neighbors_original:
-            if not (coordinates[n[0]][n[1]] and coordinates[n[0]][n[1]] is not champion.target) or n in visited:
+            if not (cv.coordinates[n[0]][n[1]] and cv.coordinates[n[0]][n[1]] is not champion.target) or n in visited:
                 neighbors.append(n)
 
         for n in neighbors:
@@ -131,7 +130,7 @@ def find_path(champion, target_y, target_x, use_second=False, secondary_result=[
         visited.append([neighbors[0][0], neighbors[0][1]])
 
     if not use_second:
-        return find_path(champion, target_y, target_x, True, path)
+        return find_path(champion, target_y, target_x, cv, True, path)
 
     else:
         if secondary_result and path:
@@ -166,7 +165,7 @@ def find_neighbors(y, x, allow_outside_map=False):
     return neighbors
 
 
-def find_target(c):
+def find_target(c, cv):
     c_coords = to_cube_coords(c)
     old_target = c.target
 
@@ -174,7 +173,7 @@ def find_target(c):
 
     # roll through everyone
     # find the closest one
-    for y in coordinates:
+    for y in cv.coordinates:
         for x in y:
             if x is not None and x.team is not c.team and x.champion and x.health > 0:
                 x_coords = to_cube_coords(x)
@@ -194,8 +193,8 @@ def find_target(c):
 
 
 # find enemies and sort them by distance
-def find_enemies(champion):
-    c = coordinates
+def find_enemies(champion, cv):
+    c = cv.coordinates
     enemies = []
     for i, a_line in enumerate(c):
         for j, col in enumerate(a_line):
@@ -207,9 +206,9 @@ def find_enemies(champion):
 
 
 # find enemies in x distance of a coordinate
-def enemies_in_distance(champion, target_y, target_x, radius):
+def enemies_in_distance(champion, target_y, target_x, radius, cv):
     enemies_within = []
-    c = coordinates
+    c = cv.coordinates
     for i, line in enumerate(c):
         for j, col in enumerate(line):
             if (c[i][j] and
@@ -224,7 +223,6 @@ def enemies_in_distance(champion, target_y, target_x, radius):
 # find hexes that are within a certain distance
 def hexes_in_distance(target_y, target_x, radius, allow_outside_map=False):
     hexes_within = []
-    c = coordinates
     for i in range(-100, 100):
         for j in range(-100, 100):
             if allow_outside_map or (i >= 0 and i <= 7 and j >= 0 and j <= 6):
@@ -401,7 +399,7 @@ def leap_to_back_line(champion, data):
     target_hex_index = 0
     while target_hex_index < len(target_hex):
         # do the actual leaping
-        if target_hex and not coordinates[target_hex[target_hex_index][0]][target_hex[target_hex_index][1]]:
+        if target_hex and not champion.cv.coordinates[target_hex[target_hex_index][0]][target_hex[target_hex_index][1]]:
             champion.print(' leaps')
             champion.move(target_hex[target_hex_index][0], target_hex[target_hex_index][1], True)
             champion.clear_que_idle()

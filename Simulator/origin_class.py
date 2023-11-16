@@ -10,10 +10,6 @@ import time
 
 starting_time = time.time_ns()
 
-cultist_stars = {'blue': 0, 'red': 0}  # chosen's stars counts as double
-total_health_teams = {'blue': 0, 'red': 0}
-galio_spawn_time = {'blue': 0, 'red': 0}
-
 amounts = {
     'cultist': {'blue': 0, 'red': 0},           # 0  in champion.py: champion object, champion.champion_functions.py
     'divine': {'blue': 0, 'red': 0},            # 1  in champion.py: spell(), champion_functions.py: attack()
@@ -73,16 +69,16 @@ team_traits = {
 }
 
 # Number of each class
-game_compositions = [team_traits.copy() for _ in range(config.NUM_PLAYERS)]
+#game_compositions = [team_traits.copy() for _ in range(config.NUM_PLAYERS)]
 
 # Tier rank
-game_comp_tiers = [team_traits.copy() for _ in range(config.NUM_PLAYERS)]
+#game_comp_tiers = [team_traits.copy() for _ in range(config.NUM_PLAYERS)]
 
 
-def chosen(champion, value):
+def chosen(champion, value, cv):
     if value:
         if champion.team:
-            amounts[value][champion.team] += 1
+            cv.amounts[value][champion.team] += 1
             stat_change = list(filter(lambda x: x['champion'] == champion.name, origin_class_stats.chosen))[0]
             if stat_change['stat'] == 'maxmana':
                 items.change_stat(champion, stat_change['stat'],
@@ -94,17 +90,16 @@ def chosen(champion, value):
     return False
 
 
-def total_health(blue, red):
-    global total_health_teams
+def total_health(blue, red, cv):
     for b in blue:
-        total_health_teams['blue'] += b.health
+        cv.total_health_teams['blue'] += b.health
     for r in red:
-        total_health_teams['red'] += r.health
+        cv.total_health_teams['red'] += r.health
 
 
-def get_origin_class_tier(team, trait):
+def get_origin_class_tier(team, trait, cv):
     try:
-        amount = amounts[trait][team]
+        amount = cv.amounts[trait][team]
         amount_limits = origin_class_stats.tiers[trait]
 
         if trait != 'ninja':
@@ -127,8 +122,8 @@ def get_origin_class_tier(team, trait):
 
 
 # calculate the amount of traits per team and mark them to the 'amounts' -dict
-def total_origin_class(blue_champion, red_champion):
-    traits = list(amounts.keys())
+def total_origin_class(blue_champion, red_champion, cv):
+    traits = list(cv.amounts.keys())
 
     blue_team = blue_champion.own_team()
     red_team = red_champion.own_team()
@@ -140,20 +135,19 @@ def total_origin_class(blue_champion, red_champion):
         for c in team:                 # champions in teams
             for t in traits:           # traits
                 if t in champion_data[c.name] and not [team, t, c.name] in counted:
-                    amounts[t][c.team] += 1
+                    cv.amounts[t][c.team] += 1
                     counted.append([team, t, c.name])
 
     for t in traits:
         if t in origin_class_stats.initiate_traits:
-            eval(t)(blue_team, red_team)  # origin_class_stats.py: initiate_traits
+            eval(t)(blue_team, red_team, cv)  # origin_class_stats.py: initiate_traits
 
-    calculate_cultist_stars(blue_team, red_team)
+    calculate_cultist_stars(blue_team, red_team, cv)
 
 
 def team_origin_class(player):
     team = player.board
-    for trait in game_compositions[player.player_num]:
-        game_compositions[player.player_num][trait] = 0
+    game_compositions = [team_traits.copy() for _ in range(config.NUM_PLAYERS)]
     unique_champions = []
     for x in range(0, 7):
         for y in range(0, 4):
@@ -162,6 +156,8 @@ def team_origin_class(player):
                     unique_champions.append(team[x][y].name)
                     for trait in team[x][y].origin:
                         game_compositions[player.player_num][trait] += 1
+                if team[x][y].chosen and team[x][y].chosen in game_compositions[player.player_num]:
+                    game_compositions[player.player_num][team[x][y].chosen] += 1
     return game_compositions[player.player_num]
 
 
@@ -175,26 +171,26 @@ def is_trait(champion, trait):
     return False
 
 
-def calculate_cultist_stars(blue, red):
+def calculate_cultist_stars(blue, red, cv):
     teams = ['blue', 'red']
     for t in teams:
         for c in eval(t):
             if is_trait(c, 'cultist'):
-                cultist_stars[t] += c.stars
+                cv.cultist_stars[t] += c.stars
                 if c.chosen == 'cultist':
-                    cultist_stars[t] += 1
+                    cv.cultist_stars[t] += 1
 
 
-def cultist(champion, team):
-    galio_stars = get_origin_class_tier(team, 'cultist')
-    galio_spawn_time[team] = champion_functions.MILLIS()
+def cultist(champion, team, cv):
+    galio_stars = get_origin_class_tier(team, 'cultist', cv)
+    cv.galio_spawn_time[team] = champion_functions.MILLIS(champion.cv)
     # find the spawn point
     # which free hex has the lowest total distance to all enemy units
     enemies = champion.enemy_team()
 
     all_hexes = field.hexes_in_distance(0, 0, 20)
     current_spawn_hex = [[], 9999]
-    coords = field.coordinates
+    coords = cv.coordinates
 
     for h in all_hexes:
         total_distance = 0
@@ -207,13 +203,13 @@ def cultist(champion, team):
 
     current_spawn_hex = current_spawn_hex[0]
 
-    champion.spawn('galio', galio_stars, current_spawn_hex[0], current_spawn_hex[1])
+    champion.spawn('galio', galio_stars, current_spawn_hex[0], current_spawn_hex[1], cv=champion.cv)
     galio = list(filter(lambda x: x.name == 'galio', champion.own_team()))[0]
     galio.print(' spawns')
     entry_range = stats.ABILITY_SECONDARY_RADIUS['galio'][galio.stars]
 
     # entry ability
-    enemies_in_range = field.enemies_in_distance(galio, galio.y, galio.x, entry_range)
+    enemies_in_range = field.enemies_in_distance(galio, galio.y, galio.x, entry_range, cv)
     for e in enemies_in_range:
         galio.spell(e, stats.ABILITY_SECONDARY_DMG['galio'][galio.stars])
 
@@ -223,7 +219,7 @@ def cultist(champion, team):
 
 
 # galio crits (directed from the attack function)
-def cultist_helper(champion, damage, target):
+def cultist_helper(champion, damage, target, cv):
 
     # reverting the armor effect
     if target.armor >= 0:
@@ -231,43 +227,43 @@ def cultist_helper(champion, damage, target):
     else:
         damage = damage / (2 - 100 / (100 - target.armor))
 
-    targets = field.enemies_in_distance(champion, target.y, target.x, 1)
+    targets = field.enemies_in_distance(champion, target.y, target.x, 1, cv)
     for t in targets:
         champion.spell(t, damage)
 
 
-divine_attack_list = []  # [champion, attack_amount]
-divine_list = []  # champion, champion, champion
+#divine_attack_list = []  # [champion, attack_amount]
+#divine_list = []  # champion, champion, champion
 
 
-def divine(champion, target, attack):
+def divine(champion, target, attack, cv):
 
     # counting the x attacks for ascending
-    if is_trait(champion, 'divine') and get_origin_class_tier(champion.team, 'divine') > 0 \
-            and not champion in divine_list:
+    if is_trait(champion, 'divine') and get_origin_class_tier(champion.team, 'divine', cv) > 0 \
+            and not champion in cv.divine_list:
         if attack:
-            divine_tier = get_origin_class_tier(champion.team, 'divine')
+            divine_tier = get_origin_class_tier(champion.team, 'divine', cv)
 
-            if len(list(filter(lambda x: x[0] == champion, divine_attack_list))) == 0:
-                divine_attack_list.append([champion, 1])
+            if len(list(filter(lambda x: x[0] == champion, cv.divine_attack_list))) == 0:
+                cv.divine_attack_list.append([champion, 1])
             else:
-                for i, d in enumerate(divine_attack_list):
+                for i, d in enumerate(cv.divine_attack_list):
                     if d[0] == champion:
-                        divine_attack_list[i][1] += 1
+                        cv.divine_attack_list[i][1] += 1
 
-                        if divine_attack_list[i][1] == origin_class_stats.threshold['divine']:
-                            divine_helper(champion, divine_tier)
+                        if cv.divine_attack_list[i][1] == origin_class_stats.threshold['divine']:
+                            divine_helper(champion, divine_tier, cv)
 
     # following target hp (directed here from spells and attacks)
-    if is_trait(target, 'divine') and get_origin_class_tier(target.team, 'divine') > 0 and not target in divine_list:
-        divine_tier = get_origin_class_tier(target.team, 'divine')
+    if is_trait(target, 'divine') and get_origin_class_tier(target.team, 'divine', cv) > 0 and not target in cv.divine_list:
+        divine_tier = get_origin_class_tier(target.team, 'divine', cv)
         if(target.health / target.max_health < 0.5):
-            divine_helper(target, divine_tier)
+            divine_helper(target, divine_tier, cv)
 
 
 # ascend champion
-def divine_helper(champion, divine_tier):
-    divine_list.append(champion)
+def divine_helper(champion, divine_tier, cv):
+    cv.divine_list.append(champion)
     champion.print(' ascends for {} seconds [divine]'.format(origin_class_stats.length['divine'][divine_tier] / 1000))
 
     items.change_stat(champion, 'stunned', False, 'divine')
@@ -283,12 +279,12 @@ def divine_helper(champion, divine_tier):
     champion.add_que('change_stat', origin_class_stats.length['divine'][divine_tier], None, 'deal_bonus_true_damage', 0)
 
 
-def dusk(blue_team, red_team):
+def dusk(blue_team, red_team, cv):
 
     teams = {'blue': blue_team, 'red': red_team}
 
     for t in ['blue', 'red']:
-        tier = get_origin_class_tier(t, 'dusk')
+        tier = get_origin_class_tier(t, 'dusk', cv)
         if tier > 0:
             for c in teams[t]:
                 items.change_stat(c, 'SP', c.SP + origin_class_stats.SP_secondary['dusk'][tier], 'dusk')
@@ -296,41 +292,41 @@ def dusk(blue_team, red_team):
                     items.change_stat(c, 'SP', c.SP + origin_class_stats.SP['dusk'][tier], 'dusk')
 
 
-elderwood_list = {'blue': 0, 'red': 0}
+#elderwood_list = {'blue': 0, 'red': 0}
 
 
-def elderwood(blue_team, red_team):
+def elderwood(blue_team, red_team, cv):
 
     teams = {'blue': blue_team, 'red': red_team}
     for t in ['blue', 'red']:
-        tier = get_origin_class_tier(t, 'elderwood')
-        if tier > 0 and elderwood_list[t] < 5:
+        tier = get_origin_class_tier(t, 'elderwood', cv)
+        if tier > 0 and cv.elderwood_list[t] < 5:
             for c in teams[t]:
                 if is_trait(c, 'elderwood'):
                     items.change_stat(c, 'AD', c.AD + origin_class_stats.AD['elderwood'][tier], 'elderwood')
                     items.change_stat(c, 'SP', c.SP + origin_class_stats.SP['elderwood'][tier], 'elderwood')
                     items.change_stat(c, 'MR', c.MR + origin_class_stats.MR['elderwood'][tier], 'elderwood')
                     items.change_stat(c, 'armor', c.armor + origin_class_stats.armor['elderwood'][tier], 'elderwood')
-            elderwood_list[t] += 1
+            cv.elderwood_list[t] += 1
 
 
-def enlightened(blue_team, red_team):
+def enlightened(blue_team, red_team, cv):
     teams = {'blue': blue_team, 'red': red_team}
 
     for t in ['blue', 'red']:
-        tier = get_origin_class_tier(t, 'enlightened')
+        tier = get_origin_class_tier(t, 'enlightened', cv)
         if(tier > 0):
             for c in teams[t]:
                 if(is_trait(c, 'enlightened')):
                     items.change_stat(c, 'mana_generation', origin_class_stats.mana_generation['enlightened'][tier], 'enlightened')
 
 
-def exile(blue_team, red_team):
+def exile(blue_team, red_team, cv):
     teams = {'blue': blue_team, 'red': red_team}
 
-    coords = field.coordinates
+    coords = cv.coordinates
     for t in ['blue', 'red']:
-        tier = get_origin_class_tier(t, 'exile')
+        tier = get_origin_class_tier(t, 'exile', cv)
         if tier > 0:
             for c in teams[t]:
                 if is_trait(c, 'exile'):
@@ -355,11 +351,11 @@ def exile(blue_team, red_team):
                             items.change_stat(c, 'lifesteal', lifesteal, 'exile')
 
 
-def ninja(blue_team, red_team):
+def ninja(blue_team, red_team, cv):
     teams = {'blue': blue_team, 'red': red_team}
 
     for t in ['blue', 'red']:
-        tier = get_origin_class_tier(t, 'ninja')
+        tier = get_origin_class_tier(t, 'ninja', cv)
         if(tier > 0):
             for c in teams[t]:
                 if(is_trait(c, 'ninja')):
@@ -368,22 +364,21 @@ def ninja(blue_team, red_team):
                     items.change_stat(c, 'SP', c.SP + origin_class_stats.SP['ninja'][tier], 'ninja')
 
 
-spirit_list = [] # champion, champion, champion (the ones who have casted)
-def spirit(champion):
-    tier = get_origin_class_tier(champion.team, 'spirit')
-    if(tier > 0 and champion not in spirit_list):
+def spirit(champion, cv):
+    tier = get_origin_class_tier(champion.team, 'spirit', cv)
+    if(tier > 0 and champion not in cv.spirit_list):
         multiplier = origin_class_stats.AS['spirit'][tier]
         own_team = champion.own_team()
         for o in own_team:
             items.change_stat(o, 'AS', o.AS * (champion.maxmana * multiplier / 100 + 1))
-        spirit_list.append(champion)
+        cv.spirit_list.append(champion)
 
 
-def the_boss(champion):
+def the_boss(champion, cv):
     champion.done_situps = True
 
     own_team = champion.own_team()
-    coords = field.coordinates
+    coords = cv.coordinates
     if len(own_team) > 1:
         # set champion.champion = False
         # free the hex he's at
@@ -404,8 +399,8 @@ def the_boss(champion):
 
 
 # do sit-ups and return when needed
-def the_boss_helper(champion):
-    coords = field.coordinates
+def the_boss_helper(champion, cv):
+    coords = cv.coordinates
 
     if len(champion.own_team()) > 1:
         champion.print(' sit-up')
@@ -447,11 +442,11 @@ def the_boss_helper(champion):
         champion.add_que('execute_function', origin_class_stats.length['the_boss'], [the_boss_helper, {}])
 
 
-def warlord(blue_team, red_team):
+def warlord(blue_team, red_team, cv):
     teams = {'blue': blue_team, 'red': red_team}
 
     for t in ['blue', 'red']:
-        tier = get_origin_class_tier(t, 'warlord')
+        tier = get_origin_class_tier(t, 'warlord', cv)
         if tier > 0:
             for c in teams[t]:
                 if is_trait(c, 'warlord'):
@@ -469,11 +464,11 @@ def warlord(blue_team, red_team):
                     items.change_stat(c, 'SP', c.SP + SP_add, 'warlord')
 
 
-def adept(blue_team, red_team):
+def adept(blue_team, red_team, cv):
     teams = {'blue': blue_team, 'red': red_team}
 
     for t in ['blue', 'red']:
-        tier = get_origin_class_tier(t, 'adept')
+        tier = get_origin_class_tier(t, 'adept', cv)
         if tier > 0:
             enemies = teams[t][0].enemy_team()
             for e in enemies:
@@ -482,11 +477,11 @@ def adept(blue_team, red_team):
                           {'ezreal': origin_class_stats.AS['adept']})
 
 
-def assassin(blue_team, red_team):
+def assassin(blue_team, red_team, cv):
     teams = {'blue': blue_team, 'red': red_team}
 
     for t in ['blue', 'red']:
-        tier = get_origin_class_tier(t, 'assassin')
+        tier = get_origin_class_tier(t, 'assassin', cv)
         for c in teams[t]:
             if is_trait(c, 'assassin'):
 
@@ -498,17 +493,17 @@ def assassin(blue_team, red_team):
 
                 items.change_stat(c, 'champion', False, '  assassin')
                 items.change_stat(c, 'stunned', True, '  assassin')
-                field.coordinates[c.y][c.x] = None
+                cv.coordinates[c.y][c.x] = None
                 # allows the units to "swap" places instead of treating the hex as taken
 
                 c.add_que('execute_function', config.LEAP_DELAY, [field.leap_to_back_line, {'trait': '  assassin'}])
 
 
-def brawler(blue_team, red_team):
+def brawler(blue_team, red_team, cv):
     teams = {'blue': blue_team, 'red': red_team}
 
     for t in ['blue', 'red']:
-        tier = get_origin_class_tier(t, 'brawler')
+        tier = get_origin_class_tier(t, 'brawler', cv)
         if tier > 0:
             for c in teams[t]:
                 if is_trait(c, 'brawler'):
@@ -518,8 +513,8 @@ def brawler(blue_team, red_team):
                     items.change_stat(c, 'health', c.health + origin_class_stats.health['brawler'][tier], 'brawler')
 
 
-def dazzler(champion, target):
-    tier = get_origin_class_tier(champion.team, 'dazzler')
+def dazzler(champion, target, cv):
+    tier = get_origin_class_tier(champion.team, 'dazzler', cv)
 
     if tier > 0:
         # self.AD_reduction_cc = False #ludens counts dazzler ad reduction as crowd control so adding a flag for dat
@@ -539,11 +534,11 @@ def dazzler(champion, target):
 
 
 # change the movement speed of the units
-def duelist(blue_team, red_team):
+def duelist(blue_team, red_team, cv):
     teams = {'blue': blue_team, 'red': red_team}
 
     for t in ['blue', 'red']:
-        tier = get_origin_class_tier(t, 'duelist')
+        tier = get_origin_class_tier(t, 'duelist', cv)
         if tier > 0:
             for c in teams[t]:
                 if is_trait(c, 'duelist'):
@@ -552,24 +547,21 @@ def duelist(blue_team, red_team):
                                       c.movement_delay * origin_class_stats.movement_delay['duelist'], 'duelist')
 
 
-# AS changes
-duelist_helper_list = []  # [champion, stacks]
 
+def duelist_helper(champion, cv):
 
-def duelist_helper(champion):
-
-    tier = get_origin_class_tier(champion.team, 'duelist')
+    tier = get_origin_class_tier(champion.team, 'duelist', cv)
     stacks = -1
     if tier > 0:
 
-        if len(list(filter(lambda x: x[0] == champion, duelist_helper_list))) == 0:
-            duelist_helper_list.append([champion, 1])
+        if len(list(filter(lambda x: x[0] == champion, cv.duelist_helper_list))) == 0:
+            cv.duelist_helper_list.append([champion, 1])
             stacks = 1
         else:
-            for i, d in enumerate(duelist_helper_list):
+            for i, d in enumerate(cv.duelist_helper_list):
                 if d[0] == champion:
-                    duelist_helper_list[i][1] += 1
-                    stacks = duelist_helper_list[i][1]
+                    cv.duelist_helper_list[i][1] += 1
+                    stacks = cv.duelist_helper_list[i][1]
 
         if stacks <= origin_class_stats.threshold['duelist']:
             end_AS = champion.AS * origin_class_stats.AS['duelist'][tier]
@@ -579,7 +571,7 @@ def duelist_helper(champion):
 
 
 # set the emperor to be the overlord of the statue thingy
-def emperor(blue_team, red_team):
+def emperor(blue_team, red_team, cv):
     ...
     # teams = {'blue': blue_team, 'red': red_team}
     #
@@ -597,10 +589,10 @@ def fortune():
 
 
 # is called from main() every x milliseconds
-def hunter(team):
+def hunter(team, cv):
     if team:
         ally_unit = team[0]
-        tier = get_origin_class_tier(ally_unit.team, 'hunter')
+        tier = get_origin_class_tier(ally_unit.team, 'hunter', cv)
         if tier > 0:
             for c in team:
                 enemy_team = ally_unit.enemy_team()
@@ -613,12 +605,12 @@ def hunter(team):
                     c.attack(bonus_damage, target, False, 'hunter')
 
 
-def keeper(blue_team, red_team):
+def keeper(blue_team, red_team, cv):
     teams = {'blue': blue_team, 'red': red_team}
-    coords = field.coordinates
+    coords = cv.coordinates
 
     for t in ['blue', 'red']:
-        tier = get_origin_class_tier(t, 'keeper')
+        tier = get_origin_class_tier(t, 'keeper', cv)
         if tier > 0:
             for c in teams[t]:
                 if is_trait(c, 'keeper'):
@@ -643,22 +635,22 @@ def keeper(blue_team, red_team):
                                       {'increase': True, 'expires': length})
 
 
-def mage(blue_team, red_team):
+def mage(blue_team, red_team, cv):
     teams = {'blue': blue_team, 'red': red_team}
 
     for t in ['blue', 'red']:
-        tier = get_origin_class_tier(t, 'mage')
+        tier = get_origin_class_tier(t, 'mage', cv)
         if tier > 0:
             for c in teams[t]:
                 if is_trait(c, 'mage'):
                     items.change_stat(c, 'SP', c.SP + (origin_class_stats.SP['mage'][tier] - 1), 'mage')
 
 
-def moonlight(blue_team, red_team):
+def moonlight(blue_team, red_team, cv):
     teams = {'blue': blue_team, 'red': red_team}
 
     for t in ['blue', 'red']:
-        tier = get_origin_class_tier(t, 'moonlight')
+        tier = get_origin_class_tier(t, 'moonlight', cv)
         if tier > 0:
             c_level = []
             for i, c in enumerate(teams[t]):
@@ -669,49 +661,46 @@ def moonlight(blue_team, red_team):
                 teams[t][c_level[i][2]].golden()
 
 
-def mystic(blue_team, red_team):
+def mystic(blue_team, red_team, cv):
     teams = {'blue': blue_team, 'red': red_team}
 
     for t in ['blue', 'red']:
-        tier = get_origin_class_tier(t, 'mystic')
+        tier = get_origin_class_tier(t, 'mystic', cv)
         if tier > 0:
             for c in teams[t]:
                 if is_trait(c, 'mystic'):
                     items.change_stat(c, 'MR', c.MR + origin_class_stats.MR['mystic'][tier], 'mystic')
 
 
-def shade(blue_team, red_team):
+def shade(blue_team, red_team, cv):
     teams = {'blue': blue_team, 'red': red_team}
 
     for t in ['blue', 'red']:
-        tier = get_origin_class_tier(t, 'shade')
+        tier = get_origin_class_tier(t, 'shade', cv)
         for c in teams[t]:
             if is_trait(c, 'shade'):
 
                 items.change_stat(c, 'champion', False, '  shade')
                 items.change_stat(c, 'stunned', True, '  shade')
-                field.coordinates[c.y][c.x] = None
+                cv.coordinates[c.y][c.x] = None
                 # allows the units to "swap" places instead of treating the hex as taken
 
                 c.add_que('execute_function', config.LEAP_DELAY, [field.leap_to_back_line, {'trait': '  shade'}])
 
 
-shade_helper_list = []  # [champion, attacks]
+def shade_helper(champion, cv):
+    if not champion.target: field.find_target(champion, cv)
 
-
-def shade_helper(champion):
-    if not champion.target: field.find_target(champion)
-
-    tier = get_origin_class_tier(champion.team, 'shade')
+    tier = get_origin_class_tier(champion.team, 'shade', cv)
     if tier > 0:
         attacks = 1
-        if len(list(filter(lambda x: x[0] == champion, shade_helper_list))) == 0:
-            shade_helper_list.append([champion, 1])
+        if len(list(filter(lambda x: x[0] == champion, cv.shade_helper_list))) == 0:
+            cv.shade_helper_list.append([champion, 1])
         else:
-            for i, s in enumerate(shade_helper_list):
+            for i, s in enumerate(cv.shade_helper_list):
                 if s[0] == champion:
-                    shade_helper_list[i][1] += 1
-                    attacks = shade_helper_list[i][1]
+                    cv.shade_helper_list[i][1] += 1
+                    attacks = cv.shade_helper_list[i][1]
 
         if attacks % 3 == 0:
             for c in champion.enemy_team():
@@ -724,8 +713,8 @@ def shade_helper(champion):
                     champion.spell(champion.target, origin_class_stats.damage['shade'][tier] / champion.SP)
 
 
-def sharpshooter(champion, target, damage, true_damage, spell):
-    tier = get_origin_class_tier(champion.team, 'sharpshooter')
+def sharpshooter(champion, target, damage, true_damage, spell, cv):
+    tier = get_origin_class_tier(champion.team, 'sharpshooter', cv)
     if tier > 0 and is_trait(champion, 'sharpshooter'):
 
         bounces = origin_class_stats.targets['sharpshooter'][tier]
@@ -757,11 +746,11 @@ def tormented():
     return
 
 
-def vanguard(blue_team, red_team):
+def vanguard(blue_team, red_team, cv):
     teams = {'blue': blue_team, 'red': red_team}
 
     for t in ['blue', 'red']:
-        tier = get_origin_class_tier(t, 'vanguard')
+        tier = get_origin_class_tier(t, 'vanguard', cv)
         if tier > 0:
             for c in teams[t]:
                 if is_trait(c, 'vanguard'):

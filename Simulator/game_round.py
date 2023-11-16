@@ -9,7 +9,7 @@ from Simulator.carousel import carousel
 
 
 class Game_Round:
-    def __init__(self, game_players, pool_obj, step_func_obj, log=True):
+    def __init__(self, game_players, pool_obj, step_func_obj, log=False):
         # Amount of damage taken as a base per round. First number is max round, second is damage
         self.ROUND_DAMAGE = [
             [3, 0],
@@ -299,14 +299,14 @@ class Game_Round:
 
 def log_to_file_start(write_log=True):
     if config.LOGMESSAGES and write_log:
-        with open('log.txt', "w") as out:
+        with open(write_log, "w") as out:
             out.write("Start of a new run")
             out.write('\n')
 
 
 def log_to_file(player, write_log=True):
     if config.LOGMESSAGES and write_log:
-        with open('log.txt', "a") as out:
+        with open(write_log, "a") as out:
             for line in player.log:
                 out.write(str(line))
                 out.write('\n')
@@ -315,7 +315,7 @@ def log_to_file(player, write_log=True):
 
 def log_end_turn(game_round, write_log=True):
     if config.LOGMESSAGES and write_log:
-        with open('log.txt', "a") as out:
+        with open(write_log, "a") as out:
             out.write("END OF ROUND " + str(game_round))
             out.write('\n')
 
@@ -323,7 +323,7 @@ def log_end_turn(game_round, write_log=True):
 # This one is for the champion and logging the battles.
 def log_to_file_combat(write_log=True):
     if config.LOGMESSAGES and config.LOG_COMBAT and write_log:
-        with open('log.txt', "a") as out:
+        with open(write_log, "a") as out:
             if len(champion.log) > 0:
                 if MILLIS() < 75000:
                     if champion.log[-1] == 'BLUE TEAM WON':

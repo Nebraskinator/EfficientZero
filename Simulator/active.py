@@ -10,30 +10,24 @@ def jhin_init(champion):
     champion.AS = stats.ATTACKS_PER_SECOND_FIXED[champion.name][champion.stars]
     champion.print(' {} {} --> {}'.format('AS', None, champion.AS))
 
-
-jhin_shots = []
-
-
 def jhin(champion, target):
-    global jhin_shots
-
     found = False
     index = -1
-    if len(jhin_shots) > 0:
-        for i, v in enumerate(jhin_shots):
+    if len(champion.cv.jhin_shots) > 0:
+        for i, v in enumerate(champion.cv.jhin_shots):
             if(v[0] == champion):
                 found = True
                 index = i
                 break
 
     if found:
-        jhin_shots[index][1] += 1
+        champion.cv.jhin_shots[index][1] += 1
     else:
-        jhin_shots.append([champion, 1])
-        index = len(jhin_shots) - 1
+        champion.cv.jhin_shots.append([champion, 1])
+        index = len(champion.cv.jhin_shots) - 1
 
-    if jhin_shots[index][1] == stats.ACTIVATE_EVERY_X_ATTACKS[champion.name]:
-        jhin_shots[index][1] = 0
+    if champion.cv.jhin_shots[index][1] == stats.ACTIVATE_EVERY_X_ATTACKS[champion.name]:
+        champion.cv.jhin_shots[index][1] = 0
         champion.print(' active triggered')
         # the last 100% of the damage is added in 'champion_functions.py: attack()'
         return {'damage': (stats.ACTIVE_DMG_PERCENT[champion.name][champion.stars] * champion.SP - 1) * champion.AD, 'true_damage': False, 'crit_random': None, 'dodge_random': None}
@@ -42,26 +36,23 @@ def jhin(champion, target):
         return {'damage': 0, 'true_damage': False, 'crit_random': None, 'dodge_random': None}
 
 
-kalista_targets = []
-
-
 def kalista(champion, target):
     if target:
         found = False
         index = -1
         # target = champion.target
-        if len(kalista_targets) > 0:
-            for i, v in enumerate(kalista_targets):
-                if(v[0] == champion, v[1] == target):
+        if len(champion.cv.kalista_targets) > 0:
+            for i, v in enumerate(champion.cv.kalista_targets):
+                if v[0] == champion and v[1] == target:
                     found = True
                     index = i
                     break
 
         if found:
-            kalista_targets[index][2] += 1
+            champion.cv.kalista_targets[index][2] += 1
         else:
-            kalista_targets.append([champion, target, 1])
-            index = len(kalista_targets) - 1
+            champion.cv.kalista_targets.append([champion, target, 1])
+            index = len(champion.cv.kalista_targets) - 1
 
         damage = champion.AD
         if target.armor >= 0:
@@ -69,7 +60,7 @@ def kalista(champion, target):
         else:
             damage = damage * (2 - 100/(100 - target.armor))
 
-        spear_damage = stats.ACTIVE_TARGET_HEALT_THRESHOLD[champion.name][champion.stars] * target.max_health * kalista_targets[index][2]
+        spear_damage = stats.ACTIVE_TARGET_HEALT_THRESHOLD[champion.name][champion.stars] * target.max_health * champion.cv.kalista_targets[index][2]
         spear_damage_original = spear_damage
         if target.MR >= 0:
             spear_damage = spear_damage * (100/(100+target.MR)) * champion.SP
@@ -91,28 +82,25 @@ def tahmkench_init(champion):
     champion.print(' {} {} --> {}'.format('damage_reduction', 0, champion.damage_reduction))
 
 
-vayne_targets = []
-
-
 def vayne(champion, target):
     found = False
     index = -1
     # target = champion.target
-    if len(vayne_targets) > 0:
-        for i, v in enumerate(vayne_targets):
+    if len(champion.cv.vayne_targets) > 0:
+        for i, v in enumerate(champion.cv.vayne_targets):
             if v[0] == champion and v[1] == target:
                 found = True
                 index = i
                 break
 
     if found:
-        vayne_targets[index][2] += 1
+        champion.cv.vayne_targets[index][2] += 1
     else:
-        vayne_targets.append([champion, target, 1])
-        index = len(vayne_targets) - 1
+        champion.cv.vayne_targets.append([champion, target, 1])
+        index = len(champion.cv.vayne_targets) - 1
 
-    if vayne_targets[index][2] == stats.ACTIVATE_EVERY_X_ATTACKS[champion.name]:
-        vayne_targets[index][2] = 0
+    if champion.cv.vayne_targets[index][2] == stats.ACTIVATE_EVERY_X_ATTACKS[champion.name]:
+        champion.cv.vayne_targets[index][2] = 0
         champion.print(' active triggered')
         return {'damage': stats.ACTIVE_DMG[champion.name][champion.stars] * champion.SP,
                 'true_damage': True, 'crit_random': None, 'dodge_random': None}
@@ -187,30 +175,25 @@ def warwick(champion, target):
         return {'damage': 0, 'true_damage': False, 'crit_random': None, 'dodge_random': None}
 
 
-zed_counter = []
-
-
 def zed(champion, target):
-    global zed_counter
-
     found = False
     index = -1
-    if len(zed_counter) > 0:
-        for i, v in enumerate(zed_counter):
+    if len(champion.cv.zed_counter) > 0:
+        for i, v in enumerate(champion.cv.zed_counter):
             if v[0] == champion:
                 found = True
                 index = i
                 break
 
     if found:
-        zed_counter[index][1] += 1
+        champion.cv.zed_counter[index][1] += 1
     else:
-        zed_counter.append([champion, 1])
-        index = len(zed_counter) - 1
+        champion.cv.zed_counter.append([champion, 1])
+        index = len(champion.cv.zed_counter) - 1
 
-    if zed_counter[index][1] == stats.ACTIVATE_EVERY_X_ATTACKS[champion.name] and champion.target:
+    if champion.cv.zed_counter[index][1] == stats.ACTIVATE_EVERY_X_ATTACKS[champion.name] and champion.target:
         champion.print(' active triggered')
-        zed_counter[index][1] = 0
+        champion.cv.zed_counter[index][1] = 0
 
         stolen_ad = champion.target.AD * stats.ACTIVE_STOLEN_AD[champion.name][champion.stars]
         

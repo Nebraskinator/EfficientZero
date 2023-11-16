@@ -34,7 +34,7 @@ def env():
 class TFT_Simulator(AECEnv):
     metadata = {"is_parallelizable": True, "name": "tft-set4-v0"}
 
-    def __init__(self, env_config, log=True):
+    def __init__(self, env_config, log=False):
         self.pool_obj = pool.pool()
         self.PLAYERS = {"player_" + str(player_id): player_class(self.pool_obj, player_id, self)
                         for player_id in range(config.NUM_PLAYERS)}
@@ -364,7 +364,8 @@ class TFT_Simulator(AECEnv):
         for player in self.PLAYERS:
             pass
 
-    def reset(self, seed=None, options=None):
+    def reset(self, seed=None, options=None, log=False):
+        self.log = log
         self.pool_obj = pool.pool()
         self.PLAYERS = {"player_" + str(player_id): player_class(self.pool_obj, player_id, self)
                         for player_id in range(config.NUM_PLAYERS)}
