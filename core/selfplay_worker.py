@@ -263,7 +263,7 @@ class DataWorker(object):
                     for i, env in enumerate(envs):
                         step_acting_agents.append([p for p in env.live_agents if taking_actions[i][p]])
                         
-                    tokens, temperatures = {}, []
+                    tokens, temperatures = [{} for _ in range(env_nums)], []
                     # stack obs for model inference
                     obs_to_stack = []
                     for i, env in enumerate(envs):
@@ -289,7 +289,7 @@ class DataWorker(object):
                         value_pool = network_output.value.reshape(-1).tolist()
                         chance_token_pool = network_output.chance_token_onehot.detach().cpu()
                         tree_nodes = 1
-                        if start_training and trained_steps >= value_training_start:
+                        if (start_training or self.config.resume_training) and trained_steps >= value_training_start:
                             tree_nodes = self.config.num_simulations
                         pool_size = self.config.action_space_size * (tree_nodes + 2)
                         roots = cytree.Roots(len(obs_to_stack), pool_size)
@@ -299,8 +299,7 @@ class DataWorker(object):
                         idx = 0
                         for i, env in enumerate(envs):
                             for p in step_acting_agents[i]:
-                                if i == 0:
-                                    tokens[p] = chance_token_pool[idx] # for logging
+                                tokens[i][p] = chance_token_pool[idx] # for logging
                                 a_mask = np.flatnonzero(action_masks[i][p])
                                 #noises.append(np.random.dirichlet([self.config.root_dirichlet_alpha] * np.sum(action_masks[p]).astype(int)).astype(np.float32).tolist())
                                 policy_logits_pool.append(network_output.policy_logits[idx, a_mask].astype(np.float32).tolist())
@@ -310,21 +309,23 @@ class DataWorker(object):
                         roots.prepare_no_noise(value_prefix_pool, value_pool, policy_logits_pool, action_mappings)
     
                         # do MCTS for a policy
-                        mcts.search(roots, model, hidden_state_roots, training_start=start_training and trained_steps >= value_training_start)
+                        mcts.search(roots, model, hidden_state_roots, training_start=(start_training or self.config.resume_training) and trained_steps >= value_training_start)
     
                         #roots_distributions = roots.get_distributions()
                         roots_values = roots.get_values()
                         roots_completed_values = roots.get_children_values(self.config.discount)
                         roots_improved_policy_probs = roots.get_policies(self.config.discount) # new policy constructed with completed Q in gumbel muzero
+                    #print({a: (round(v, 2), round(p, 2)) for a, v, p in zip(action_mappings[0], roots_completed_values[0], roots_improved_policy_probs[0])})
                     idx = 0
+
                     for i, env in enumerate(envs):                          
                         action, dists, vals = {}, {}, {}
                         for p in step_acting_agents[i]:    
-                            if self.config.use_priority and not self.config.use_max_priority and start_training:
+                            if self.config.use_priority and not self.config.use_max_priority and (start_training or self.config.resume_training):
                                 pred_values_lst[i][p].append(network_output.value[idx].item())
                                 search_values_lst[i][p].append(roots_values[idx])                              
                             if (start_training or self.config.resume_training) and trained_steps >= learned_agent_actions_start:
-                                search_stats, value, temperature = roots_improved_policy_probs[idx], float(np.max(roots_completed_values[idx])), float(temperatures[i][p])
+                                search_stats, value, temperature = roots_improved_policy_probs[idx], float(roots_values[idx]), float(temperatures[i][p])
                                 distributions = np.zeros(self.config.action_space_size)
                                 distributions[np.flatnonzero(action_masks[i][p])] = search_stats
                                 #action[p] = np.argmax(distributions)
@@ -346,7 +347,7 @@ class DataWorker(object):
                             if p not in step_acting_agents[i]:
                                 action[p] = 2090
 
-                        self.config.record_tokens(tokens, env)
+                        self.config.record_tokens(tokens[i], env)
                         self.config.record_best_actions(action, dists, env)                                       
                         obs, ori_reward, taking_action, done, action_mask = env.step(action)
                         taking_actions[i] = taking_action

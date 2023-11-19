@@ -44,7 +44,7 @@ class Player:
         #self.ai = PlayerAI(self)
         self.similarity_scorer = SimilarityScorer(self)
         self.similarity_score = 0
-        self.similarity_coeff = 0.0
+        self.similarity_coeff = 1.0
         self.max_similarity_reward = 300
         
 
@@ -85,7 +85,6 @@ class Player:
         self.exp_cost = 4
         self.exp_per_buy = 4
         self.round = 0
-        self.action_mask = np.zeros(56)
 
         # This could be in a config file, but we could implement something that alters the
         # Amount of gold required to level that differs player to player
@@ -142,7 +141,7 @@ class Player:
         self.item_reward = 0
         self.won_game_reward = 10
         self.prev_rewards = 0
-        self.damage_reward = 0
+        self.damage_reward = 1
         self.excess_gold_reward = 0
 
         # Everyone shares the pool object.
@@ -304,7 +303,7 @@ class Player:
         self.print("passing turn; no actions until next combat")
         
     """
-    Description - Used to flag player as passing turns until after next combat
+    Description - Take no actions, but update opponent board observations
     """
     # TODO: change self play to ignore passing players during MCTS
     def pass_action(self):
@@ -312,208 +311,163 @@ class Player:
         self.print("no action, updating opponent observations")
 
     """
-    Description - Single player step function to take actions
-    Inputs      - action: int
-                    0 - 27: board positions
-                    28 - 36: bench positions
-                    37 - 46: item_bench positions
-                    47 - 51: shop positions
-                    52: buy exp
-                    53: refresh shop
-                    54: pass turn
-                    >54: ignored
+    Description - Returns the first empty bench position, or -1 if the bench 
+                is full
     """
+    def get_empty_bench_slot(self):
+        for i in range(len(self.bench)):
+            if self.bench[i]:
+                return i
+        return -1
 
+    """
+    Description - Step function to take action
+    Inputs      - action: int
+    Notes       -   Action space can be considered a 14 x 4 x 31 matrix where
+                    the x and y coordinates designate a "from" position and the
+                    z coordinate designates the "to" position/action.
+                    The x, y coordinate system matches the positions used in
+                    the observation. This allows the use of 3d action space 
+                    mapping in a neural network, if desired.
+                    x, y, z = action // 31 // 4, action // 31 % 4, action % 31
+                    x, y: from position
+                    z: to position / action
+                    0 <= z < 28: to board position
+                    z == 28: to bench
+                    z == 29: sell
+                    z == 30: other (buy champ, refresh, etc)
+    """
     def take_action(self, action):
-        if 1 <= action <= 28:
-            t = action - 1
-            x, y = t % 7, t // 7
-            if self.selection:                                 
-                if self.selection['origin'] == 'item_bench':
-                    self.move_item_to_board(self.selection['coord'], x, y)
-                elif self.selection['origin'] == 'board':
-                    if [x, y] != self.selection['coord']:
-                        self.move_board_to_board(self.selection['coord'][0], self.selection['coord'][1], x, y)
-                        self.print("champions in play: "+str(self.num_units_in_play))
-                elif self.selection['origin'] == 'bench':
-                    self.move_bench_to_board(self.selection['coord'], x, y)
-                    self.print("champions in play: "+str(self.num_units_in_play))
-                else:
-                    self.reward += self.mistake_reward
-                    self.actionless_click('board')
-                self.clear_selection('board')
-            elif self.board[x][y]:
-                self.select_champion_or_item(self.board[x][y], 'board', [x, y])
-            else:
-                self.reward += self.mistake_reward
-                self.actionless_click('board')
-        elif 29 <= action <= 37:
-            x = action - 29
-            if self.selection:
-                if self.selection['origin'] == 'item_bench':
-                    self.move_item_to_bench(self.selection['coord'], x)
-                elif self.selection['origin'] == 'board':
-                    self.move_board_to_bench(self.selection['coord'][0], self.selection['coord'][1], x)
-                    self.print("champions in play: "+str(self.num_units_in_play))
-                elif self.selection['origin'] == 'bench':
-                    self.reward += self.mistake_reward
-                    self.actionless_click('bench')
-                self.clear_selection('bench')
-            elif self.bench[x]:
-                self.select_champion_or_item(self.bench[x], 'bench', x)
-            else:
-                self.reward += self.mistake_reward
-                self.actionless_click('bench')
-        elif 38 <= action <= 47:
-            x = action - 38
-            if self.selection: 
-                self.reward += self.mistake_reward                                
-                self.clear_selection('item bench')
-            elif self.item_bench[x]:
-                self.select_champion_or_item(self.item_bench[x], 'item_bench', x)
-            else:
-                self.reward += self.mistake_reward
-                self.actionless_click('item_bench')
-        elif 48 <= action <= 52:
-            if self.selection:
-                if self.selection['origin'] == 'board':
-                    self.sell_champion(self.selection['selected'], field=True)
-                    self.print("champions in play: "+str(self.num_units_in_play))
-                elif self.selection['origin'] == 'bench':
-                    self.sell_from_bench(self.selection['coord'])
-                    self.print("champions in play: "+str(self.num_units_in_play))
-                elif self.selection['origin'] == 'item_bench':
-                    self.reward += self.mistake_reward
-                    self.actionless_click('shop')
-                self.clear_selection('shop')
-            else:
-                x = action - 48
-                success = False
-                if not self.shop[x]:
-                    self.reward += self.mistake_reward
-                    self.actionless_click('shop')
-                if self.shop[x] and self.shop[x].endswith("_c"):
-                    c_shop = self.shop[x].split('_')
-                    a_champion = champion.champion(c_shop[0], chosen=c_shop[1], itemlist=[])
-                    success = self.buy_champion(a_champion)
-                    self.print("champions in play: "+str(self.num_units_in_play))
-                elif self.shop[x]:
-                    a_champion = champion.champion(self.shop[x])
-                    success = self.buy_champion(a_champion)
-                    self.print("champions in play: "+str(self.num_units_in_play))
-                if success:
-                    self.shop[x] = None
-        elif action == 53:
-            if self.refresh():
-                self.shop = self.pool_obj.sample(self, 5)
-                self.printShop(self.shop)
-        elif action == 54:
-            self.buy_exp()
-        elif action == 55:
-            exp_to_level = 0
-            if self.level < self.max_level:
-                exp_to_level = self.level_costs[self.level] - self.exp
-                num_buys = math.ceil(exp_to_level / self.exp_per_buy)
-                self.buy_exp(num_buys)
-        elif action == 0:
-            self.pass_action()
-        self.actions_taken_this_round += 1
-
-    def take_action_single(self, action):
         self.action_history.append(action)
-        x, y, z = action // 38 // 4, action // 38 % 4, action % 38
+        x, y, z = action // 31 // 4, action // 31 % 4, action % 31
+        flat_x = x*4 + y
         self.print("action: {}, x: {}, y: {}, z: {}".format(action, x, y, z))
+        
+        # from board positions
         if x < 7:
             if self.board[x][y]:
+                # board to board
                 if z < 28:
                     dest_x, dest_y = z // 4, z % 4
                     if x != dest_x or y != dest_y:
                         self.move_board_to_board(x, y, dest_x, dest_y)
-                elif z < 37:
-                    x_bench = z - 28
-                    self.move_board_to_bench(x, y, x_bench)
-                else:
+                # board to bench
+                elif z == 28:
+                    x_bench = self.get_empty_bench_slot()
+                    if x_bench >= 0:
+                        self.move_board_to_bench(x, y, x_bench)
+                # sell from board
+                elif z == 29:
                     self.sell_champion(self.board[x][y], field=True)
-        elif 7 <= x <= 9 and (x-7) * 4 + y < 9:
+        
+        # from bench positions
+        elif flat_x <= 36:
             x_bench = (x-7) * 4 + y
             if x_bench < len(self.bench) and self.bench[x_bench]:
+                # bench to board
                 if z < 28:
                     dest_x, dest_y = z // 4, z % 4
                     self.move_bench_to_board(x_bench, dest_x, dest_y)
-                elif z < 37:
-                    dest_x = z - 28
-                    if x_bench != dest_x:
-                        self.move_bench_to_bench(x_bench, dest_x)
-                else:
-                    self.sell_from_bench(x_bench)      
-        elif 9 <= x <= 10 and (x-9) * 4 + y - 1 < 5:
+                # sell from bench
+                elif z == 29:
+                    self.sell_from_bench(x_bench)     
+                    
+        # from shop positions
+        elif flat_x <= 41:
             x_shop = (x-9) * 4 + y - 1
             success = False
             if not self.shop[x_shop]:
                 self.reward += self.mistake_reward
                 self.actionless_click('shop')
+            # buy chosen champion
             elif self.shop[x_shop] and self.shop[x_shop].endswith("_c"):
                 c_shop = self.shop[x_shop].split('_')
                 a_champion = champion.champion(c_shop[0], chosen=c_shop[1], itemlist=[])
                 success = self.buy_champion(a_champion)
                 self.print("champions in play: "+str(self.num_units_in_play))
+            # buy champion
             elif self.shop[x_shop]:
                 a_champion = champion.champion(self.shop[x_shop])
                 success = self.buy_champion(a_champion)
                 self.print("champions in play: "+str(self.num_units_in_play))
+            # clear shop if successful
             if success:
                 #self.reward += 1
                 self.shop[x_shop] = None
-        elif 10 <= x <= 12:
+        # from item bench positions
+        elif x < 13:
             x_itembench = (x-10) * 4 + y - 2
             if self.item_bench[x_itembench]:
+                # item bench to board
                 if z < 28:
                     dest_x, dest_y = z // 4, z % 4
                     self.move_item_to_board(x_itembench, dest_x, dest_y)
-                elif z < 37:
-                    dest_x = z - 28
-                    self.move_item_to_bench(x_itembench, dest_x)
-
-        elif x == 13 and y == 0 and self.round > 1:
+                    
+        # refresh
+        elif flat_x == 52:
             if self.refresh():
                 self.shop = self.pool_obj.sample(self, 5)
                 self.printShop(self.shop)
-        elif x == 13 and y == 1 and self.round > 1:
+                
+        # buy exp
+        elif flat_x == 53:
             self.buy_exp()
-
-        elif x == 13 and y == 3:
+            
+        # pass / update opponent observations
+        elif flat_x == 55:
             self.pass_action() 
         self.actions_taken_this_round += 1
-            
-    def generate_action_mask_single(self):
-        mask = np.zeros((14, 4, 38))
+
+    """
+    Description - Generates a flat action mask where 0 is an illegal action
+                and 1 is a legal action
+    Notes       - Legal actions are mapped to a 14 x 4 x 31 matrix, then
+                flattened into a linear mask. The linear mask can be used
+                to determine legal actions for MCTS. The mask can be reshaped
+                to a 3d action space and mapped to the observation positions
+                if desired.
+    """            
+    def generate_action_mask(self):
+        mask = np.zeros((14, 4, 31))
+        bench_full = self.bench_full()
+        
+        # find legal "from" positions on the board        
         for y in range(4):
             for x in range(7):
                 if self.board[x][y]:
-                    mask[x, y, :] = 1
+                    # all movements and selling actions legal
+                    mask[x, y, :-1] = 1
+                    # movement to same position is illegal
                     mask[x, y, x*4 + y] = 0
+                    # cannot move to bench if the bench is full
+                    if bench_full:
+                        mask[x, y, 28] = 0
+        # find legal "from" positions on the bench
         for x_bench in range(len(self.bench)):
             if self.bench[x_bench]:
                 x, y = x_bench // 4 + 7, x_bench % 4
+                # selling is legal
+                mask[x, y, 29] = 0
+                # any board "to" position is legal if the board is not full
                 if self.num_units_in_play < self.max_units:
-                    mask[x, y, :] = 1                    
-                else:
-                    mask[x, y, 28:] = 1                    
+                    mask[x, y, :28] = 1     
+                # otherwise occupied board "to" positions are legal (swap positions)
+                else:                 
                     for board_y in range(4):
                         for board_x in range(7):
                             if self.board[board_x][board_y]:
                                 mask[x, y, board_x*4 + board_y] = 1
-                mask[x, y, 28 + x_bench] = 0
+        # find legal "from" positions on the item bench
         for x_itembench, item in enumerate(self.item_bench):
             if item:
                 x, y = (x_itembench + 2) // 4 + 10, (x_itembench + 2) % 4 
+                # occupied board "to" positions are legal if the champion 
+                # does not have a full inventory
                 for board_y in range(4):
                     for board_x in range(7):
                         if self.board[board_x][board_y] and len(self.board[board_x][board_y].items) < 3:
                             mask[x, y, board_x*4 + board_y] = 1
-                for x_bench in range(len(self.bench)):
-                    if self.bench[x_bench] and len(self.bench[x_bench].items) < 3:
-                        mask[x, y, 28 + x_bench] = 1
+        # find legal "from" positions in the shop
         for x_shop in range(5):
             if self.shop[x_shop]:
                 x, y = (x_shop + 1) // 4 + 9, (x_shop + 1) % 4
@@ -523,116 +477,35 @@ class Player:
                 if self.shop[x_shop].endswith('_c'):
                     cost = cost_star_values[cost - 1][1]
                     level = 2
+                # can only purchase champion if there is sufficient gold
                 if cost <= self.gold:
-                    if self.bench_full():
+                    # cannot purchase while the bench is full unless the
+                    # champion can be goldened
+                    if bench_full:
                         for trip in self.triple_catalog:
                             if trip['name'] == champ_name and trip['num'] == 2 and trip['level'] == level:
-                                mask[x, y, 28] = 1
+                                mask[x, y, 30] = 1
                     else:
-                        mask[x, y, 28] = 1
+                        mask[x, y, 30] = 1
+        # can only buy xp if there is sufficient gold
         if self.gold >= 4:
-            mask[-1, 1, 0] = 1
+            mask[-1, 1, 30] = 1
+        # can only refresh the shop if there is sufficient gold
         if self.gold >= 2:
-            mask[-1, 0, 0] = 1
+            mask[-1, 0, 30] = 1
         '''
         exp_to_level = 0
         if self.level < self.max_level:
             exp_to_level = self.level_costs[self.level] - self.exp
             num_buys = math.ceil(exp_to_level / self.exp_per_buy)
             if self.gold >= num_buys * self.exp_cost:
-                mask[5, 6, 0] = 1
+                mask[-2, 3, 30] = 1
         '''
-        mask[-1, 3, 0] = 1
-        return np.reshape(mask, 14*4*38)
-        
-
-    def generate_action_mask(self):
-        mask = np.zeros(56)
-        for i in range(1, 29):
-            t = i-1
-            x, y = t % 7, t // 7            
-            if self.selection:
-                if self.selection['origin'] == 'board' and [x, y] != self.selection['coord']:
-                    mask[i] = 1
-                if self.selection['origin'] == 'bench':
-                    if self.board[x][y] and not self.board[x][y].target_dummy:
-                        mask[i] = 1
-                    elif self.num_units_in_play < self.max_units:
-                        mask[i] = 1
-                if self.selection['origin'] == 'item_bench':
-                    if self.board[x][y] and not self.board[x][y].target_dummy:
-                        if self.selection['selected'] == 'champion_duplicator':
-                            mask[i] = 1
-                        elif self.selection['selected'] in ['magnetic_remover','reforger']:
-                            if len(self.board[x][y].items) > 0:
-                                mask[i] = 1
-                        elif self.selection['selected'] == 'thieves_gloves':
-                            if len(self.board[x][y].items) == 0:
-                                mask[i] = 1
-                        elif self.selection['selected'] in ['kayn_shadowassassin','kayn_rhast']:
-                            if self.board[x][y].name == 'kayn':
-                                mask[i] = 1
-                        elif len(self.board[x][y].items) < 3:
-                            mask[i] = 1
-            elif self.board[x][y]:
-                mask[i] = 1
-        for i in range(29, 38):
-            x_bench = i - 29
-            if self.selection:
-                if self.selection['origin'] == 'board' and not self.selection['selected'].target_dummy:
-                    mask[i] = 1
-                if self.selection['origin'] == 'bench':
-                    continue
-                if self.selection['origin'] == 'item_bench':
-                    if self.bench[x_bench]:
-                        if self.selection['selected'] == 'champion_duplicator':
-                            mask[i] = 1
-                        elif self.selection['selected'] in ['magnetic_remover','reforger']:
-                            if len(self.bench[x_bench].items) > 0:
-                                mask[i] = 1
-                        elif self.selection['selected'] == 'thieves_gloves':
-                            if len(self.bench[x_bench].items) == 0:
-                                mask[i] = 1
-                        elif self.selection['selected'] in ['kayn_shadowassassin','kayn_rhast']:
-                            if self.bench[x_bench].name == 'kayn':
-                                mask[i] = 1
-                        elif len(self.bench[x_bench].items) < 3:
-                            mask[i] = 1
-            elif self.bench[x_bench]:
-                mask[i] = 1
-        for i in range(38, 48):
-            if not self.selection:
-                x = i - 38
-                if self.item_bench[x]:
-                    mask[i] = 1
-        for i in range(48, 53):
-            if self.selection:
-                if self.selection['origin'] in ['board', 'bench'] and not self.selection['selected'].target_dummy:
-                    mask[i] = 1
-            else:
-                x = i - 48
-                if self.shop[x]:
-                    cost = COST[self.shop[x].split('_')[0]]
-                    if self.shop[x].endswith('_c'):
-                        cost = cost_star_values[cost - 1][1]
-                    if cost <= self.gold:
-                        mask[i] = 1
-        if self.gold >= 4:
-            mask[54] = 1
-        if self.gold >= 2:
-            mask[53] = 1
-        exp_to_level = 0
-        if self.level < self.max_level:
-            exp_to_level = self.level_costs[self.level] - self.exp
-            num_buys = math.ceil(exp_to_level / self.exp_per_buy)
-            if self.gold >= num_buys * self.exp_cost:
-                mask[55] = 1
-        mask[0] = 1
-        self.action_mask = mask
-                
+        # can always pass
+        mask[-1, 3, 30] = 1
+        return np.reshape(mask, 14*4*31)
+                      
             
-                    
-
     """
     Description - Adds an item to the item_bench. 
     Inputs      - item: String
@@ -931,31 +804,73 @@ class Player:
                     i_index -= 2 * z
         self.chosen_vector = output_array
 
-    """
-    Description - Generates the observation space of the player. 
-                    Observation space is 12x12x164
-                    See "TFT AI Notes" Google sheet for full description
-    Inputs      - private: bool
-                    indicates if the observation is public or private                    
-    """
+
     
     
     def update_opponent_observations(self):
         self.opponent_public_obs = self.simulator.get_opponent_observations(self)
     
     def empty_observation(self):
-        item_encoding_size = 10
-        champ_encoding_size = 22
-        return np.zeros((14, 4, item_encoding_size*3 + champ_encoding_size + 2)).astype('uint8')
-    
+        return np.zeros((14, 4, 52)).astype('uint8')
+
+    """
+    Description - Generates the observation space of the player. 
+                    Observation space is 14 x 4 x 52
+                    
+                    [ bo  bo  bo  bo ]
+                    [ bo  bo  bo  bo ]
+                    [ bo  bo  bo  bo ]
+                    [ bo  bo  bo  bo ]
+                    [ bo  bo  bo  bo ]
+                    [ bo  bo  bo  bo ]
+                    [ bo  bo  bo  bo ]
+                    [ be  be  be  be ]
+                    [ be  be  be  be ]
+                    [ be  sh  sh  sh ]
+                    [ sh  sh  sh  ib ]
+                    [ ib  ib  ib  ib ]
+                    [ ib  ib  ib  ib ]
+                    [ fv  fv  fv  fv ]
+                    
+                bo = board positions
+                be = bench positions
+                sh = shop positions
+                ib = item bench positions
+                fv = flat game state vector reshaped
+                
+                The Z axis is used to encode unit, position, and previous action
+                information:
+                    0:3 = item ids - integer (input for embedding layer)
+                    3:10 = origin ids - integer (input for embedding layer)
+                    10 = champ id - integer (input for embedding layer)
+                    11:15 = stars - one_hot
+                    15:21 = cost - one_hot
+                    21:25 = location - one_hot
+                    25:29 = y - one_hot
+                    29:36 = x - one_hot
+                    37 = AD - float converted to uint (divide by 255. in network)
+                    38 = crit chance - float converted to uint (divide by 255. in network)
+                    39 = armor - float converted to uint (divide by 255. in network)
+                    40 = MR - float converted to uint (divide by 255. in network)
+                    41 = dodge - float converted to uint (divide by 255. in network)
+                    42 = health - float converted to uint (divide by 255. in network)
+                    43 = starting mana % - float converted to uint (divide by 255. in network)
+                    44 = max mana - float converted to uint (divide by 255. in network)
+                    45 = AS - float converted to uint (divide by 255. in network)
+                    46 = SP - float converted to uint (divide by 255. in network)
+                    47 = range - float converted to uint (divide by 255. in network)
+                    48 = opponent - int (1 for true)
+                    49 = self - int (1 for true)
+                    50 = previous action, "from"  - int (1 for true)
+                    51 = previous action, "to"  - int (1 for true)
+                    
+    Inputs      - private: bool
+                    indicates if the observation is public or private                    
+    """    
     def observation(self, private=False):
-        
-        # 161 length 
-        item_encoding_size = 10
-        champ_encoding_size = 22
+
         def encode_item(item):
-            encoding = np.zeros(10).astype('uint8')
-            encoding[0] = list(items).index(item) + 1
+            encoding = list(items).index(item) + 1
             
             mods = {'AD':0,
                     'crit_chance':0,
@@ -969,76 +884,101 @@ class Player:
                         
             for key, value in items[item].items():
                 if key == 'AD':
-                    encoding[1] = np.clip(value / 2, 0, 255)
+                    #encoding[1] = np.clip(value / 2, 0, 255)
                     mods[key] += value
                 elif key == 'crit_chance':
-                    encoding[2] = np.clip(value * 255, 0, 255)
+                    #encoding[2] = np.clip(value * 255, 0, 255)
                     mods[key] += value
                 elif key == 'armor':
-                    encoding[3] = np.clip(value, 0, 255)
+                    #encoding[3] = np.clip(value, 0, 255)
                     mods[key] += value
                 elif key == 'MR':
-                    encoding[4] = np.clip(value, 0, 255)
+                    #encoding[4] = np.clip(value, 0, 255)
                     mods[key] += value
                 elif key == 'dodge':
-                    encoding[5] = np.clip(value * 400, 0, 255)
+                    #encoding[5] = np.clip(value * 400, 0, 255)
                     mods[key] += value
                 elif key == 'health':
-                    encoding[6] = np.clip((value**0.5) * 3, 0, 255)
+                    #encoding[6] = np.clip((value**0.5) * 3, 0, 255)
                     mods[key] += value
                 elif key == 'mana':
-                    encoding[7] = np.clip(value * 2.5, 0, 255)
+                    #encoding[7] = np.clip(value * 2.5, 0, 255)
                     mods[key] += value
                 elif key == 'AS':
-                    encoding[8] = np.clip((value-1) * 2.5, 0, 255)
+                    #encoding[8] = np.clip((value-1) * 2.5, 0, 255)
                     mods[key] += value - 1
                 elif key == 'SP':
-                    encoding[9] = np.clip(value * 3, 0, 255)
+                    #encoding[9] = np.clip(value * 3, 0, 255)
                     mods[key] += value
                            
             return encoding, mods
         
-        def encode_champion(champ, locationID):
-            # items are 0:30, then champ stats
-            es = item_encoding_size * 3
-            encoding = np.zeros(es+champ_encoding_size).astype('uint8')         
-            
+        def encode_champion(champ, locationID, x, y, private):
+            # 0:3 = item ids
+            # 3:10 = origin ids
+            # 10 = champ id
+            # 11:15 = stars one_hot
+            # 15:21 = cost one_hot
+            # 21:25 = location one_hot
+            # 25:29 = y one_hot
+            # 29:36 = x one_hot
+            # 37 = AD
+            # 38 = crit chance
+            # 39 = armor
+            # 40 = MR
+            # 41 = dodge
+            # 42 = health
+            # 43 = starting mana %
+            # 44 = max mana
+            # 45 = AS
+            # 46 = SP
+            # 47 = range
+            # 48 = opponent
+            # 49 = self
+            encoding = np.zeros(50).astype('uint8')         
+            e_idx = 0
             origins = []
             mods = []
             for i, item in enumerate(champ.items):
                 if i >= 3:
                     break
-                s = i*item_encoding_size
                 e, m = encode_item(item)
-                encoding[s:s+item_encoding_size] = e
+                encoding[e_idx] = e
                 mods.append(m)
-                if item in trait_items.values():
-                    for o, t in trait_items.items():
-                        if t == item:
-                            origins.append(o)
-                            break
-            e_idx = es
+                e_idx += 1
+                
             if champ.chosen:
                 origins.append(champ.chosen)
-            
-            try:
-                c_index = list(COST.keys()).index(champ.name)
-            except:
-                c_index = 0
                 
-            encoding[e_idx] = c_index
-            e_idx += 1
-            # max of 7 
+            e_idx = 3
+            
+            # max of 7 origins (3 native, + 3 from items, +1 for chosen)
             for i, origin in enumerate(champ.origin + origins):
                 encoding[e_idx+i] = list(tiers).index(origin) + 1
             e_idx += 7
             
-            encoding[e_idx] = champ.stars - 1
+            try:
+                encoding[e_idx] = list(COST.keys()).index(champ.name)
+            except:
+                pass
             e_idx += 1
-            encoding[e_idx] = COST[champ.name]   
-            e_idx += 1
-            encoding[e_idx] = locationID
-            e_idx += 1
+            
+            encoding[e_idx + champ.stars - 1] = 255
+            e_idx += 4
+            
+            encoding[e_idx + COST[champ.name]] = 255   
+            e_idx += 6
+            
+            encoding[e_idx + locationID] = 255
+            e_idx += 4
+            
+            if y >= 0:
+                encoding[e_idx + y] = 255
+            e_idx += 4
+            
+            if x >= 0:
+                encoding[e_idx + x] = 255
+            e_idx += 7
             
             AD = champ.AD
             crit_chance = champ.crit_chance
@@ -1088,29 +1028,46 @@ class Player:
             encoding[e_idx] = np.clip(champ.range * 32, 0, 255)
             e_idx += 1
             
+            encoding[e_idx + private] = 255
+            
             return encoding
-                        
-        obs = np.zeros((14, 4, item_encoding_size*3 + champ_encoding_size)).astype('uint8')
+        
+        # generate an empty array for champion encoding
+        obs = np.zeros((14, 4, 50)).astype('uint8')
+        
+        # encode the board positions
         for y in range(0, 4):
             # IMPORTANT TO HAVE THE X INSIDE -- Silver is not sure why but ok.
             for x in range(0, 7):
                 if self.board[x][y]:                    
                     curr_champ = self.board[x][y]                        
-                    obs[x, y, :] = encode_champion(curr_champ, 1)
+                    obs[x, y, :] = encode_champion(curr_champ, 0, x, y, private)
                 else:
-                    obs[x, y, 40] = 1
-
+                    obs[x, y, 21 + 0] = 255
+                    obs[x, y, 25 + y] = 255
+                    obs[x, y, 29 + x] = 255
+                    obs[x, y, 48 + private] = 255
+        
+        # encode the bench positions
         for x_bench in range(len(self.bench)):
             x, y = x_bench // 4 + 7, x_bench % 4
             if self.bench[x_bench]:
                 curr_champ = self.bench[x_bench]                        
-                obs[x, y, :] = encode_champion(curr_champ, 2)
-
+                obs[x, y, :] = encode_champion(curr_champ, 1, -1, -1, private)
+            else:
+                obs[x, y, 21 + 1] = 255
+                obs[x, y, 48 + private] = 255                
+        
+        # encode the item bench positions
         for ind, item in enumerate(self.item_bench):
             x, y = (ind + 2) // 4 + 10, (ind + 2) % 4
             if item and list(items).index(item):
                 temp, _ = encode_item(item)
-                obs[x, y, :len(temp)] = temp
+                obs[x, y, 0] = temp
+            obs[x, y, 21 + 2] = 255
+            obs[x, y, 48 + private] = 255      
+            
+        # encode shop positions if the observation is private
         if private:
             for x_shop in range(len(self.shop)):
                 x, y = (x_shop + 1) // 4 + 9, (x_shop + 1) % 4
@@ -1120,11 +1077,17 @@ class Player:
                     if curr_champ.endswith('_c'):
                         curr_champ, origin = curr_champ.split('_')[:2]
                     curr_champ = champion.champion(curr_champ, chosen=origin)
-                    obs[x, y, :] = encode_champion(curr_champ, 3)     
+                    obs[x, y, :] = encode_champion(curr_champ, 3, -1, -1, private)  
+                else:
+                    obs[x, y, 21 + 3] = 255
+                    obs[x, y, 48 + private] = 255                    
         
+        # generate a flat vector representing the game state
         v_idx = 0
         max_o = 10
         vector = np.zeros(31).astype('uint8')
+        
+        # add origin ids (input for embedding layers)
         for i, origin in enumerate(tiers):
             if self.team_tiers[origin]:
                 vector[v_idx] = list(tiers).index(origin) + 1
@@ -1132,7 +1095,7 @@ class Player:
                 v_idx += 2
         
         v_idx = max_o*2
-        
+        # add game information
         vector[v_idx] = np.clip((self.level - 1) / 8 * 255, 0, 255)
         v_idx += 1
         vector[v_idx] = np.clip((self.max_units - 1) / 9 * 255, 0, 255)
@@ -1167,29 +1130,45 @@ class Player:
         v_idx += 1
 
 
-        # vector size is 576
+        # reshape flat vector and add it to the observation array
         for i in range(len(vector) // obs.shape[-1] + (1 if len(vector) % obs.shape[-1] else 0)):
             temp = vector[i*obs.shape[-1] : (i+1)*obs.shape[-1]]
             obs[-1, i, :len(temp)] = temp 
         
+        # encode the last action as a 14 x 4 x 2 array
+        # z == 0: "from" position
+        # z == 1: "to" position
         action_obs = np.zeros((14*4, 2)).astype('uint8')
         if private and self.action_history:
             a = self.action_history[-1]
-            x, y, z = a // 38 // 4, a // 38 % 4, a % 38
+            x, y, z = a // 31 // 4, a // 31 % 4, a % 31
+            flat_x = x*4 + y 
             action_obs[x*4 + y, 0] = 255
-            if x >= 13:
-                dest_x, dest_y = x, y
-            else:
+            if x < 7:
                 if z < 28:
                     dest_x, dest_y = z // 4, z % 4
-                elif z < 37:
-                    x_bench = z - 28
-                    dest_x, dest_y = x_bench // 4 + 7, x_bench % 4                   
-                else:
-                    dest_x, dest_y = 13, 2
-            action_obs[dest_x*4 + dest_y, 1] = 255
+                    action_obs[dest_x*4 + dest_y, 1] = 255
+                elif z == 28:
+                    action_obs[28:37, 1] = 255
+                elif z == 29:
+                    action_obs[-4:, 1] = 255
+            elif flat_x <= 36:
+                if z < 28:
+                    dest_x, dest_y = z // 4, z % 4
+                    action_obs[dest_x*4 + dest_y, 1] = 255
+                elif z == 29:
+                    action_obs[-4:, 1] = 255
+            elif flat_x <= 41:
+                action_obs[28:37, 1] = 255
+            elif x < 13:
+                if z < 28:
+                    dest_x, dest_y = z // 4, z % 4
+                    action_obs[dest_x*4 + dest_y, 1] = 255   
+            else:
+                action_obs[x*4 + y, 1] = 255
+
         action_obs = np.reshape(action_obs, (14, 4, 2))
-            
+        # concatentate the action encoding with the observation
         obs = np.concatenate([obs, action_obs], axis=-1)
         
         return obs
@@ -1720,7 +1699,7 @@ class Player:
                             if item in trait_items.values():
                                 for ori, it in trait_items.items():
                                     if item == it:
-                                        champ.origin.remote(ori)
+                                        champ.origin.remove(ori)
                                 self.update_team_tiers()
                             champ.items.remove(item)
                         self.item_bench[xBench] = None
@@ -2242,7 +2221,7 @@ class Player:
         #self.ai.reset_phase()
         self.selection = None
         if log:
-            #self.print("total similarity score: {}".format(round(self.similarity_score, 4)))
+            self.print("total similarity score: {}".format(round(self.similarity_score, 4)))
             #self.update_team_tiers()
             self.printComp()
             self.printBench()
@@ -2438,13 +2417,16 @@ class Player:
     Description - Called at the conclusion of the game to the player who won the game
     """
     def won_game(self):
-        self.reward += self.won_game_reward
-        self.print("+0 reward for winning game")
+        reward = self.won_game_reward * (1 - self.similarity_coeff)
+        self.reward += reward
+        self.print("+{} reward for winning game".format(reward))
         
     def lost_game(self, num_players):
+        reward = 0
         if num_players >= 4:
+            reward = self.won_game_reward * (1 - self.similarity_coeff)
             self.reward -= self.won_game_reward
-        self.print("-0 reward for losing game")
+        self.print("-{} reward for losing game".format(reward))
 
     """
     Description - Same as loss_round but if the opponent was a ghost
@@ -2493,6 +2475,8 @@ class Player:
                     return
                 self.gold += math.ceil(fortune_returns[self.fortune_loss_streak])
                 self.fortune_loss_streak = 0
+
+
 
 class Comp:
     def __init__(self, champions, positions, desired_items, chosen,
@@ -2637,7 +2621,7 @@ class SimilarityScorer:
                          []
                          ]
         self.comps.append(Comp(champs, positions, desired_items, ['divine','adept','hunter']))
-        '''
+        
         champs = ['vayne',
                 'thresh',
                 'lillia',
@@ -2926,7 +2910,26 @@ class SimilarityScorer:
                          ['ludens_echo','ludens_echo','quicksilver']
                          ]
         self.comps.append(Comp(champs, positions, desired_items, ['mage']))
-        '''
+        
+        champs = ['xinzhao',
+                'jarvaniv',
+                'garen',
+                'katarina',
+                'azir',
+                ]
+        desired_items = [[],
+                         [],
+                         [],
+                         ['hextech_gunblade', 'quicksilver', 'rabadons_deathcap'],
+                         ['spear_of_shojin', 'rapid_firecannon', 'guinsoos_rageblade'],
+                         ]
+        positions = [(4, 3),
+                     (5, 3),
+                     (6, 3),
+                     (4, 2),
+                     (6, 0),
+                     ]
+        self.comps.append(Comp(champs, positions, desired_items, ['warlord']))
         
         
         

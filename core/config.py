@@ -271,7 +271,7 @@ class BaseConfig(object):
         self.weight_decay = 1e-4
         self.momentum = 0.9
         self.lr_warm_up = lr_warm_up
-        self.lr_warm_step = int(self.training_steps * self.lr_warm_up)
+        self.lr_warm_step = lr_warm_up
         self.lr_init = lr_init
         self.lr_decay_rate = lr_decay_rate
         self.lr_decay_steps = lr_decay_steps
@@ -412,7 +412,7 @@ class BaseConfig(object):
         else:
             self.auto_td_steps = self.auto_td_steps_ratio * self.training_steps
 
-        assert 0 <= self.lr_warm_up <= 0.1
+        assert 0 <= self.lr_warm_up <= 1000000
         assert 1 <= self.lstm_horizon_len <= self.num_unroll_steps * 2
         assert self.start_transitions >= self.batch_size
 

@@ -54,18 +54,6 @@ class MCTS(object):
                 iters = 1
                 max_moves_considered = 1
             for index_simulation in range(iters):
-                hs_to_append = [None for _ in range(num)]
-                hscr_to_append = [None for _ in range(num)]
-                hshr_to_append = [None for _ in range(num)]
-                value_prefix_lst = [None for _ in range(num)]
-                value_lst = [None for _ in range(num)]
-                policy_lst = [None for _ in range(num)]
-                hidden_afterstates = []
-                #hidden_afterstates_c_reward = []
-                #hidden_afterstates_h_reward = []
-                hidden_states = []
-                #hidden_states_c_reward = []
-                #hidden_states_h_reward = []
 
                 # prepare a result wrapper to transport results between python and c++ parts
                 results = tree.ResultsWrapper(num)
@@ -99,6 +87,10 @@ class MCTS(object):
                 #print_actions = [i for i in actions_to_predict]
 
                 if states_to_predict:
+                    hs_to_append = []
+                    value_prefix_lst = []
+                    value_lst = []
+                    policy_lst = []
                     states_to_predict = torch.from_numpy(np.asarray(states_to_predict)).to(device).float()
                     #states_to_predict_c_reward = torch.from_numpy(np.asarray(states_to_predict_c_reward)).to(device).unsqueeze(0)
                     #states_to_predict_h_reward = torch.from_numpy(np.asarray(states_to_predict_h_reward)).to(device).unsqueeze(0)
@@ -119,10 +111,10 @@ class MCTS(object):
                     #reward_hidden_nodes = network_output.reward_hidden
                                        
                     for i, y in enumerate(chance_node_y_lst):
-                        hs_to_append[y] = hidden_state_nodes[i]
-                        value_prefix_lst[y] = value_prefix_pool[i]
-                        value_lst[y] = value_pool[i]
-                        policy_lst[y] = policy_logits_pool[i]
+                        hs_to_append.append(hidden_state_nodes[i])
+                        value_prefix_lst.append(value_prefix_pool[i])
+                        value_lst.append(value_pool[i])
+                        policy_lst.append(policy_logits_pool[i])
                         #hscr_to_append[y] = reward_hidden_nodes[0][:, [i], :]
                         #hshr_to_append[y] = reward_hidden_nodes[1][:, [i], :]
                     '''
@@ -130,57 +122,70 @@ class MCTS(object):
                                                                                              value_pool[0],
                                                                                              value_prefix_pool[0]))
                     '''
-                
+                    hidden_state_index_x += 1
+                    hidden_state_pool.append(hs_to_append)
+                    hidden_state_index_x_lst, hidden_state_index_y_lst, last_actions = tree.batch_step(min_max_stats_lst, 
+                                                                                                        results, 
+                                                                                                        chance_node_y_lst, 
+                                                                                                        hidden_state_index_x, 
+                                                                                                        discount,
+                                                                                                        value_prefix_lst, 
+                                                                                                        value_lst, 
+                                                                                                        policy_lst)
+                    
+                    
                 states_to_predict = []
                 states_to_predict_c_reward = []
                 states_to_predict_h_reward = []
                 actions_to_predict = []
                 
                 # the policy nodes expand using policy logits predictions from a state
-                for ic in policy_node_y_lst:
-                    ix = hidden_state_index_x_lst[ic]
-                    iy = hidden_state_index_y_lst[ic]
+                for a, ix, iy in zip(last_actions, hidden_state_index_x_lst, hidden_state_index_y_lst):
                     states_to_predict.append(hidden_state_pool[ix][iy])
                     #states_to_predict_c_reward.append(reward_hidden_c_pool[ix][0][iy])
                     #states_to_predict_h_reward.append(reward_hidden_h_pool[ix][0][iy])
-                    actions_to_predict.append(last_actions[ic])
-                
-                #print_actions = [i for i in actions_to_predict]
-                
-                if states_to_predict:
-                    states_to_predict = torch.from_numpy(np.asarray(states_to_predict)).to(device).float()
-                    #states_to_predict_c_reward = torch.from_numpy(np.asarray(states_to_predict_c_reward)).to(device).unsqueeze(0)
-                    #states_to_predict_h_reward = torch.from_numpy(np.asarray(states_to_predict_h_reward)).to(device).unsqueeze(0)
+                    actions_to_predict.append(a)
+                               
 
-                    actions_to_predict = torch.from_numpy(np.asarray(actions_to_predict)).to(device).long()
-                    actions_to_predict = torch.nn.functional.one_hot(actions_to_predict, self.config.num_chance_tokens)
+                hs_to_append = []
+                value_prefix_lst = []
+                value_lst = []
+                policy_lst = []
+                states_to_predict = torch.from_numpy(np.asarray(states_to_predict)).to(device).float()
+                #states_to_predict_c_reward = torch.from_numpy(np.asarray(states_to_predict_c_reward)).to(device).unsqueeze(0)
+                #states_to_predict_h_reward = torch.from_numpy(np.asarray(states_to_predict_h_reward)).to(device).unsqueeze(0)
 
-                    # evaluation for leaf nodes
-                    if self.config.amp_type == 'torch_amp':
-                        with autocast():
-                            network_output = model.recurrent_state_inference(states_to_predict, (states_to_predict_c_reward, states_to_predict_h_reward), actions_to_predict)
-                    else:
+                actions_to_predict = torch.from_numpy(np.asarray(actions_to_predict)).to(device).long()
+                actions_to_predict = torch.nn.functional.one_hot(actions_to_predict, self.config.num_chance_tokens)
+
+                # evaluation for leaf nodes
+                if self.config.amp_type == 'torch_amp':
+                    with autocast():
                         network_output = model.recurrent_state_inference(states_to_predict, (states_to_predict_c_reward, states_to_predict_h_reward), actions_to_predict)
+                else:
+                    network_output = model.recurrent_state_inference(states_to_predict, (states_to_predict_c_reward, states_to_predict_h_reward), actions_to_predict)
 
-                    hidden_state_nodes = network_output.hidden_state
-                    value_prefix_pool = network_output.value_prefix.reshape(-1).tolist()
-                    value_pool = network_output.value.reshape(-1).tolist()
-                    policy_logits_pool = network_output.policy_logits.tolist()
-                    #reward_hidden_nodes = network_output.reward_hidden
-                                        
-                    for i, y in enumerate(policy_node_y_lst):
-                        hs_to_append[y] = hidden_state_nodes[i]
-                        value_prefix_lst[y] = value_prefix_pool[i]
-                        value_lst[y] = value_pool[i]
-                        policy_lst[y] = policy_logits_pool[i]
-                        #hscr_to_append[y] = reward_hidden_nodes[0][:, [i], :]
-                        #hshr_to_append[y] = reward_hidden_nodes[1][:, [i], :]
-                    '''
-                    print("state inference -- chance: {}, value: {}, reward: {}".format(print_actions[0],
-                                                                                             value_pool[0],
-                                                                                             value_prefix_pool[0]))
-                    '''
+                hidden_state_nodes = network_output.hidden_state
+                value_prefix_pool = network_output.value_prefix.reshape(-1).tolist()
+                value_pool = network_output.value.reshape(-1).tolist()
+                policy_logits_pool = network_output.policy_logits.tolist()
+                #reward_hidden_nodes = network_output.reward_hidden
+                                    
+                for i in range(len(states_to_predict)):
+                    hs_to_append.append(hidden_state_nodes[i])
+                    value_prefix_lst.append(value_prefix_pool[i])
+                    value_lst.append(value_pool[i])
+                    policy_lst.append(policy_logits_pool[i])
+                    #hscr_to_append[y] = reward_hidden_nodes[0][:, [i], :]
+                    #hshr_to_append[y] = reward_hidden_nodes[1][:, [i], :]
+                    
+                '''
+                print("state inference -- chance: {}, value: {}, reward: {}".format(print_actions[0],
+                                                                                         value_pool[0],
+                                                                                         value_prefix_pool[0]))
+                '''
                 
+                hidden_state_index_x += 1
                 hidden_state_pool.append(hs_to_append)
                 #hscr_to_append = np.concatenate(hscr_to_append, axis=-2)
                 #hshr_to_append = np.concatenate(hshr_to_append, axis=-2)
@@ -198,8 +203,7 @@ class MCTS(object):
 
                 #reward_hidden_c_pool.append(hscr_to_append)
                 #reward_hidden_h_pool.append(hshr_to_append)
-                
-                hidden_state_index_x += 1
+                #print((value_prefix_pool[0], results.get_searched_node(0, 1)))
 
                 #print((hidden_state_index_x, discount, value_prefix_lst, value_lst, policy_lst))
 

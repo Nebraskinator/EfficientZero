@@ -45,8 +45,8 @@ class TFT_Simulator(AECEnv):
         self.num_players = config.NUM_PLAYERS
         self.log = log
         self.previous_rewards = {"player_" + str(player_id): 0 for player_id in range(config.NUM_PLAYERS)}
-        self.image_channel = 54
-        self.action_depth = 38
+        self.image_channel = 52
+        self.action_depth = 31
         self.obs_shape = (self.num_players, 14, 4, self.image_channel)
         self.step_function = Step_Function(self.pool_obj)
         self.game_round = Game_Round(self.PLAYERS, self.pool_obj, self.step_function, self.log)
@@ -116,9 +116,9 @@ class TFT_Simulator(AECEnv):
 
     @functools.lru_cache(maxsize=None)
     def action_space(self, agent: str) -> gym.spaces.Space:
-        return 14*4*38
+        return 14*4*31
     def action_space_size(self):
-        return 14*4*38
+        return 14*4*31
     def check_dead(self):
         num_alive = 0
         for key, player in self.PLAYERS.items():
@@ -405,7 +405,7 @@ class TFT_Simulator(AECEnv):
         self.public_observations = {player: self.PLAYERS[player].observation() for player in list(self.PLAYERS.keys())}
         obs_dict = {player: self.make_observation(player) for player in list(self.PLAYERS.keys()) if self.PLAYERS[player].is_alive}
         taking_actions_dict = {player: self.PLAYERS[player].taking_actions for player in list(self.PLAYERS.keys())}
-        action_masks = {player: self.PLAYERS[player].generate_action_mask_single() for player in list(self.PLAYERS.keys())}
+        action_masks = {player: self.PLAYERS[player].generate_action_mask() for player in list(self.PLAYERS.keys())}
 
         return obs_dict, taking_actions_dict, action_masks
 
@@ -440,10 +440,10 @@ class TFT_Simulator(AECEnv):
         live_agents_temp = [i for i in self.live_agents]
         for player in list(action.keys()):
             if self.PLAYERS[player].is_alive and self.PLAYERS[player].taking_actions:
-                self.PLAYERS[player].take_action_single(action[player])
+                self.PLAYERS[player].take_action(action[player])
         self.actions_taken_this_round += 1
-        #for player in self.PLAYERS.values():
-        #    player.score()
+        for player in self.PLAYERS.values():
+            player.score()
         dones = {p: False for p in live_agents_temp}
         if self.actions_taken_this_round >= self.max_actions_per_round:
             self.actions_taken_this_round = 0
@@ -473,7 +473,7 @@ class TFT_Simulator(AECEnv):
         for p in list(self.PLAYERS.keys()):
             self.PLAYERS[p].reward = 0
         taking_actions_dict = {player: self.PLAYERS[player].taking_actions for player in live_agents_temp}
-        action_masks = {p: self.PLAYERS[p].generate_action_mask_single() for p in live_agents_temp}
+        action_masks = {p: self.PLAYERS[p].generate_action_mask() for p in live_agents_temp}
         return obs_dict, rewards_dict, taking_actions_dict, dones, action_masks
             
             
