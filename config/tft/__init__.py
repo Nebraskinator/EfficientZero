@@ -38,19 +38,19 @@ class TFTConfig(BaseConfig):
             cvt_string=False,
             image_based=True,
             # lr scheduler
-            lr_warm_up=0.001,
-            lr_init=0.001,
+            lr_warm_up=25000,
+            lr_init=0.00003,
             lr_decay_rate=0.1,
             lr_decay_steps=1000000,
             auto_td_steps_ratio=0.3,
             # replay window
-            start_transitions=2e2,
+            start_transitions=1e5,
             total_transitions=100 * 1000,
-            transition_num=5e5,
+            transition_num=1.5e5,
             # frame skip & stack observation
             gray_scale=False,
             frame_skip=1,
-            stacked_observations=2,
+            stacked_observations=1,
             # coefficient
             reward_loss_coeff=1,
             value_loss_coeff=1,
@@ -90,19 +90,19 @@ class TFTConfig(BaseConfig):
         self.resnet_fc_reward_layers = [256]  # Define the hidden layers in the reward head of the dynamic network
         self.resnet_fc_value_layers = [256]
         self.resnet_fc_chance_layers = [256] # Define the hidden layers in the value head of the prediction network
-        self.resnet_policy_layers = 38  # Define the depth in the 3D policy head of the prediction network
+        self.resnet_policy_layers = 31  # Define the depth in the 3D policy head of the prediction network
         self.downsample = False  # Downsample observations before representation network (See paper appendix Network Architecture)
 
     def visit_softmax_temperature_fn(self, num_moves, trained_steps):
         if self.change_temperature:
-            if trained_steps < 25000: #0.25 * (self.training_steps):
-                return 1
-            elif trained_steps < 50000: #0.5 * (self.training_steps):
+            if trained_steps < 40000: #0.25 * (self.training_steps):
                 return 0.5
-            #elif trained_steps < 0.75 * (self.training_steps):
-            #   return 0.25
-            else:
+            elif trained_steps < 80000: #0.5 * (self.training_steps):
                 return 0.25
+            elif trained_steps < 160000 * (self.training_steps):
+               return 0.125
+            else:
+                return 0.0625
         else:
             return 1.0
     

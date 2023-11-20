@@ -122,91 +122,65 @@ class ResidualBlock(nn.Module):
 
         return x
 
-class ItemEncoding(nn.Module):
-    def __init__(self, 
-                 item_embedding_layer, 
-                 embedding_size,
-                 output_size=32,
-                 ):
-        assert output_size > embedding_size
-        super().__init__()
-        self.output_size = output_size
-        self.item_embedding = item_embedding_layer
-        self.linear = nn.Linear(9, output_size - embedding_size, bias=False)
-               
-    def forward(self, x):
-        embed = x[:, :, 0].long()
-        embed = [self.item_embedding(embed)]
-        embed.append(self.linear(torch.div(x[:, :, 1:], 255.)))
-        embed = torch.concat(embed, dim=-1)
-        return embed
-
 class UnitEncoding(nn.Module):
     def __init__(self, 
+                 unit_embedding_size,
                  item_embedding_size, 
-                 item_encoded_size,
-                 unit_embedding_size, 
-                 origin_embedding_layer, 
                  origin_embedding_size,
                  output_size=64,
                  ):
         super().__init__()        
-        self.item_encoder = ItemEncoding(nn.Embedding(60, item_embedding_size, padding_idx=0), 
-                                         item_embedding_size,
-                                         output_size=item_encoded_size)
-        assert output_size > unit_embedding_size + item_encoded_size + origin_embedding_size
-        self.unit_embedding_layer = nn.Embedding(72, unit_embedding_size, padding_idx=0)
-        self.origin_embedding_layer = origin_embedding_layer
-        self.linear = nn.Linear(27, 
-                                output_size - unit_embedding_size - item_encoded_size - origin_embedding_size, 
-                                bias=False)
+        self.unit_embedding = nn.Embedding(72, unit_embedding_size, padding_idx=0)
+        self.item_embedding = nn.Embedding(60, item_embedding_size, padding_idx=0)
+        self.origin_embedding = nn.Embedding(27, origin_embedding_size, padding_idx=0)
+        
+        self.mlp = nn.Sequential(
+                    nn.Linear(unit_embedding_size + item_embedding_size + origin_embedding_size + 41, output_size * 4),
+                    nn.GELU(),
+                    nn.Linear(output_size * 4, output_size),)
                
     def forward(self, x):
         layers = []
         item_layers = []
         for i in range(3):
-            item_layers.append(self.item_encoder(x[:,:,i*10:(i+1)*10].long()).unsqueeze(-2))
+            item_layers.append(self.item_embedding(x[:,:,i].long()).unsqueeze(-2))
         item_layers = torch.concat(item_layers, dim=-2)
         item_layers = torch.sum(item_layers, dim=-2)
         layers.append(item_layers)
-        layers.append(self.unit_embedding_layer(x[:,:,30].long()))
         origin_layers = []
-        for i in range(31, 38):
-            origin_layers.append(self.origin_embedding_layer(x[:,:,i].long()).unsqueeze(-2))
+        for i in range(3, 10):
+            origin_layers.append(self.origin_embedding(x[:,:,i].long()).unsqueeze(-2))
         origin_layers = torch.concat(origin_layers, dim=-2)
         origin_layers = torch.sum(origin_layers, dim=-2)
         layers.append(origin_layers)
-        lin_layers = []
-        for i in range(38, 41):
-            n = 4
-            if i % 2:
-                n += 2
-            lin_layers.append(nn.functional.one_hot(x[:, :, i].long(), num_classes=n))        
-        lin_layers.append(torch.div(x[:, :, 41:], 255.))
-        lin_layers = torch.concat(lin_layers, dim=-1)
-        layers.append(self.linear(lin_layers))
+        layers.append(self.unit_embedding(x[:,:,10].long()))
+        layers.append(torch.div(x[:, :, 11:], 255.))
         layers = torch.concat(layers, dim=-1)
+        layers = self.mlp(layers)
         return layers          
 
 class VectorEncoding(nn.Module):
     def __init__(self, 
-                 origin_embedding_layer, 
                  origin_embedding_size,
                  output_size):
         super().__init__()
-        self.origin_embedding_layer = origin_embedding_layer
-        self.linear = nn.Linear(54*4 - 20, output_size - origin_embedding_size, bias=False)
+        self.origin_embedding = nn.Embedding(27, origin_embedding_size, padding_idx=0)
+        self.mlp = nn.Sequential(
+                    nn.Linear(52*4 - 20 + origin_embedding_size, output_size * 4),
+                    nn.GELU(),
+                    nn.Linear(output_size * 4, output_size),)
                
     def forward(self, x):
         layers = []
         origin_layers = []
         for i in range(10):
-            origin_layers.append(torch.mul(self.origin_embedding_layer(x[:,i*2].long()), x[:, i*2+1].unsqueeze(-1)).unsqueeze(-2))
+            origin_layers.append(torch.mul(self.origin_embedding(x[:,i*2].long()), x[:, i*2+1].unsqueeze(-1)).unsqueeze(-2))
         origin_layers = torch.concat(origin_layers, dim=-2)
         origin_layers = torch.sum(origin_layers, dim=-2)
         layers.append(origin_layers)
-        layers.append(self.linear(torch.div(x[:,20:], 255.)))
+        layers.append(torch.div(x[:,20:], 255.))
         layers = torch.concat(layers, dim=-1)
+        layers = self.mlp(layers)
         return layers
     
 class AttentionResBlock(nn.Module):
@@ -351,18 +325,12 @@ class RepresentationNetwork(nn.Module):
         self.num_opponent_registers = num_opponent_registers
         self.num_history_registers = num_history_registers
         
-        # this embedding layer is used by both the unit encoding and vector encoding modules
-        self.origin_embedding = nn.Embedding(27, 8, padding_idx=0)
-        
         # encodes all units and items
-        self.unit_encoding = UnitEncoding(item_embedding_size=8, 
-                                          item_encoded_size=16, 
-                                          unit_embedding_size=16, 
-                                          origin_embedding_layer=self.origin_embedding, 
-                                          origin_embedding_size=8,
-                                          output_size=unit_embed_channels - 2)
+        self.unit_encoding = UnitEncoding(unit_embedding_size=32,
+                                        item_embedding_size=16, 
+                                        origin_embedding_size=16,
+                                        output_size=unit_embed_channels)
         
-        self.pos_encoding = PositionalEncoding(2, 52)
         
         '''
         # self attention resnet applied to the board
@@ -394,23 +362,22 @@ class RepresentationNetwork(nn.Module):
         self.units_sa_blocks = nn.ModuleList(units_sa_blocks)
         
         # encodes the non-units state vector
-        self.vec_encoding = VectorEncoding(origin_embedding_layer=self.origin_embedding, 
-                                           origin_embedding_size=8,
-                                           output_size=128)
+        self.vec_encoding = VectorEncoding(origin_embedding_size=16,
+                                           output_size=256)
         
         # embeds the units as a linear vector
         self.lin_units_embedding = nn.Sequential(
                         nn.LayerNorm((self.state_length - self.observation_shape[-1]) * self.unit_embed_channels),
                         nn.GELU(),
                         nn.Linear((self.state_length - self.observation_shape[-1]) * self.unit_embed_channels, 
-                                  128,
+                                  256,
                                   bias=False))
         
         # calculate the size of the embedded state vector
         self.vec_embed_size = self.state_length * vec_channels       
         
         # calculate the state vector after concatenation with the board/bench/shop embeddings
-        self.vec_concat_size = 128 + unit_embed_channels * 4 + 128
+        self.vec_concat_size = 256 + unit_embed_channels * 4 + 256
         
         # linear resnet for the concatenated state vector
         vec_block_list = []
@@ -484,7 +451,7 @@ class RepresentationNetwork(nn.Module):
                                                  )        
         l += num_history_registers
         final_sa_blocks = []
-        for i in range(3):
+        for i in range(10):
             final_sa_blocks.append(AttentionResBlock(embedding_size=unit_embed_channels,
                                                      num_heads=2,
                                                      length=l))         
@@ -520,7 +487,7 @@ class RepresentationNetwork(nn.Module):
         # encode units
         units = self.unit_encoding(units)
         
-        units = self.pos_encoding(units)
+        #units = self.pos_encoding(units)
         
         
         '''
@@ -713,7 +680,7 @@ class StateDynamicsNetwork(nn.Module):
         self.act_conv = LinearResidualBlock(channels+outcome_space_layers, channels, (length, channels+outcome_space_layers))
                 
         dynamics_sa_blocks = []
-        for i in range(3):
+        for i in range(8):
             dynamics_sa_blocks.append(AttentionResBlock(embedding_size=channels,
                                                      num_heads=2,
                                                      length=length))         
@@ -804,7 +771,7 @@ class AfterstateDynamicsNetwork(nn.Module):
         self.act_conv = LinearResidualBlock(channels+action_space_layers, channels, (length, channels+action_space_layers))
         
         dynamics_sa_blocks = []
-        for i in range(3):
+        for i in range(8):
             dynamics_sa_blocks.append(AttentionResBlock(embedding_size=channels,
                                                      num_heads=2,
                                                      length=length))         
@@ -1169,7 +1136,7 @@ class EfficientZeroNet(BaseNet):
             action_space_size=action_space_size,
             num_channels=num_channels,
             reduced_channels_value=16,
-            reduced_channels_policy=38,
+            reduced_channels_policy=31,
             fc_value_layers=fc_value_layers,
             fc_policy_layers=None,
             full_support_size=value_support_size,
@@ -1234,18 +1201,33 @@ class EfficientZeroNet(BaseNet):
         
         for i in range(encoded_state.shape[0]):
             a = action[i].data[0]
-            x, y, z = a // 38 // 4, a // 38 % 4, a % 38
-            action_one_hot[i, x*4 + y, 0] = 1.
-            if x < 13:
+            x, y, z = a // 31 // 4, a // 31 % 4, a % 31
+            flat_x = x*4 + y 
+            action_one_hot[i, x*4 + y, 0] = 1
+            if x < 7:
                 if z < 28:
                     dest_x, dest_y = z // 4, z % 4
-                    action_one_hot[i, dest_x*4 + dest_y, 1] = 1.
-                elif z < 37:
-                    x_bench = z - 28
-                    dest_x, dest_y = x_bench // 4 + 7, x_bench % 4  
-                    action_one_hot[i, dest_x*4 + dest_y, 1] = 1.              
-        
-            
+                    action_one_hot[i, dest_x*4 + dest_y, 1] = 1
+                elif z == 28:
+                    action_one_hot[i, 28:37, 1] = 1
+                elif z == 29:
+                    action_one_hot[i, -4:, 1] = 1
+            elif flat_x <= 36:
+                if z < 28:
+                    dest_x, dest_y = z // 4, z % 4
+                    action_one_hot[i, dest_x*4 + dest_y, 1] = 1
+                elif z == 29:
+                    action_one_hot[i, -4:, 1] = 1
+            elif flat_x <= 41:
+                action_one_hot[i, 28:37, 1] = 1
+            elif x < 13:
+                if z < 28:
+                    dest_x, dest_y = z // 4, z % 4
+                    action_one_hot[i, dest_x*4 + dest_y, 1] = 1   
+            else:
+                action_one_hot[i, x*4 + y, 1] = 1
+                         
+                    
         '''
         action_one_hot = (
             action[:, :, None, None] * action_one_hot / self.action_space_size
