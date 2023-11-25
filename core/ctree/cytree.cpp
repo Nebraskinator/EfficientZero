@@ -1199,7 +1199,7 @@ struct __pyx_obj_6cytree_ResultsWrapper {
 };
 
 
-/* "cytree.pyx":39
+/* "cytree.pyx":42
  * 
  * 
  * cdef class Roots:             # <<<<<<<<<<<<<<
@@ -1214,7 +1214,7 @@ struct __pyx_obj_6cytree_Roots {
 };
 
 
-/* "cytree.pyx":81
+/* "cytree.pyx":84
  * 
  * 
  * cdef class Node:             # <<<<<<<<<<<<<<
@@ -1761,6 +1761,7 @@ static const char __pyx_k_num[] = "num";
 static const char __pyx_k_Node[] = "Node";
 static const char __pyx_k_main[] = "__main__";
 static const char __pyx_k_name[] = "__name__";
+static const char __pyx_k_path[] = "path";
 static const char __pyx_k_test[] = "__test__";
 static const char __pyx_k_Roots[] = "Roots";
 static const char __pyx_k_numpy[] = "numpy";
@@ -1777,8 +1778,11 @@ static const char __pyx_k_values[] = "values";
 static const char __pyx_k_cvalues[] = "cvalues";
 static const char __pyx_k_results[] = "results";
 static const char __pyx_k_to_play[] = "to_play";
+static const char __pyx_k_to_step[] = "to_step";
+static const char __pyx_k_cto_step[] = "cto_step";
 static const char __pyx_k_discount[] = "discount";
 static const char __pyx_k_getstate[] = "__getstate__";
+static const char __pyx_k_node_idx[] = "node_idx";
 static const char __pyx_k_policies[] = "policies";
 static const char __pyx_k_root_num[] = "root_num";
 static const char __pyx_k_setstate[] = "__setstate__";
@@ -1787,6 +1791,7 @@ static const char __pyx_k_cpolicies[] = "cpolicies";
 static const char __pyx_k_pool_size[] = "pool_size";
 static const char __pyx_k_reduce_ex[] = "__reduce_ex__";
 static const char __pyx_k_action_num[] = "action_num";
+static const char __pyx_k_batch_step[] = "batch_step";
 static const char __pyx_k_cytree_pyx[] = "cytree.pyx";
 static const char __pyx_k_value_pool[] = "value_pool";
 static const char __pyx_k_ImportError[] = "ImportError";
@@ -1825,9 +1830,11 @@ static PyObject *__pyx_n_s_action_mapping;
 static PyObject *__pyx_n_s_action_mappings;
 static PyObject *__pyx_n_s_action_num;
 static PyObject *__pyx_n_s_batch_back_propagate;
+static PyObject *__pyx_n_s_batch_step;
 static PyObject *__pyx_n_s_batch_traverse;
 static PyObject *__pyx_n_s_cline_in_traceback;
 static PyObject *__pyx_n_s_cpolicies;
+static PyObject *__pyx_n_s_cto_step;
 static PyObject *__pyx_n_s_ctypes;
 static PyObject *__pyx_n_s_cvalue_prefixs;
 static PyObject *__pyx_n_s_cvalues;
@@ -1845,6 +1852,7 @@ static PyObject *__pyx_n_s_max_num_considered_actions;
 static PyObject *__pyx_n_s_min_max_stats_lst;
 static PyObject *__pyx_n_s_name;
 static PyObject *__pyx_kp_s_no_default___reduce___due_to_non;
+static PyObject *__pyx_n_s_node_idx;
 static PyObject *__pyx_n_s_noises;
 static PyObject *__pyx_n_s_np;
 static PyObject *__pyx_n_s_num;
@@ -1852,6 +1860,7 @@ static PyObject *__pyx_n_s_num_simulations;
 static PyObject *__pyx_n_s_numpy;
 static PyObject *__pyx_kp_s_numpy_core_multiarray_failed_to;
 static PyObject *__pyx_kp_s_numpy_core_umath_failed_to_impor;
+static PyObject *__pyx_n_s_path;
 static PyObject *__pyx_n_s_policies;
 static PyObject *__pyx_n_s_policy_logits;
 static PyObject *__pyx_n_s_policy_logits_pool;
@@ -1869,6 +1878,7 @@ static PyObject *__pyx_n_s_setstate;
 static PyObject *__pyx_n_s_setstate_cython;
 static PyObject *__pyx_n_s_test;
 static PyObject *__pyx_n_s_to_play;
+static PyObject *__pyx_n_s_to_step;
 static PyObject *__pyx_n_s_value;
 static PyObject *__pyx_n_s_value_pool;
 static PyObject *__pyx_n_s_value_prefix;
@@ -1882,8 +1892,9 @@ static PyObject *__pyx_pf_6cytree_15MinMaxStatsList_6__reduce_cython__(CYTHON_UN
 static PyObject *__pyx_pf_6cytree_15MinMaxStatsList_8__setstate_cython__(CYTHON_UNUSED struct __pyx_obj_6cytree_MinMaxStatsList *__pyx_v_self, CYTHON_UNUSED PyObject *__pyx_v___pyx_state); /* proto */
 static int __pyx_pf_6cytree_14ResultsWrapper___cinit__(struct __pyx_obj_6cytree_ResultsWrapper *__pyx_v_self, int __pyx_v_num); /* proto */
 static PyObject *__pyx_pf_6cytree_14ResultsWrapper_2get_search_len(struct __pyx_obj_6cytree_ResultsWrapper *__pyx_v_self); /* proto */
-static PyObject *__pyx_pf_6cytree_14ResultsWrapper_4__reduce_cython__(CYTHON_UNUSED struct __pyx_obj_6cytree_ResultsWrapper *__pyx_v_self); /* proto */
-static PyObject *__pyx_pf_6cytree_14ResultsWrapper_6__setstate_cython__(CYTHON_UNUSED struct __pyx_obj_6cytree_ResultsWrapper *__pyx_v_self, CYTHON_UNUSED PyObject *__pyx_v___pyx_state); /* proto */
+static PyObject *__pyx_pf_6cytree_14ResultsWrapper_4get_searched_node(struct __pyx_obj_6cytree_ResultsWrapper *__pyx_v_self, int __pyx_v_path, int __pyx_v_node_idx); /* proto */
+static PyObject *__pyx_pf_6cytree_14ResultsWrapper_6__reduce_cython__(CYTHON_UNUSED struct __pyx_obj_6cytree_ResultsWrapper *__pyx_v_self); /* proto */
+static PyObject *__pyx_pf_6cytree_14ResultsWrapper_8__setstate_cython__(CYTHON_UNUSED struct __pyx_obj_6cytree_ResultsWrapper *__pyx_v_self, CYTHON_UNUSED PyObject *__pyx_v___pyx_state); /* proto */
 static int __pyx_pf_6cytree_5Roots___cinit__(struct __pyx_obj_6cytree_Roots *__pyx_v_self, int __pyx_v_root_num, int __pyx_v_pool_size); /* proto */
 static PyObject *__pyx_pf_6cytree_5Roots_2prepare(struct __pyx_obj_6cytree_Roots *__pyx_v_self, float __pyx_v_root_exploration_fraction, PyObject *__pyx_v_noises, PyObject *__pyx_v_value_prefix_pool, PyObject *__pyx_v_value_pool, PyObject *__pyx_v_policy_logits_pool, PyObject *__pyx_v_action_mappings); /* proto */
 static PyObject *__pyx_pf_6cytree_5Roots_4prepare_no_noise(struct __pyx_obj_6cytree_Roots *__pyx_v_self, PyObject *__pyx_v_value_prefix_pool, PyObject *__pyx_v_value_pool, PyObject *__pyx_v_policy_logits_pool, PyObject *__pyx_v_action_mappings); /* proto */
@@ -1903,7 +1914,8 @@ static PyObject *__pyx_pf_6cytree_4Node_4expand_as_root(struct __pyx_obj_6cytree
 static PyObject *__pyx_pf_6cytree_4Node_6__reduce_cython__(CYTHON_UNUSED struct __pyx_obj_6cytree_Node *__pyx_v_self); /* proto */
 static PyObject *__pyx_pf_6cytree_4Node_8__setstate_cython__(CYTHON_UNUSED struct __pyx_obj_6cytree_Node *__pyx_v_self, CYTHON_UNUSED PyObject *__pyx_v___pyx_state); /* proto */
 static PyObject *__pyx_pf_6cytree_batch_back_propagate(CYTHON_UNUSED PyObject *__pyx_self, int __pyx_v_hidden_state_index_x, float __pyx_v_discount, PyObject *__pyx_v_value_prefixs, PyObject *__pyx_v_values, PyObject *__pyx_v_policies, struct __pyx_obj_6cytree_MinMaxStatsList *__pyx_v_min_max_stats_lst, struct __pyx_obj_6cytree_ResultsWrapper *__pyx_v_results, PyObject *__pyx_v_is_reset_lst); /* proto */
-static PyObject *__pyx_pf_6cytree_2batch_traverse(CYTHON_UNUSED PyObject *__pyx_self, struct __pyx_obj_6cytree_Roots *__pyx_v_roots, int __pyx_v_num_simulations, int __pyx_v_max_num_considered_actions, float __pyx_v_discount, struct __pyx_obj_6cytree_MinMaxStatsList *__pyx_v_min_max_stats_lst, struct __pyx_obj_6cytree_ResultsWrapper *__pyx_v_results); /* proto */
+static PyObject *__pyx_pf_6cytree_2batch_step(CYTHON_UNUSED PyObject *__pyx_self, struct __pyx_obj_6cytree_MinMaxStatsList *__pyx_v_min_max_stats_lst, struct __pyx_obj_6cytree_ResultsWrapper *__pyx_v_results, PyObject *__pyx_v_to_step, int __pyx_v_hidden_state_index_x, float __pyx_v_discount, PyObject *__pyx_v_value_prefixs, PyObject *__pyx_v_values, PyObject *__pyx_v_policies); /* proto */
+static PyObject *__pyx_pf_6cytree_4batch_traverse(CYTHON_UNUSED PyObject *__pyx_self, struct __pyx_obj_6cytree_Roots *__pyx_v_roots, int __pyx_v_num_simulations, int __pyx_v_max_num_considered_actions, float __pyx_v_discount, struct __pyx_obj_6cytree_MinMaxStatsList *__pyx_v_min_max_stats_lst, struct __pyx_obj_6cytree_ResultsWrapper *__pyx_v_results); /* proto */
 static PyObject *__pyx_tp_new_6cytree_MinMaxStatsList(PyTypeObject *t, PyObject *a, PyObject *k); /*proto*/
 static PyObject *__pyx_tp_new_6cytree_ResultsWrapper(PyTypeObject *t, PyObject *a, PyObject *k); /*proto*/
 static PyObject *__pyx_tp_new_6cytree_Roots(PyTypeObject *t, PyObject *a, PyObject *k); /*proto*/
@@ -1920,8 +1932,10 @@ static PyObject *__pyx_tuple__9;
 static PyObject *__pyx_tuple__10;
 static PyObject *__pyx_tuple__11;
 static PyObject *__pyx_tuple__13;
+static PyObject *__pyx_tuple__15;
 static PyObject *__pyx_codeobj__12;
 static PyObject *__pyx_codeobj__14;
+static PyObject *__pyx_codeobj__16;
 /* Late includes */
 
 /* "cytree.pyx":19
@@ -2387,7 +2401,7 @@ static PyObject *__pyx_pf_6cytree_14ResultsWrapper_2get_search_len(struct __pyx_
  *     def get_search_len(self):
  *         return self.cresults.search_lens             # <<<<<<<<<<<<<<
  * 
- * 
+ *     def get_searched_node(self, int path, int node_idx):
  */
   __Pyx_XDECREF(__pyx_r);
   __pyx_t_1 = __pyx_convert_vector_to_py_int(__pyx_v_self->cresults.search_lens); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 36, __pyx_L1_error)
@@ -2415,6 +2429,120 @@ static PyObject *__pyx_pf_6cytree_14ResultsWrapper_2get_search_len(struct __pyx_
   return __pyx_r;
 }
 
+/* "cytree.pyx":38
+ *         return self.cresults.search_lens
+ * 
+ *     def get_searched_node(self, int path, int node_idx):             # <<<<<<<<<<<<<<
+ *         return self.cresults.get_searched_node(path, node_idx)
+ * 
+ */
+
+/* Python wrapper */
+static PyObject *__pyx_pw_6cytree_14ResultsWrapper_5get_searched_node(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
+static PyObject *__pyx_pw_6cytree_14ResultsWrapper_5get_searched_node(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
+  int __pyx_v_path;
+  int __pyx_v_node_idx;
+  int __pyx_lineno = 0;
+  const char *__pyx_filename = NULL;
+  int __pyx_clineno = 0;
+  PyObject *__pyx_r = 0;
+  __Pyx_RefNannyDeclarations
+  __Pyx_RefNannySetupContext("get_searched_node (wrapper)", 0);
+  {
+    static PyObject **__pyx_pyargnames[] = {&__pyx_n_s_path,&__pyx_n_s_node_idx,0};
+    PyObject* values[2] = {0,0};
+    if (unlikely(__pyx_kwds)) {
+      Py_ssize_t kw_args;
+      const Py_ssize_t pos_args = PyTuple_GET_SIZE(__pyx_args);
+      switch (pos_args) {
+        case  2: values[1] = PyTuple_GET_ITEM(__pyx_args, 1);
+        CYTHON_FALLTHROUGH;
+        case  1: values[0] = PyTuple_GET_ITEM(__pyx_args, 0);
+        CYTHON_FALLTHROUGH;
+        case  0: break;
+        default: goto __pyx_L5_argtuple_error;
+      }
+      kw_args = PyDict_Size(__pyx_kwds);
+      switch (pos_args) {
+        case  0:
+        if (likely((values[0] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_path)) != 0)) kw_args--;
+        else goto __pyx_L5_argtuple_error;
+        CYTHON_FALLTHROUGH;
+        case  1:
+        if (likely((values[1] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_node_idx)) != 0)) kw_args--;
+        else {
+          __Pyx_RaiseArgtupleInvalid("get_searched_node", 1, 2, 2, 1); __PYX_ERR(1, 38, __pyx_L3_error)
+        }
+      }
+      if (unlikely(kw_args > 0)) {
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "get_searched_node") < 0)) __PYX_ERR(1, 38, __pyx_L3_error)
+      }
+    } else if (PyTuple_GET_SIZE(__pyx_args) != 2) {
+      goto __pyx_L5_argtuple_error;
+    } else {
+      values[0] = PyTuple_GET_ITEM(__pyx_args, 0);
+      values[1] = PyTuple_GET_ITEM(__pyx_args, 1);
+    }
+    __pyx_v_path = __Pyx_PyInt_As_int(values[0]); if (unlikely((__pyx_v_path == (int)-1) && PyErr_Occurred())) __PYX_ERR(1, 38, __pyx_L3_error)
+    __pyx_v_node_idx = __Pyx_PyInt_As_int(values[1]); if (unlikely((__pyx_v_node_idx == (int)-1) && PyErr_Occurred())) __PYX_ERR(1, 38, __pyx_L3_error)
+  }
+  goto __pyx_L4_argument_unpacking_done;
+  __pyx_L5_argtuple_error:;
+  __Pyx_RaiseArgtupleInvalid("get_searched_node", 1, 2, 2, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(1, 38, __pyx_L3_error)
+  __pyx_L3_error:;
+  __Pyx_AddTraceback("cytree.ResultsWrapper.get_searched_node", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __Pyx_RefNannyFinishContext();
+  return NULL;
+  __pyx_L4_argument_unpacking_done:;
+  __pyx_r = __pyx_pf_6cytree_14ResultsWrapper_4get_searched_node(((struct __pyx_obj_6cytree_ResultsWrapper *)__pyx_v_self), __pyx_v_path, __pyx_v_node_idx);
+
+  /* function exit code */
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
+static PyObject *__pyx_pf_6cytree_14ResultsWrapper_4get_searched_node(struct __pyx_obj_6cytree_ResultsWrapper *__pyx_v_self, int __pyx_v_path, int __pyx_v_node_idx) {
+  PyObject *__pyx_r = NULL;
+  __Pyx_RefNannyDeclarations
+  PyObject *__pyx_t_1 = NULL;
+  int __pyx_lineno = 0;
+  const char *__pyx_filename = NULL;
+  int __pyx_clineno = 0;
+  __Pyx_RefNannySetupContext("get_searched_node", 0);
+
+  /* "cytree.pyx":39
+ * 
+ *     def get_searched_node(self, int path, int node_idx):
+ *         return self.cresults.get_searched_node(path, node_idx)             # <<<<<<<<<<<<<<
+ * 
+ * 
+ */
+  __Pyx_XDECREF(__pyx_r);
+  __pyx_t_1 = __Pyx_PyInt_From_int(__pyx_v_self->cresults.get_searched_node(__pyx_v_path, __pyx_v_node_idx)); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 39, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_1);
+  __pyx_r = __pyx_t_1;
+  __pyx_t_1 = 0;
+  goto __pyx_L0;
+
+  /* "cytree.pyx":38
+ *         return self.cresults.search_lens
+ * 
+ *     def get_searched_node(self, int path, int node_idx):             # <<<<<<<<<<<<<<
+ *         return self.cresults.get_searched_node(path, node_idx)
+ * 
+ */
+
+  /* function exit code */
+  __pyx_L1_error:;
+  __Pyx_XDECREF(__pyx_t_1);
+  __Pyx_AddTraceback("cytree.ResultsWrapper.get_searched_node", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __pyx_r = NULL;
+  __pyx_L0:;
+  __Pyx_XGIVEREF(__pyx_r);
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
 /* "(tree fragment)":1
  * def __reduce_cython__(self):             # <<<<<<<<<<<<<<
  *     raise TypeError("no default __reduce__ due to non-trivial __cinit__")
@@ -2422,19 +2550,19 @@ static PyObject *__pyx_pf_6cytree_14ResultsWrapper_2get_search_len(struct __pyx_
  */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_6cytree_14ResultsWrapper_5__reduce_cython__(PyObject *__pyx_v_self, CYTHON_UNUSED PyObject *unused); /*proto*/
-static PyObject *__pyx_pw_6cytree_14ResultsWrapper_5__reduce_cython__(PyObject *__pyx_v_self, CYTHON_UNUSED PyObject *unused) {
+static PyObject *__pyx_pw_6cytree_14ResultsWrapper_7__reduce_cython__(PyObject *__pyx_v_self, CYTHON_UNUSED PyObject *unused); /*proto*/
+static PyObject *__pyx_pw_6cytree_14ResultsWrapper_7__reduce_cython__(PyObject *__pyx_v_self, CYTHON_UNUSED PyObject *unused) {
   PyObject *__pyx_r = 0;
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("__reduce_cython__ (wrapper)", 0);
-  __pyx_r = __pyx_pf_6cytree_14ResultsWrapper_4__reduce_cython__(((struct __pyx_obj_6cytree_ResultsWrapper *)__pyx_v_self));
+  __pyx_r = __pyx_pf_6cytree_14ResultsWrapper_6__reduce_cython__(((struct __pyx_obj_6cytree_ResultsWrapper *)__pyx_v_self));
 
   /* function exit code */
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_6cytree_14ResultsWrapper_4__reduce_cython__(CYTHON_UNUSED struct __pyx_obj_6cytree_ResultsWrapper *__pyx_v_self) {
+static PyObject *__pyx_pf_6cytree_14ResultsWrapper_6__reduce_cython__(CYTHON_UNUSED struct __pyx_obj_6cytree_ResultsWrapper *__pyx_v_self) {
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
@@ -2479,19 +2607,19 @@ static PyObject *__pyx_pf_6cytree_14ResultsWrapper_4__reduce_cython__(CYTHON_UNU
  */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_6cytree_14ResultsWrapper_7__setstate_cython__(PyObject *__pyx_v_self, PyObject *__pyx_v___pyx_state); /*proto*/
-static PyObject *__pyx_pw_6cytree_14ResultsWrapper_7__setstate_cython__(PyObject *__pyx_v_self, PyObject *__pyx_v___pyx_state) {
+static PyObject *__pyx_pw_6cytree_14ResultsWrapper_9__setstate_cython__(PyObject *__pyx_v_self, PyObject *__pyx_v___pyx_state); /*proto*/
+static PyObject *__pyx_pw_6cytree_14ResultsWrapper_9__setstate_cython__(PyObject *__pyx_v_self, PyObject *__pyx_v___pyx_state) {
   PyObject *__pyx_r = 0;
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("__setstate_cython__ (wrapper)", 0);
-  __pyx_r = __pyx_pf_6cytree_14ResultsWrapper_6__setstate_cython__(((struct __pyx_obj_6cytree_ResultsWrapper *)__pyx_v_self), ((PyObject *)__pyx_v___pyx_state));
+  __pyx_r = __pyx_pf_6cytree_14ResultsWrapper_8__setstate_cython__(((struct __pyx_obj_6cytree_ResultsWrapper *)__pyx_v_self), ((PyObject *)__pyx_v___pyx_state));
 
   /* function exit code */
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_6cytree_14ResultsWrapper_6__setstate_cython__(CYTHON_UNUSED struct __pyx_obj_6cytree_ResultsWrapper *__pyx_v_self, CYTHON_UNUSED PyObject *__pyx_v___pyx_state) {
+static PyObject *__pyx_pf_6cytree_14ResultsWrapper_8__setstate_cython__(CYTHON_UNUSED struct __pyx_obj_6cytree_ResultsWrapper *__pyx_v_self, CYTHON_UNUSED PyObject *__pyx_v___pyx_state) {
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
@@ -2528,7 +2656,7 @@ static PyObject *__pyx_pf_6cytree_14ResultsWrapper_6__setstate_cython__(CYTHON_U
   return __pyx_r;
 }
 
-/* "cytree.pyx":44
+/* "cytree.pyx":47
  *     cdef CRoots *roots
  * 
  *     def __cinit__(self, int root_num, int pool_size):             # <<<<<<<<<<<<<<
@@ -2570,11 +2698,11 @@ static int __pyx_pw_6cytree_5Roots_1__cinit__(PyObject *__pyx_v_self, PyObject *
         case  1:
         if (likely((values[1] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_pool_size)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 2, 2, 1); __PYX_ERR(1, 44, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 2, 2, 1); __PYX_ERR(1, 47, __pyx_L3_error)
         }
       }
       if (unlikely(kw_args > 0)) {
-        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "__cinit__") < 0)) __PYX_ERR(1, 44, __pyx_L3_error)
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "__cinit__") < 0)) __PYX_ERR(1, 47, __pyx_L3_error)
       }
     } else if (PyTuple_GET_SIZE(__pyx_args) != 2) {
       goto __pyx_L5_argtuple_error;
@@ -2582,12 +2710,12 @@ static int __pyx_pw_6cytree_5Roots_1__cinit__(PyObject *__pyx_v_self, PyObject *
       values[0] = PyTuple_GET_ITEM(__pyx_args, 0);
       values[1] = PyTuple_GET_ITEM(__pyx_args, 1);
     }
-    __pyx_v_root_num = __Pyx_PyInt_As_int(values[0]); if (unlikely((__pyx_v_root_num == (int)-1) && PyErr_Occurred())) __PYX_ERR(1, 44, __pyx_L3_error)
-    __pyx_v_pool_size = __Pyx_PyInt_As_int(values[1]); if (unlikely((__pyx_v_pool_size == (int)-1) && PyErr_Occurred())) __PYX_ERR(1, 44, __pyx_L3_error)
+    __pyx_v_root_num = __Pyx_PyInt_As_int(values[0]); if (unlikely((__pyx_v_root_num == (int)-1) && PyErr_Occurred())) __PYX_ERR(1, 47, __pyx_L3_error)
+    __pyx_v_pool_size = __Pyx_PyInt_As_int(values[1]); if (unlikely((__pyx_v_pool_size == (int)-1) && PyErr_Occurred())) __PYX_ERR(1, 47, __pyx_L3_error)
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 2, 2, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(1, 44, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 2, 2, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(1, 47, __pyx_L3_error)
   __pyx_L3_error:;
   __Pyx_AddTraceback("cytree.Roots.__cinit__", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
@@ -2609,7 +2737,7 @@ static int __pyx_pf_6cytree_5Roots___cinit__(struct __pyx_obj_6cytree_Roots *__p
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("__cinit__", 0);
 
-  /* "cytree.pyx":45
+  /* "cytree.pyx":48
  * 
  *     def __cinit__(self, int root_num, int pool_size):
  *         self.root_num = root_num             # <<<<<<<<<<<<<<
@@ -2618,7 +2746,7 @@ static int __pyx_pf_6cytree_5Roots___cinit__(struct __pyx_obj_6cytree_Roots *__p
  */
   __pyx_v_self->root_num = __pyx_v_root_num;
 
-  /* "cytree.pyx":46
+  /* "cytree.pyx":49
  *     def __cinit__(self, int root_num, int pool_size):
  *         self.root_num = root_num
  *         self.pool_size = pool_size             # <<<<<<<<<<<<<<
@@ -2627,7 +2755,7 @@ static int __pyx_pf_6cytree_5Roots___cinit__(struct __pyx_obj_6cytree_Roots *__p
  */
   __pyx_v_self->pool_size = __pyx_v_pool_size;
 
-  /* "cytree.pyx":47
+  /* "cytree.pyx":50
  *         self.root_num = root_num
  *         self.pool_size = pool_size
  *         self.roots = new CRoots(root_num, self.pool_size)             # <<<<<<<<<<<<<<
@@ -2638,11 +2766,11 @@ static int __pyx_pf_6cytree_5Roots___cinit__(struct __pyx_obj_6cytree_Roots *__p
     __pyx_t_1 = new tree::CRoots(__pyx_v_root_num, __pyx_v_self->pool_size);
   } catch(...) {
     __Pyx_CppExn2PyErr();
-    __PYX_ERR(1, 47, __pyx_L1_error)
+    __PYX_ERR(1, 50, __pyx_L1_error)
   }
   __pyx_v_self->roots = __pyx_t_1;
 
-  /* "cytree.pyx":44
+  /* "cytree.pyx":47
  *     cdef CRoots *roots
  * 
  *     def __cinit__(self, int root_num, int pool_size):             # <<<<<<<<<<<<<<
@@ -2661,7 +2789,7 @@ static int __pyx_pf_6cytree_5Roots___cinit__(struct __pyx_obj_6cytree_Roots *__p
   return __pyx_r;
 }
 
-/* "cytree.pyx":49
+/* "cytree.pyx":52
  *         self.roots = new CRoots(root_num, self.pool_size)
  * 
  *     def prepare(self, float root_exploration_fraction, list noises, list value_prefix_pool, list value_pool, list policy_logits_pool, list action_mappings):             # <<<<<<<<<<<<<<
@@ -2715,35 +2843,35 @@ static PyObject *__pyx_pw_6cytree_5Roots_3prepare(PyObject *__pyx_v_self, PyObje
         case  1:
         if (likely((values[1] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_noises)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("prepare", 1, 6, 6, 1); __PYX_ERR(1, 49, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("prepare", 1, 6, 6, 1); __PYX_ERR(1, 52, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  2:
         if (likely((values[2] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_value_prefix_pool)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("prepare", 1, 6, 6, 2); __PYX_ERR(1, 49, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("prepare", 1, 6, 6, 2); __PYX_ERR(1, 52, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  3:
         if (likely((values[3] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_value_pool)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("prepare", 1, 6, 6, 3); __PYX_ERR(1, 49, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("prepare", 1, 6, 6, 3); __PYX_ERR(1, 52, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  4:
         if (likely((values[4] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_policy_logits_pool)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("prepare", 1, 6, 6, 4); __PYX_ERR(1, 49, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("prepare", 1, 6, 6, 4); __PYX_ERR(1, 52, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  5:
         if (likely((values[5] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_action_mappings)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("prepare", 1, 6, 6, 5); __PYX_ERR(1, 49, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("prepare", 1, 6, 6, 5); __PYX_ERR(1, 52, __pyx_L3_error)
         }
       }
       if (unlikely(kw_args > 0)) {
-        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "prepare") < 0)) __PYX_ERR(1, 49, __pyx_L3_error)
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "prepare") < 0)) __PYX_ERR(1, 52, __pyx_L3_error)
       }
     } else if (PyTuple_GET_SIZE(__pyx_args) != 6) {
       goto __pyx_L5_argtuple_error;
@@ -2755,7 +2883,7 @@ static PyObject *__pyx_pw_6cytree_5Roots_3prepare(PyObject *__pyx_v_self, PyObje
       values[4] = PyTuple_GET_ITEM(__pyx_args, 4);
       values[5] = PyTuple_GET_ITEM(__pyx_args, 5);
     }
-    __pyx_v_root_exploration_fraction = __pyx_PyFloat_AsFloat(values[0]); if (unlikely((__pyx_v_root_exploration_fraction == (float)-1) && PyErr_Occurred())) __PYX_ERR(1, 49, __pyx_L3_error)
+    __pyx_v_root_exploration_fraction = __pyx_PyFloat_AsFloat(values[0]); if (unlikely((__pyx_v_root_exploration_fraction == (float)-1) && PyErr_Occurred())) __PYX_ERR(1, 52, __pyx_L3_error)
     __pyx_v_noises = ((PyObject*)values[1]);
     __pyx_v_value_prefix_pool = ((PyObject*)values[2]);
     __pyx_v_value_pool = ((PyObject*)values[3]);
@@ -2764,17 +2892,17 @@ static PyObject *__pyx_pw_6cytree_5Roots_3prepare(PyObject *__pyx_v_self, PyObje
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("prepare", 1, 6, 6, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(1, 49, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("prepare", 1, 6, 6, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(1, 52, __pyx_L3_error)
   __pyx_L3_error:;
   __Pyx_AddTraceback("cytree.Roots.prepare", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_noises), (&PyList_Type), 1, "noises", 1))) __PYX_ERR(1, 49, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_value_prefix_pool), (&PyList_Type), 1, "value_prefix_pool", 1))) __PYX_ERR(1, 49, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_value_pool), (&PyList_Type), 1, "value_pool", 1))) __PYX_ERR(1, 49, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_policy_logits_pool), (&PyList_Type), 1, "policy_logits_pool", 1))) __PYX_ERR(1, 49, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_action_mappings), (&PyList_Type), 1, "action_mappings", 1))) __PYX_ERR(1, 49, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_noises), (&PyList_Type), 1, "noises", 1))) __PYX_ERR(1, 52, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_value_prefix_pool), (&PyList_Type), 1, "value_prefix_pool", 1))) __PYX_ERR(1, 52, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_value_pool), (&PyList_Type), 1, "value_pool", 1))) __PYX_ERR(1, 52, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_policy_logits_pool), (&PyList_Type), 1, "policy_logits_pool", 1))) __PYX_ERR(1, 52, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_action_mappings), (&PyList_Type), 1, "action_mappings", 1))) __PYX_ERR(1, 52, __pyx_L1_error)
   __pyx_r = __pyx_pf_6cytree_5Roots_2prepare(((struct __pyx_obj_6cytree_Roots *)__pyx_v_self), __pyx_v_root_exploration_fraction, __pyx_v_noises, __pyx_v_value_prefix_pool, __pyx_v_value_pool, __pyx_v_policy_logits_pool, __pyx_v_action_mappings);
 
   /* function exit code */
@@ -2799,21 +2927,21 @@ static PyObject *__pyx_pf_6cytree_5Roots_2prepare(struct __pyx_obj_6cytree_Roots
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("prepare", 0);
 
-  /* "cytree.pyx":50
+  /* "cytree.pyx":53
  * 
  *     def prepare(self, float root_exploration_fraction, list noises, list value_prefix_pool, list value_pool, list policy_logits_pool, list action_mappings):
  *         self.roots[0].prepare(root_exploration_fraction, noises, value_prefix_pool, value_pool, policy_logits_pool, action_mappings)             # <<<<<<<<<<<<<<
  * 
  *     def prepare_no_noise(self, list value_prefix_pool, list value_pool, list policy_logits_pool, list action_mappings):
  */
-  __pyx_t_1 = __pyx_convert_vector_from_py_std_3a__3a_vector_3c_float_3e___(__pyx_v_noises); if (unlikely(PyErr_Occurred())) __PYX_ERR(1, 50, __pyx_L1_error)
-  __pyx_t_2 = __pyx_convert_vector_from_py_float(__pyx_v_value_prefix_pool); if (unlikely(PyErr_Occurred())) __PYX_ERR(1, 50, __pyx_L1_error)
-  __pyx_t_3 = __pyx_convert_vector_from_py_float(__pyx_v_value_pool); if (unlikely(PyErr_Occurred())) __PYX_ERR(1, 50, __pyx_L1_error)
-  __pyx_t_4 = __pyx_convert_vector_from_py_std_3a__3a_vector_3c_float_3e___(__pyx_v_policy_logits_pool); if (unlikely(PyErr_Occurred())) __PYX_ERR(1, 50, __pyx_L1_error)
-  __pyx_t_5 = __pyx_convert_vector_from_py_std_3a__3a_vector_3c_int_3e___(__pyx_v_action_mappings); if (unlikely(PyErr_Occurred())) __PYX_ERR(1, 50, __pyx_L1_error)
+  __pyx_t_1 = __pyx_convert_vector_from_py_std_3a__3a_vector_3c_float_3e___(__pyx_v_noises); if (unlikely(PyErr_Occurred())) __PYX_ERR(1, 53, __pyx_L1_error)
+  __pyx_t_2 = __pyx_convert_vector_from_py_float(__pyx_v_value_prefix_pool); if (unlikely(PyErr_Occurred())) __PYX_ERR(1, 53, __pyx_L1_error)
+  __pyx_t_3 = __pyx_convert_vector_from_py_float(__pyx_v_value_pool); if (unlikely(PyErr_Occurred())) __PYX_ERR(1, 53, __pyx_L1_error)
+  __pyx_t_4 = __pyx_convert_vector_from_py_std_3a__3a_vector_3c_float_3e___(__pyx_v_policy_logits_pool); if (unlikely(PyErr_Occurred())) __PYX_ERR(1, 53, __pyx_L1_error)
+  __pyx_t_5 = __pyx_convert_vector_from_py_std_3a__3a_vector_3c_int_3e___(__pyx_v_action_mappings); if (unlikely(PyErr_Occurred())) __PYX_ERR(1, 53, __pyx_L1_error)
   (__pyx_v_self->roots[0]).prepare(__pyx_v_root_exploration_fraction, __pyx_t_1, __pyx_t_2, __pyx_t_3, __pyx_t_4, __pyx_t_5);
 
-  /* "cytree.pyx":49
+  /* "cytree.pyx":52
  *         self.roots = new CRoots(root_num, self.pool_size)
  * 
  *     def prepare(self, float root_exploration_fraction, list noises, list value_prefix_pool, list value_pool, list policy_logits_pool, list action_mappings):             # <<<<<<<<<<<<<<
@@ -2833,7 +2961,7 @@ static PyObject *__pyx_pf_6cytree_5Roots_2prepare(struct __pyx_obj_6cytree_Roots
   return __pyx_r;
 }
 
-/* "cytree.pyx":52
+/* "cytree.pyx":55
  *         self.roots[0].prepare(root_exploration_fraction, noises, value_prefix_pool, value_pool, policy_logits_pool, action_mappings)
  * 
  *     def prepare_no_noise(self, list value_prefix_pool, list value_pool, list policy_logits_pool, list action_mappings):             # <<<<<<<<<<<<<<
@@ -2881,23 +3009,23 @@ static PyObject *__pyx_pw_6cytree_5Roots_5prepare_no_noise(PyObject *__pyx_v_sel
         case  1:
         if (likely((values[1] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_value_pool)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("prepare_no_noise", 1, 4, 4, 1); __PYX_ERR(1, 52, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("prepare_no_noise", 1, 4, 4, 1); __PYX_ERR(1, 55, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  2:
         if (likely((values[2] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_policy_logits_pool)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("prepare_no_noise", 1, 4, 4, 2); __PYX_ERR(1, 52, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("prepare_no_noise", 1, 4, 4, 2); __PYX_ERR(1, 55, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  3:
         if (likely((values[3] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_action_mappings)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("prepare_no_noise", 1, 4, 4, 3); __PYX_ERR(1, 52, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("prepare_no_noise", 1, 4, 4, 3); __PYX_ERR(1, 55, __pyx_L3_error)
         }
       }
       if (unlikely(kw_args > 0)) {
-        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "prepare_no_noise") < 0)) __PYX_ERR(1, 52, __pyx_L3_error)
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "prepare_no_noise") < 0)) __PYX_ERR(1, 55, __pyx_L3_error)
       }
     } else if (PyTuple_GET_SIZE(__pyx_args) != 4) {
       goto __pyx_L5_argtuple_error;
@@ -2914,16 +3042,16 @@ static PyObject *__pyx_pw_6cytree_5Roots_5prepare_no_noise(PyObject *__pyx_v_sel
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("prepare_no_noise", 1, 4, 4, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(1, 52, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("prepare_no_noise", 1, 4, 4, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(1, 55, __pyx_L3_error)
   __pyx_L3_error:;
   __Pyx_AddTraceback("cytree.Roots.prepare_no_noise", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_value_prefix_pool), (&PyList_Type), 1, "value_prefix_pool", 1))) __PYX_ERR(1, 52, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_value_pool), (&PyList_Type), 1, "value_pool", 1))) __PYX_ERR(1, 52, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_policy_logits_pool), (&PyList_Type), 1, "policy_logits_pool", 1))) __PYX_ERR(1, 52, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_action_mappings), (&PyList_Type), 1, "action_mappings", 1))) __PYX_ERR(1, 52, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_value_prefix_pool), (&PyList_Type), 1, "value_prefix_pool", 1))) __PYX_ERR(1, 55, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_value_pool), (&PyList_Type), 1, "value_pool", 1))) __PYX_ERR(1, 55, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_policy_logits_pool), (&PyList_Type), 1, "policy_logits_pool", 1))) __PYX_ERR(1, 55, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_action_mappings), (&PyList_Type), 1, "action_mappings", 1))) __PYX_ERR(1, 55, __pyx_L1_error)
   __pyx_r = __pyx_pf_6cytree_5Roots_4prepare_no_noise(((struct __pyx_obj_6cytree_Roots *)__pyx_v_self), __pyx_v_value_prefix_pool, __pyx_v_value_pool, __pyx_v_policy_logits_pool, __pyx_v_action_mappings);
 
   /* function exit code */
@@ -2947,20 +3075,20 @@ static PyObject *__pyx_pf_6cytree_5Roots_4prepare_no_noise(struct __pyx_obj_6cyt
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("prepare_no_noise", 0);
 
-  /* "cytree.pyx":53
+  /* "cytree.pyx":56
  * 
  *     def prepare_no_noise(self, list value_prefix_pool, list value_pool, list policy_logits_pool, list action_mappings):
  *         self.roots[0].prepare_no_noise(value_prefix_pool, value_pool, policy_logits_pool, action_mappings)             # <<<<<<<<<<<<<<
  * 
  *     def get_trajectories(self):
  */
-  __pyx_t_1 = __pyx_convert_vector_from_py_float(__pyx_v_value_prefix_pool); if (unlikely(PyErr_Occurred())) __PYX_ERR(1, 53, __pyx_L1_error)
-  __pyx_t_2 = __pyx_convert_vector_from_py_float(__pyx_v_value_pool); if (unlikely(PyErr_Occurred())) __PYX_ERR(1, 53, __pyx_L1_error)
-  __pyx_t_3 = __pyx_convert_vector_from_py_std_3a__3a_vector_3c_float_3e___(__pyx_v_policy_logits_pool); if (unlikely(PyErr_Occurred())) __PYX_ERR(1, 53, __pyx_L1_error)
-  __pyx_t_4 = __pyx_convert_vector_from_py_std_3a__3a_vector_3c_int_3e___(__pyx_v_action_mappings); if (unlikely(PyErr_Occurred())) __PYX_ERR(1, 53, __pyx_L1_error)
+  __pyx_t_1 = __pyx_convert_vector_from_py_float(__pyx_v_value_prefix_pool); if (unlikely(PyErr_Occurred())) __PYX_ERR(1, 56, __pyx_L1_error)
+  __pyx_t_2 = __pyx_convert_vector_from_py_float(__pyx_v_value_pool); if (unlikely(PyErr_Occurred())) __PYX_ERR(1, 56, __pyx_L1_error)
+  __pyx_t_3 = __pyx_convert_vector_from_py_std_3a__3a_vector_3c_float_3e___(__pyx_v_policy_logits_pool); if (unlikely(PyErr_Occurred())) __PYX_ERR(1, 56, __pyx_L1_error)
+  __pyx_t_4 = __pyx_convert_vector_from_py_std_3a__3a_vector_3c_int_3e___(__pyx_v_action_mappings); if (unlikely(PyErr_Occurred())) __PYX_ERR(1, 56, __pyx_L1_error)
   (__pyx_v_self->roots[0]).prepare_no_noise(__pyx_t_1, __pyx_t_2, __pyx_t_3, __pyx_t_4);
 
-  /* "cytree.pyx":52
+  /* "cytree.pyx":55
  *         self.roots[0].prepare(root_exploration_fraction, noises, value_prefix_pool, value_pool, policy_logits_pool, action_mappings)
  * 
  *     def prepare_no_noise(self, list value_prefix_pool, list value_pool, list policy_logits_pool, list action_mappings):             # <<<<<<<<<<<<<<
@@ -2980,7 +3108,7 @@ static PyObject *__pyx_pf_6cytree_5Roots_4prepare_no_noise(struct __pyx_obj_6cyt
   return __pyx_r;
 }
 
-/* "cytree.pyx":55
+/* "cytree.pyx":58
  *         self.roots[0].prepare_no_noise(value_prefix_pool, value_pool, policy_logits_pool, action_mappings)
  * 
  *     def get_trajectories(self):             # <<<<<<<<<<<<<<
@@ -3010,7 +3138,7 @@ static PyObject *__pyx_pf_6cytree_5Roots_6get_trajectories(struct __pyx_obj_6cyt
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("get_trajectories", 0);
 
-  /* "cytree.pyx":56
+  /* "cytree.pyx":59
  * 
  *     def get_trajectories(self):
  *         return self.roots[0].get_trajectories()             # <<<<<<<<<<<<<<
@@ -3018,13 +3146,13 @@ static PyObject *__pyx_pf_6cytree_5Roots_6get_trajectories(struct __pyx_obj_6cyt
  *     def get_distributions(self):
  */
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_1 = __pyx_convert_vector_to_py_std_3a__3a_vector_3c_int_3e___((__pyx_v_self->roots[0]).get_trajectories()); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 56, __pyx_L1_error)
+  __pyx_t_1 = __pyx_convert_vector_to_py_std_3a__3a_vector_3c_int_3e___((__pyx_v_self->roots[0]).get_trajectories()); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 59, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_r = __pyx_t_1;
   __pyx_t_1 = 0;
   goto __pyx_L0;
 
-  /* "cytree.pyx":55
+  /* "cytree.pyx":58
  *         self.roots[0].prepare_no_noise(value_prefix_pool, value_pool, policy_logits_pool, action_mappings)
  * 
  *     def get_trajectories(self):             # <<<<<<<<<<<<<<
@@ -3043,7 +3171,7 @@ static PyObject *__pyx_pf_6cytree_5Roots_6get_trajectories(struct __pyx_obj_6cyt
   return __pyx_r;
 }
 
-/* "cytree.pyx":58
+/* "cytree.pyx":61
  *         return self.roots[0].get_trajectories()
  * 
  *     def get_distributions(self):             # <<<<<<<<<<<<<<
@@ -3073,7 +3201,7 @@ static PyObject *__pyx_pf_6cytree_5Roots_8get_distributions(struct __pyx_obj_6cy
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("get_distributions", 0);
 
-  /* "cytree.pyx":59
+  /* "cytree.pyx":62
  * 
  *     def get_distributions(self):
  *         return self.roots[0].get_distributions()             # <<<<<<<<<<<<<<
@@ -3081,13 +3209,13 @@ static PyObject *__pyx_pf_6cytree_5Roots_8get_distributions(struct __pyx_obj_6cy
  *     def get_values(self):
  */
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_1 = __pyx_convert_vector_to_py_std_3a__3a_vector_3c_int_3e___((__pyx_v_self->roots[0]).get_distributions()); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 59, __pyx_L1_error)
+  __pyx_t_1 = __pyx_convert_vector_to_py_std_3a__3a_vector_3c_int_3e___((__pyx_v_self->roots[0]).get_distributions()); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 62, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_r = __pyx_t_1;
   __pyx_t_1 = 0;
   goto __pyx_L0;
 
-  /* "cytree.pyx":58
+  /* "cytree.pyx":61
  *         return self.roots[0].get_trajectories()
  * 
  *     def get_distributions(self):             # <<<<<<<<<<<<<<
@@ -3106,7 +3234,7 @@ static PyObject *__pyx_pf_6cytree_5Roots_8get_distributions(struct __pyx_obj_6cy
   return __pyx_r;
 }
 
-/* "cytree.pyx":61
+/* "cytree.pyx":64
  *         return self.roots[0].get_distributions()
  * 
  *     def get_values(self):             # <<<<<<<<<<<<<<
@@ -3136,7 +3264,7 @@ static PyObject *__pyx_pf_6cytree_5Roots_10get_values(struct __pyx_obj_6cytree_R
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("get_values", 0);
 
-  /* "cytree.pyx":62
+  /* "cytree.pyx":65
  * 
  *     def get_values(self):
  *         return self.roots[0].get_values()             # <<<<<<<<<<<<<<
@@ -3144,13 +3272,13 @@ static PyObject *__pyx_pf_6cytree_5Roots_10get_values(struct __pyx_obj_6cytree_R
  *     def get_children_values(self, float discount):
  */
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_1 = __pyx_convert_vector_to_py_float((__pyx_v_self->roots[0]).get_values()); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 62, __pyx_L1_error)
+  __pyx_t_1 = __pyx_convert_vector_to_py_float((__pyx_v_self->roots[0]).get_values()); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 65, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_r = __pyx_t_1;
   __pyx_t_1 = 0;
   goto __pyx_L0;
 
-  /* "cytree.pyx":61
+  /* "cytree.pyx":64
  *         return self.roots[0].get_distributions()
  * 
  *     def get_values(self):             # <<<<<<<<<<<<<<
@@ -3169,7 +3297,7 @@ static PyObject *__pyx_pf_6cytree_5Roots_10get_values(struct __pyx_obj_6cytree_R
   return __pyx_r;
 }
 
-/* "cytree.pyx":64
+/* "cytree.pyx":67
  *         return self.roots[0].get_values()
  * 
  *     def get_children_values(self, float discount):             # <<<<<<<<<<<<<<
@@ -3188,7 +3316,7 @@ static PyObject *__pyx_pw_6cytree_5Roots_13get_children_values(PyObject *__pyx_v
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("get_children_values (wrapper)", 0);
   assert(__pyx_arg_discount); {
-    __pyx_v_discount = __pyx_PyFloat_AsFloat(__pyx_arg_discount); if (unlikely((__pyx_v_discount == (float)-1) && PyErr_Occurred())) __PYX_ERR(1, 64, __pyx_L3_error)
+    __pyx_v_discount = __pyx_PyFloat_AsFloat(__pyx_arg_discount); if (unlikely((__pyx_v_discount == (float)-1) && PyErr_Occurred())) __PYX_ERR(1, 67, __pyx_L3_error)
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L3_error:;
@@ -3212,7 +3340,7 @@ static PyObject *__pyx_pf_6cytree_5Roots_12get_children_values(struct __pyx_obj_
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("get_children_values", 0);
 
-  /* "cytree.pyx":65
+  /* "cytree.pyx":68
  * 
  *     def get_children_values(self, float discount):
  *         return self.roots[0].get_children_values(discount)             # <<<<<<<<<<<<<<
@@ -3220,13 +3348,13 @@ static PyObject *__pyx_pf_6cytree_5Roots_12get_children_values(struct __pyx_obj_
  *     def get_policies(self, float discount):
  */
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_1 = __pyx_convert_vector_to_py_std_3a__3a_vector_3c_float_3e___((__pyx_v_self->roots[0]).get_children_values(__pyx_v_discount)); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 65, __pyx_L1_error)
+  __pyx_t_1 = __pyx_convert_vector_to_py_std_3a__3a_vector_3c_float_3e___((__pyx_v_self->roots[0]).get_children_values(__pyx_v_discount)); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 68, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_r = __pyx_t_1;
   __pyx_t_1 = 0;
   goto __pyx_L0;
 
-  /* "cytree.pyx":64
+  /* "cytree.pyx":67
  *         return self.roots[0].get_values()
  * 
  *     def get_children_values(self, float discount):             # <<<<<<<<<<<<<<
@@ -3245,7 +3373,7 @@ static PyObject *__pyx_pf_6cytree_5Roots_12get_children_values(struct __pyx_obj_
   return __pyx_r;
 }
 
-/* "cytree.pyx":67
+/* "cytree.pyx":70
  *         return self.roots[0].get_children_values(discount)
  * 
  *     def get_policies(self, float discount):             # <<<<<<<<<<<<<<
@@ -3264,7 +3392,7 @@ static PyObject *__pyx_pw_6cytree_5Roots_15get_policies(PyObject *__pyx_v_self, 
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("get_policies (wrapper)", 0);
   assert(__pyx_arg_discount); {
-    __pyx_v_discount = __pyx_PyFloat_AsFloat(__pyx_arg_discount); if (unlikely((__pyx_v_discount == (float)-1) && PyErr_Occurred())) __PYX_ERR(1, 67, __pyx_L3_error)
+    __pyx_v_discount = __pyx_PyFloat_AsFloat(__pyx_arg_discount); if (unlikely((__pyx_v_discount == (float)-1) && PyErr_Occurred())) __PYX_ERR(1, 70, __pyx_L3_error)
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L3_error:;
@@ -3288,7 +3416,7 @@ static PyObject *__pyx_pf_6cytree_5Roots_14get_policies(struct __pyx_obj_6cytree
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("get_policies", 0);
 
-  /* "cytree.pyx":68
+  /* "cytree.pyx":71
  * 
  *     def get_policies(self, float discount):
  *         return self.roots[0].get_policies(discount)             # <<<<<<<<<<<<<<
@@ -3296,13 +3424,13 @@ static PyObject *__pyx_pf_6cytree_5Roots_14get_policies(struct __pyx_obj_6cytree
  *     def clear(self):
  */
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_1 = __pyx_convert_vector_to_py_std_3a__3a_vector_3c_float_3e___((__pyx_v_self->roots[0]).get_policies(__pyx_v_discount)); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 68, __pyx_L1_error)
+  __pyx_t_1 = __pyx_convert_vector_to_py_std_3a__3a_vector_3c_float_3e___((__pyx_v_self->roots[0]).get_policies(__pyx_v_discount)); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 71, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_r = __pyx_t_1;
   __pyx_t_1 = 0;
   goto __pyx_L0;
 
-  /* "cytree.pyx":67
+  /* "cytree.pyx":70
  *         return self.roots[0].get_children_values(discount)
  * 
  *     def get_policies(self, float discount):             # <<<<<<<<<<<<<<
@@ -3321,7 +3449,7 @@ static PyObject *__pyx_pf_6cytree_5Roots_14get_policies(struct __pyx_obj_6cytree
   return __pyx_r;
 }
 
-/* "cytree.pyx":70
+/* "cytree.pyx":73
  *         return self.roots[0].get_policies(discount)
  * 
  *     def clear(self):             # <<<<<<<<<<<<<<
@@ -3347,7 +3475,7 @@ static PyObject *__pyx_pf_6cytree_5Roots_16clear(struct __pyx_obj_6cytree_Roots 
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("clear", 0);
 
-  /* "cytree.pyx":71
+  /* "cytree.pyx":74
  * 
  *     def clear(self):
  *         self.roots[0].clear()             # <<<<<<<<<<<<<<
@@ -3356,7 +3484,7 @@ static PyObject *__pyx_pf_6cytree_5Roots_16clear(struct __pyx_obj_6cytree_Roots 
  */
   (__pyx_v_self->roots[0]).clear();
 
-  /* "cytree.pyx":70
+  /* "cytree.pyx":73
  *         return self.roots[0].get_policies(discount)
  * 
  *     def clear(self):             # <<<<<<<<<<<<<<
@@ -3371,7 +3499,7 @@ static PyObject *__pyx_pf_6cytree_5Roots_16clear(struct __pyx_obj_6cytree_Roots 
   return __pyx_r;
 }
 
-/* "cytree.pyx":73
+/* "cytree.pyx":76
  *         self.roots[0].clear()
  * 
  *     def __dealloc__(self):             # <<<<<<<<<<<<<<
@@ -3394,7 +3522,7 @@ static void __pyx_pf_6cytree_5Roots_18__dealloc__(struct __pyx_obj_6cytree_Roots
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("__dealloc__", 0);
 
-  /* "cytree.pyx":74
+  /* "cytree.pyx":77
  * 
  *     def __dealloc__(self):
  *         del self.roots             # <<<<<<<<<<<<<<
@@ -3403,7 +3531,7 @@ static void __pyx_pf_6cytree_5Roots_18__dealloc__(struct __pyx_obj_6cytree_Roots
  */
   delete __pyx_v_self->roots;
 
-  /* "cytree.pyx":73
+  /* "cytree.pyx":76
  *         self.roots[0].clear()
  * 
  *     def __dealloc__(self):             # <<<<<<<<<<<<<<
@@ -3415,7 +3543,7 @@ static void __pyx_pf_6cytree_5Roots_18__dealloc__(struct __pyx_obj_6cytree_Roots
   __Pyx_RefNannyFinishContext();
 }
 
-/* "cytree.pyx":77
+/* "cytree.pyx":80
  * 
  *     @property
  *     def num(self):             # <<<<<<<<<<<<<<
@@ -3445,7 +3573,7 @@ static PyObject *__pyx_pf_6cytree_5Roots_3num___get__(struct __pyx_obj_6cytree_R
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("__get__", 0);
 
-  /* "cytree.pyx":78
+  /* "cytree.pyx":81
  *     @property
  *     def num(self):
  *         return self.root_num             # <<<<<<<<<<<<<<
@@ -3453,13 +3581,13 @@ static PyObject *__pyx_pf_6cytree_5Roots_3num___get__(struct __pyx_obj_6cytree_R
  * 
  */
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_1 = __Pyx_PyInt_From_int(__pyx_v_self->root_num); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 78, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyInt_From_int(__pyx_v_self->root_num); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 81, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_r = __pyx_t_1;
   __pyx_t_1 = 0;
   goto __pyx_L0;
 
-  /* "cytree.pyx":77
+  /* "cytree.pyx":80
  * 
  *     @property
  *     def num(self):             # <<<<<<<<<<<<<<
@@ -3591,7 +3719,7 @@ static PyObject *__pyx_pf_6cytree_5Roots_22__setstate_cython__(CYTHON_UNUSED str
   return __pyx_r;
 }
 
-/* "cytree.pyx":84
+/* "cytree.pyx":87
  *     cdef CNode cnode
  * 
  *     def __cinit__(self):             # <<<<<<<<<<<<<<
@@ -3626,7 +3754,7 @@ static int __pyx_pf_6cytree_4Node___cinit__(CYTHON_UNUSED struct __pyx_obj_6cytr
   return __pyx_r;
 }
 
-/* "cytree.pyx":87
+/* "cytree.pyx":90
  *         pass
  * 
  *     def __cinit__(self, float prior, int action_num):             # <<<<<<<<<<<<<<
@@ -3668,11 +3796,11 @@ static int __pyx_pw_6cytree_4Node_3__cinit__(PyObject *__pyx_v_self, PyObject *_
         case  1:
         if (likely((values[1] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_action_num)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 2, 2, 1); __PYX_ERR(1, 87, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 2, 2, 1); __PYX_ERR(1, 90, __pyx_L3_error)
         }
       }
       if (unlikely(kw_args > 0)) {
-        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "__cinit__") < 0)) __PYX_ERR(1, 87, __pyx_L3_error)
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "__cinit__") < 0)) __PYX_ERR(1, 90, __pyx_L3_error)
       }
     } else if (PyTuple_GET_SIZE(__pyx_args) != 2) {
       goto __pyx_L5_argtuple_error;
@@ -3680,12 +3808,12 @@ static int __pyx_pw_6cytree_4Node_3__cinit__(PyObject *__pyx_v_self, PyObject *_
       values[0] = PyTuple_GET_ITEM(__pyx_args, 0);
       values[1] = PyTuple_GET_ITEM(__pyx_args, 1);
     }
-    __pyx_v_prior = __pyx_PyFloat_AsFloat(values[0]); if (unlikely((__pyx_v_prior == (float)-1) && PyErr_Occurred())) __PYX_ERR(1, 87, __pyx_L3_error)
-    __pyx_v_action_num = __Pyx_PyInt_As_int(values[1]); if (unlikely((__pyx_v_action_num == (int)-1) && PyErr_Occurred())) __PYX_ERR(1, 87, __pyx_L3_error)
+    __pyx_v_prior = __pyx_PyFloat_AsFloat(values[0]); if (unlikely((__pyx_v_prior == (float)-1) && PyErr_Occurred())) __PYX_ERR(1, 90, __pyx_L3_error)
+    __pyx_v_action_num = __Pyx_PyInt_As_int(values[1]); if (unlikely((__pyx_v_action_num == (int)-1) && PyErr_Occurred())) __PYX_ERR(1, 90, __pyx_L3_error)
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 2, 2, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(1, 87, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("__cinit__", 1, 2, 2, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(1, 90, __pyx_L3_error)
   __pyx_L3_error:;
   __Pyx_AddTraceback("cytree.Node.__cinit__", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
@@ -3709,7 +3837,7 @@ static int __pyx_pf_6cytree_4Node_2__cinit__(CYTHON_UNUSED struct __pyx_obj_6cyt
   return __pyx_r;
 }
 
-/* "cytree.pyx":91
+/* "cytree.pyx":94
  *         pass
  * 
  *     def expand_as_root(self, int to_play, int hidden_state_index_x, int hidden_state_index_y, float value_prefix, float value, list policy_logits, list action_mapping):             # <<<<<<<<<<<<<<
@@ -3766,41 +3894,41 @@ static PyObject *__pyx_pw_6cytree_4Node_5expand_as_root(PyObject *__pyx_v_self, 
         case  1:
         if (likely((values[1] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_hidden_state_index_x)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("expand_as_root", 1, 7, 7, 1); __PYX_ERR(1, 91, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("expand_as_root", 1, 7, 7, 1); __PYX_ERR(1, 94, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  2:
         if (likely((values[2] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_hidden_state_index_y)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("expand_as_root", 1, 7, 7, 2); __PYX_ERR(1, 91, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("expand_as_root", 1, 7, 7, 2); __PYX_ERR(1, 94, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  3:
         if (likely((values[3] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_value_prefix)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("expand_as_root", 1, 7, 7, 3); __PYX_ERR(1, 91, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("expand_as_root", 1, 7, 7, 3); __PYX_ERR(1, 94, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  4:
         if (likely((values[4] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_value)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("expand_as_root", 1, 7, 7, 4); __PYX_ERR(1, 91, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("expand_as_root", 1, 7, 7, 4); __PYX_ERR(1, 94, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  5:
         if (likely((values[5] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_policy_logits)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("expand_as_root", 1, 7, 7, 5); __PYX_ERR(1, 91, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("expand_as_root", 1, 7, 7, 5); __PYX_ERR(1, 94, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  6:
         if (likely((values[6] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_action_mapping)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("expand_as_root", 1, 7, 7, 6); __PYX_ERR(1, 91, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("expand_as_root", 1, 7, 7, 6); __PYX_ERR(1, 94, __pyx_L3_error)
         }
       }
       if (unlikely(kw_args > 0)) {
-        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "expand_as_root") < 0)) __PYX_ERR(1, 91, __pyx_L3_error)
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "expand_as_root") < 0)) __PYX_ERR(1, 94, __pyx_L3_error)
       }
     } else if (PyTuple_GET_SIZE(__pyx_args) != 7) {
       goto __pyx_L5_argtuple_error;
@@ -3813,24 +3941,24 @@ static PyObject *__pyx_pw_6cytree_4Node_5expand_as_root(PyObject *__pyx_v_self, 
       values[5] = PyTuple_GET_ITEM(__pyx_args, 5);
       values[6] = PyTuple_GET_ITEM(__pyx_args, 6);
     }
-    __pyx_v_to_play = __Pyx_PyInt_As_int(values[0]); if (unlikely((__pyx_v_to_play == (int)-1) && PyErr_Occurred())) __PYX_ERR(1, 91, __pyx_L3_error)
-    __pyx_v_hidden_state_index_x = __Pyx_PyInt_As_int(values[1]); if (unlikely((__pyx_v_hidden_state_index_x == (int)-1) && PyErr_Occurred())) __PYX_ERR(1, 91, __pyx_L3_error)
-    __pyx_v_hidden_state_index_y = __Pyx_PyInt_As_int(values[2]); if (unlikely((__pyx_v_hidden_state_index_y == (int)-1) && PyErr_Occurred())) __PYX_ERR(1, 91, __pyx_L3_error)
-    __pyx_v_value_prefix = __pyx_PyFloat_AsFloat(values[3]); if (unlikely((__pyx_v_value_prefix == (float)-1) && PyErr_Occurred())) __PYX_ERR(1, 91, __pyx_L3_error)
-    __pyx_v_value = __pyx_PyFloat_AsFloat(values[4]); if (unlikely((__pyx_v_value == (float)-1) && PyErr_Occurred())) __PYX_ERR(1, 91, __pyx_L3_error)
+    __pyx_v_to_play = __Pyx_PyInt_As_int(values[0]); if (unlikely((__pyx_v_to_play == (int)-1) && PyErr_Occurred())) __PYX_ERR(1, 94, __pyx_L3_error)
+    __pyx_v_hidden_state_index_x = __Pyx_PyInt_As_int(values[1]); if (unlikely((__pyx_v_hidden_state_index_x == (int)-1) && PyErr_Occurred())) __PYX_ERR(1, 94, __pyx_L3_error)
+    __pyx_v_hidden_state_index_y = __Pyx_PyInt_As_int(values[2]); if (unlikely((__pyx_v_hidden_state_index_y == (int)-1) && PyErr_Occurred())) __PYX_ERR(1, 94, __pyx_L3_error)
+    __pyx_v_value_prefix = __pyx_PyFloat_AsFloat(values[3]); if (unlikely((__pyx_v_value_prefix == (float)-1) && PyErr_Occurred())) __PYX_ERR(1, 94, __pyx_L3_error)
+    __pyx_v_value = __pyx_PyFloat_AsFloat(values[4]); if (unlikely((__pyx_v_value == (float)-1) && PyErr_Occurred())) __PYX_ERR(1, 94, __pyx_L3_error)
     __pyx_v_policy_logits = ((PyObject*)values[5]);
     __pyx_v_action_mapping = ((PyObject*)values[6]);
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("expand_as_root", 1, 7, 7, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(1, 91, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("expand_as_root", 1, 7, 7, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(1, 94, __pyx_L3_error)
   __pyx_L3_error:;
   __Pyx_AddTraceback("cytree.Node.expand_as_root", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_policy_logits), (&PyList_Type), 1, "policy_logits", 1))) __PYX_ERR(1, 91, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_action_mapping), (&PyList_Type), 1, "action_mapping", 1))) __PYX_ERR(1, 91, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_policy_logits), (&PyList_Type), 1, "policy_logits", 1))) __PYX_ERR(1, 94, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_action_mapping), (&PyList_Type), 1, "action_mapping", 1))) __PYX_ERR(1, 94, __pyx_L1_error)
   __pyx_r = __pyx_pf_6cytree_4Node_4expand_as_root(((struct __pyx_obj_6cytree_Node *)__pyx_v_self), __pyx_v_to_play, __pyx_v_hidden_state_index_x, __pyx_v_hidden_state_index_y, __pyx_v_value_prefix, __pyx_v_value, __pyx_v_policy_logits, __pyx_v_action_mapping);
 
   /* function exit code */
@@ -3854,27 +3982,27 @@ static PyObject *__pyx_pf_6cytree_4Node_4expand_as_root(struct __pyx_obj_6cytree
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("expand_as_root", 0);
 
-  /* "cytree.pyx":92
+  /* "cytree.pyx":95
  * 
  *     def expand_as_root(self, int to_play, int hidden_state_index_x, int hidden_state_index_y, float value_prefix, float value, list policy_logits, list action_mapping):
  *         cdef vector[float] cpolicy = policy_logits             # <<<<<<<<<<<<<<
  *         cdef vector[int] caction_mapping = action_mapping
  *         self.cnode.expand_as_root(to_play, hidden_state_index_x, hidden_state_index_y, value_prefix, value, cpolicy, caction_mapping)
  */
-  __pyx_t_1 = __pyx_convert_vector_from_py_float(__pyx_v_policy_logits); if (unlikely(PyErr_Occurred())) __PYX_ERR(1, 92, __pyx_L1_error)
+  __pyx_t_1 = __pyx_convert_vector_from_py_float(__pyx_v_policy_logits); if (unlikely(PyErr_Occurred())) __PYX_ERR(1, 95, __pyx_L1_error)
   __pyx_v_cpolicy = __pyx_t_1;
 
-  /* "cytree.pyx":93
+  /* "cytree.pyx":96
  *     def expand_as_root(self, int to_play, int hidden_state_index_x, int hidden_state_index_y, float value_prefix, float value, list policy_logits, list action_mapping):
  *         cdef vector[float] cpolicy = policy_logits
  *         cdef vector[int] caction_mapping = action_mapping             # <<<<<<<<<<<<<<
  *         self.cnode.expand_as_root(to_play, hidden_state_index_x, hidden_state_index_y, value_prefix, value, cpolicy, caction_mapping)
  *     #def __dealloc__(self):
  */
-  __pyx_t_2 = __pyx_convert_vector_from_py_int(__pyx_v_action_mapping); if (unlikely(PyErr_Occurred())) __PYX_ERR(1, 93, __pyx_L1_error)
+  __pyx_t_2 = __pyx_convert_vector_from_py_int(__pyx_v_action_mapping); if (unlikely(PyErr_Occurred())) __PYX_ERR(1, 96, __pyx_L1_error)
   __pyx_v_caction_mapping = __pyx_t_2;
 
-  /* "cytree.pyx":94
+  /* "cytree.pyx":97
  *         cdef vector[float] cpolicy = policy_logits
  *         cdef vector[int] caction_mapping = action_mapping
  *         self.cnode.expand_as_root(to_play, hidden_state_index_x, hidden_state_index_y, value_prefix, value, cpolicy, caction_mapping)             # <<<<<<<<<<<<<<
@@ -3883,7 +4011,7 @@ static PyObject *__pyx_pf_6cytree_4Node_4expand_as_root(struct __pyx_obj_6cytree
  */
   __pyx_v_self->cnode.expand_as_root(__pyx_v_to_play, __pyx_v_hidden_state_index_x, __pyx_v_hidden_state_index_y, __pyx_v_value_prefix, __pyx_v_value, __pyx_v_cpolicy, __pyx_v_caction_mapping);
 
-  /* "cytree.pyx":91
+  /* "cytree.pyx":94
  *         pass
  * 
  *     def expand_as_root(self, int to_play, int hidden_state_index_x, int hidden_state_index_y, float value_prefix, float value, list policy_logits, list action_mapping):             # <<<<<<<<<<<<<<
@@ -4016,7 +4144,7 @@ static PyObject *__pyx_pf_6cytree_4Node_8__setstate_cython__(CYTHON_UNUSED struc
   return __pyx_r;
 }
 
-/* "cytree.pyx":98
+/* "cytree.pyx":101
  *     #    del self.cnode
  * 
  * def batch_back_propagate(int hidden_state_index_x, float discount, list value_prefixs, list values, list policies, MinMaxStatsList min_max_stats_lst, ResultsWrapper results, list is_reset_lst):             # <<<<<<<<<<<<<<
@@ -4077,47 +4205,47 @@ static PyObject *__pyx_pw_6cytree_1batch_back_propagate(PyObject *__pyx_self, Py
         case  1:
         if (likely((values[1] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_discount)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("batch_back_propagate", 1, 8, 8, 1); __PYX_ERR(1, 98, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("batch_back_propagate", 1, 8, 8, 1); __PYX_ERR(1, 101, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  2:
         if (likely((values[2] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_value_prefixs)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("batch_back_propagate", 1, 8, 8, 2); __PYX_ERR(1, 98, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("batch_back_propagate", 1, 8, 8, 2); __PYX_ERR(1, 101, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  3:
         if (likely((values[3] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_values)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("batch_back_propagate", 1, 8, 8, 3); __PYX_ERR(1, 98, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("batch_back_propagate", 1, 8, 8, 3); __PYX_ERR(1, 101, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  4:
         if (likely((values[4] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_policies)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("batch_back_propagate", 1, 8, 8, 4); __PYX_ERR(1, 98, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("batch_back_propagate", 1, 8, 8, 4); __PYX_ERR(1, 101, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  5:
         if (likely((values[5] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_min_max_stats_lst)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("batch_back_propagate", 1, 8, 8, 5); __PYX_ERR(1, 98, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("batch_back_propagate", 1, 8, 8, 5); __PYX_ERR(1, 101, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  6:
         if (likely((values[6] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_results)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("batch_back_propagate", 1, 8, 8, 6); __PYX_ERR(1, 98, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("batch_back_propagate", 1, 8, 8, 6); __PYX_ERR(1, 101, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  7:
         if (likely((values[7] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_is_reset_lst)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("batch_back_propagate", 1, 8, 8, 7); __PYX_ERR(1, 98, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("batch_back_propagate", 1, 8, 8, 7); __PYX_ERR(1, 101, __pyx_L3_error)
         }
       }
       if (unlikely(kw_args > 0)) {
-        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "batch_back_propagate") < 0)) __PYX_ERR(1, 98, __pyx_L3_error)
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "batch_back_propagate") < 0)) __PYX_ERR(1, 101, __pyx_L3_error)
       }
     } else if (PyTuple_GET_SIZE(__pyx_args) != 8) {
       goto __pyx_L5_argtuple_error;
@@ -4131,8 +4259,8 @@ static PyObject *__pyx_pw_6cytree_1batch_back_propagate(PyObject *__pyx_self, Py
       values[6] = PyTuple_GET_ITEM(__pyx_args, 6);
       values[7] = PyTuple_GET_ITEM(__pyx_args, 7);
     }
-    __pyx_v_hidden_state_index_x = __Pyx_PyInt_As_int(values[0]); if (unlikely((__pyx_v_hidden_state_index_x == (int)-1) && PyErr_Occurred())) __PYX_ERR(1, 98, __pyx_L3_error)
-    __pyx_v_discount = __pyx_PyFloat_AsFloat(values[1]); if (unlikely((__pyx_v_discount == (float)-1) && PyErr_Occurred())) __PYX_ERR(1, 98, __pyx_L3_error)
+    __pyx_v_hidden_state_index_x = __Pyx_PyInt_As_int(values[0]); if (unlikely((__pyx_v_hidden_state_index_x == (int)-1) && PyErr_Occurred())) __PYX_ERR(1, 101, __pyx_L3_error)
+    __pyx_v_discount = __pyx_PyFloat_AsFloat(values[1]); if (unlikely((__pyx_v_discount == (float)-1) && PyErr_Occurred())) __PYX_ERR(1, 101, __pyx_L3_error)
     __pyx_v_value_prefixs = ((PyObject*)values[2]);
     __pyx_v_values = ((PyObject*)values[3]);
     __pyx_v_policies = ((PyObject*)values[4]);
@@ -4142,18 +4270,18 @@ static PyObject *__pyx_pw_6cytree_1batch_back_propagate(PyObject *__pyx_self, Py
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("batch_back_propagate", 1, 8, 8, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(1, 98, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("batch_back_propagate", 1, 8, 8, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(1, 101, __pyx_L3_error)
   __pyx_L3_error:;
   __Pyx_AddTraceback("cytree.batch_back_propagate", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_value_prefixs), (&PyList_Type), 1, "value_prefixs", 1))) __PYX_ERR(1, 98, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_values), (&PyList_Type), 1, "values", 1))) __PYX_ERR(1, 98, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_policies), (&PyList_Type), 1, "policies", 1))) __PYX_ERR(1, 98, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_min_max_stats_lst), __pyx_ptype_6cytree_MinMaxStatsList, 1, "min_max_stats_lst", 0))) __PYX_ERR(1, 98, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_results), __pyx_ptype_6cytree_ResultsWrapper, 1, "results", 0))) __PYX_ERR(1, 98, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_is_reset_lst), (&PyList_Type), 1, "is_reset_lst", 1))) __PYX_ERR(1, 98, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_value_prefixs), (&PyList_Type), 1, "value_prefixs", 1))) __PYX_ERR(1, 101, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_values), (&PyList_Type), 1, "values", 1))) __PYX_ERR(1, 101, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_policies), (&PyList_Type), 1, "policies", 1))) __PYX_ERR(1, 101, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_min_max_stats_lst), __pyx_ptype_6cytree_MinMaxStatsList, 1, "min_max_stats_lst", 0))) __PYX_ERR(1, 101, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_results), __pyx_ptype_6cytree_ResultsWrapper, 1, "results", 0))) __PYX_ERR(1, 101, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_is_reset_lst), (&PyList_Type), 1, "is_reset_lst", 1))) __PYX_ERR(1, 101, __pyx_L1_error)
   __pyx_r = __pyx_pf_6cytree_batch_back_propagate(__pyx_self, __pyx_v_hidden_state_index_x, __pyx_v_discount, __pyx_v_value_prefixs, __pyx_v_values, __pyx_v_policies, __pyx_v_min_max_stats_lst, __pyx_v_results, __pyx_v_is_reset_lst);
 
   /* function exit code */
@@ -4179,46 +4307,46 @@ static PyObject *__pyx_pf_6cytree_batch_back_propagate(CYTHON_UNUSED PyObject *_
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("batch_back_propagate", 0);
 
-  /* "cytree.pyx":100
+  /* "cytree.pyx":103
  * def batch_back_propagate(int hidden_state_index_x, float discount, list value_prefixs, list values, list policies, MinMaxStatsList min_max_stats_lst, ResultsWrapper results, list is_reset_lst):
  *     cdef int i
  *     cdef vector[float] cvalue_prefixs = value_prefixs             # <<<<<<<<<<<<<<
  *     cdef vector[float] cvalues = values
  *     cdef vector[vector[float]] cpolicies = policies
  */
-  __pyx_t_1 = __pyx_convert_vector_from_py_float(__pyx_v_value_prefixs); if (unlikely(PyErr_Occurred())) __PYX_ERR(1, 100, __pyx_L1_error)
+  __pyx_t_1 = __pyx_convert_vector_from_py_float(__pyx_v_value_prefixs); if (unlikely(PyErr_Occurred())) __PYX_ERR(1, 103, __pyx_L1_error)
   __pyx_v_cvalue_prefixs = __pyx_t_1;
 
-  /* "cytree.pyx":101
+  /* "cytree.pyx":104
  *     cdef int i
  *     cdef vector[float] cvalue_prefixs = value_prefixs
  *     cdef vector[float] cvalues = values             # <<<<<<<<<<<<<<
  *     cdef vector[vector[float]] cpolicies = policies
  * 
  */
-  __pyx_t_1 = __pyx_convert_vector_from_py_float(__pyx_v_values); if (unlikely(PyErr_Occurred())) __PYX_ERR(1, 101, __pyx_L1_error)
+  __pyx_t_1 = __pyx_convert_vector_from_py_float(__pyx_v_values); if (unlikely(PyErr_Occurred())) __PYX_ERR(1, 104, __pyx_L1_error)
   __pyx_v_cvalues = __pyx_t_1;
 
-  /* "cytree.pyx":102
+  /* "cytree.pyx":105
  *     cdef vector[float] cvalue_prefixs = value_prefixs
  *     cdef vector[float] cvalues = values
  *     cdef vector[vector[float]] cpolicies = policies             # <<<<<<<<<<<<<<
  * 
  *     cbatch_back_propagate(hidden_state_index_x, discount, cvalue_prefixs, cvalues, cpolicies,
  */
-  __pyx_t_2 = __pyx_convert_vector_from_py_std_3a__3a_vector_3c_float_3e___(__pyx_v_policies); if (unlikely(PyErr_Occurred())) __PYX_ERR(1, 102, __pyx_L1_error)
+  __pyx_t_2 = __pyx_convert_vector_from_py_std_3a__3a_vector_3c_float_3e___(__pyx_v_policies); if (unlikely(PyErr_Occurred())) __PYX_ERR(1, 105, __pyx_L1_error)
   __pyx_v_cpolicies = __pyx_t_2;
 
-  /* "cytree.pyx":105
+  /* "cytree.pyx":108
  * 
  *     cbatch_back_propagate(hidden_state_index_x, discount, cvalue_prefixs, cvalues, cpolicies,
  *                           min_max_stats_lst.cmin_max_stats_lst, results.cresults, is_reset_lst)             # <<<<<<<<<<<<<<
  * 
- * 
+ * def batch_step(MinMaxStatsList min_max_stats_lst, ResultsWrapper results, list to_step, int hidden_state_index_x, float discount, list value_prefixs, list values, list policies):
  */
-  __pyx_t_3 = __pyx_convert_vector_from_py_int(__pyx_v_is_reset_lst); if (unlikely(PyErr_Occurred())) __PYX_ERR(1, 105, __pyx_L1_error)
+  __pyx_t_3 = __pyx_convert_vector_from_py_int(__pyx_v_is_reset_lst); if (unlikely(PyErr_Occurred())) __PYX_ERR(1, 108, __pyx_L1_error)
 
-  /* "cytree.pyx":104
+  /* "cytree.pyx":107
  *     cdef vector[vector[float]] cpolicies = policies
  * 
  *     cbatch_back_propagate(hidden_state_index_x, discount, cvalue_prefixs, cvalues, cpolicies,             # <<<<<<<<<<<<<<
@@ -4227,7 +4355,7 @@ static PyObject *__pyx_pf_6cytree_batch_back_propagate(CYTHON_UNUSED PyObject *_
  */
   tree::cbatch_back_propagate(__pyx_v_hidden_state_index_x, __pyx_v_discount, __pyx_v_cvalue_prefixs, __pyx_v_cvalues, __pyx_v_cpolicies, __pyx_v_min_max_stats_lst->cmin_max_stats_lst, __pyx_v_results->cresults, __pyx_t_3);
 
-  /* "cytree.pyx":98
+  /* "cytree.pyx":101
  *     #    del self.cnode
  * 
  * def batch_back_propagate(int hidden_state_index_x, float discount, list value_prefixs, list values, list policies, MinMaxStatsList min_max_stats_lst, ResultsWrapper results, list is_reset_lst):             # <<<<<<<<<<<<<<
@@ -4247,8 +4375,276 @@ static PyObject *__pyx_pf_6cytree_batch_back_propagate(CYTHON_UNUSED PyObject *_
   return __pyx_r;
 }
 
-/* "cytree.pyx":108
+/* "cytree.pyx":110
+ *                           min_max_stats_lst.cmin_max_stats_lst, results.cresults, is_reset_lst)
  * 
+ * def batch_step(MinMaxStatsList min_max_stats_lst, ResultsWrapper results, list to_step, int hidden_state_index_x, float discount, list value_prefixs, list values, list policies):             # <<<<<<<<<<<<<<
+ *     cdef int i
+ *     cdef vector[int] cto_step = to_step
+ */
+
+/* Python wrapper */
+static PyObject *__pyx_pw_6cytree_3batch_step(PyObject *__pyx_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
+static PyMethodDef __pyx_mdef_6cytree_3batch_step = {"batch_step", (PyCFunction)(void*)(PyCFunctionWithKeywords)__pyx_pw_6cytree_3batch_step, METH_VARARGS|METH_KEYWORDS, 0};
+static PyObject *__pyx_pw_6cytree_3batch_step(PyObject *__pyx_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
+  struct __pyx_obj_6cytree_MinMaxStatsList *__pyx_v_min_max_stats_lst = 0;
+  struct __pyx_obj_6cytree_ResultsWrapper *__pyx_v_results = 0;
+  PyObject *__pyx_v_to_step = 0;
+  int __pyx_v_hidden_state_index_x;
+  float __pyx_v_discount;
+  PyObject *__pyx_v_value_prefixs = 0;
+  PyObject *__pyx_v_values = 0;
+  PyObject *__pyx_v_policies = 0;
+  int __pyx_lineno = 0;
+  const char *__pyx_filename = NULL;
+  int __pyx_clineno = 0;
+  PyObject *__pyx_r = 0;
+  __Pyx_RefNannyDeclarations
+  __Pyx_RefNannySetupContext("batch_step (wrapper)", 0);
+  {
+    static PyObject **__pyx_pyargnames[] = {&__pyx_n_s_min_max_stats_lst,&__pyx_n_s_results,&__pyx_n_s_to_step,&__pyx_n_s_hidden_state_index_x,&__pyx_n_s_discount,&__pyx_n_s_value_prefixs,&__pyx_n_s_values,&__pyx_n_s_policies,0};
+    PyObject* values[8] = {0,0,0,0,0,0,0,0};
+    if (unlikely(__pyx_kwds)) {
+      Py_ssize_t kw_args;
+      const Py_ssize_t pos_args = PyTuple_GET_SIZE(__pyx_args);
+      switch (pos_args) {
+        case  8: values[7] = PyTuple_GET_ITEM(__pyx_args, 7);
+        CYTHON_FALLTHROUGH;
+        case  7: values[6] = PyTuple_GET_ITEM(__pyx_args, 6);
+        CYTHON_FALLTHROUGH;
+        case  6: values[5] = PyTuple_GET_ITEM(__pyx_args, 5);
+        CYTHON_FALLTHROUGH;
+        case  5: values[4] = PyTuple_GET_ITEM(__pyx_args, 4);
+        CYTHON_FALLTHROUGH;
+        case  4: values[3] = PyTuple_GET_ITEM(__pyx_args, 3);
+        CYTHON_FALLTHROUGH;
+        case  3: values[2] = PyTuple_GET_ITEM(__pyx_args, 2);
+        CYTHON_FALLTHROUGH;
+        case  2: values[1] = PyTuple_GET_ITEM(__pyx_args, 1);
+        CYTHON_FALLTHROUGH;
+        case  1: values[0] = PyTuple_GET_ITEM(__pyx_args, 0);
+        CYTHON_FALLTHROUGH;
+        case  0: break;
+        default: goto __pyx_L5_argtuple_error;
+      }
+      kw_args = PyDict_Size(__pyx_kwds);
+      switch (pos_args) {
+        case  0:
+        if (likely((values[0] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_min_max_stats_lst)) != 0)) kw_args--;
+        else goto __pyx_L5_argtuple_error;
+        CYTHON_FALLTHROUGH;
+        case  1:
+        if (likely((values[1] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_results)) != 0)) kw_args--;
+        else {
+          __Pyx_RaiseArgtupleInvalid("batch_step", 1, 8, 8, 1); __PYX_ERR(1, 110, __pyx_L3_error)
+        }
+        CYTHON_FALLTHROUGH;
+        case  2:
+        if (likely((values[2] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_to_step)) != 0)) kw_args--;
+        else {
+          __Pyx_RaiseArgtupleInvalid("batch_step", 1, 8, 8, 2); __PYX_ERR(1, 110, __pyx_L3_error)
+        }
+        CYTHON_FALLTHROUGH;
+        case  3:
+        if (likely((values[3] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_hidden_state_index_x)) != 0)) kw_args--;
+        else {
+          __Pyx_RaiseArgtupleInvalid("batch_step", 1, 8, 8, 3); __PYX_ERR(1, 110, __pyx_L3_error)
+        }
+        CYTHON_FALLTHROUGH;
+        case  4:
+        if (likely((values[4] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_discount)) != 0)) kw_args--;
+        else {
+          __Pyx_RaiseArgtupleInvalid("batch_step", 1, 8, 8, 4); __PYX_ERR(1, 110, __pyx_L3_error)
+        }
+        CYTHON_FALLTHROUGH;
+        case  5:
+        if (likely((values[5] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_value_prefixs)) != 0)) kw_args--;
+        else {
+          __Pyx_RaiseArgtupleInvalid("batch_step", 1, 8, 8, 5); __PYX_ERR(1, 110, __pyx_L3_error)
+        }
+        CYTHON_FALLTHROUGH;
+        case  6:
+        if (likely((values[6] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_values)) != 0)) kw_args--;
+        else {
+          __Pyx_RaiseArgtupleInvalid("batch_step", 1, 8, 8, 6); __PYX_ERR(1, 110, __pyx_L3_error)
+        }
+        CYTHON_FALLTHROUGH;
+        case  7:
+        if (likely((values[7] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_policies)) != 0)) kw_args--;
+        else {
+          __Pyx_RaiseArgtupleInvalid("batch_step", 1, 8, 8, 7); __PYX_ERR(1, 110, __pyx_L3_error)
+        }
+      }
+      if (unlikely(kw_args > 0)) {
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "batch_step") < 0)) __PYX_ERR(1, 110, __pyx_L3_error)
+      }
+    } else if (PyTuple_GET_SIZE(__pyx_args) != 8) {
+      goto __pyx_L5_argtuple_error;
+    } else {
+      values[0] = PyTuple_GET_ITEM(__pyx_args, 0);
+      values[1] = PyTuple_GET_ITEM(__pyx_args, 1);
+      values[2] = PyTuple_GET_ITEM(__pyx_args, 2);
+      values[3] = PyTuple_GET_ITEM(__pyx_args, 3);
+      values[4] = PyTuple_GET_ITEM(__pyx_args, 4);
+      values[5] = PyTuple_GET_ITEM(__pyx_args, 5);
+      values[6] = PyTuple_GET_ITEM(__pyx_args, 6);
+      values[7] = PyTuple_GET_ITEM(__pyx_args, 7);
+    }
+    __pyx_v_min_max_stats_lst = ((struct __pyx_obj_6cytree_MinMaxStatsList *)values[0]);
+    __pyx_v_results = ((struct __pyx_obj_6cytree_ResultsWrapper *)values[1]);
+    __pyx_v_to_step = ((PyObject*)values[2]);
+    __pyx_v_hidden_state_index_x = __Pyx_PyInt_As_int(values[3]); if (unlikely((__pyx_v_hidden_state_index_x == (int)-1) && PyErr_Occurred())) __PYX_ERR(1, 110, __pyx_L3_error)
+    __pyx_v_discount = __pyx_PyFloat_AsFloat(values[4]); if (unlikely((__pyx_v_discount == (float)-1) && PyErr_Occurred())) __PYX_ERR(1, 110, __pyx_L3_error)
+    __pyx_v_value_prefixs = ((PyObject*)values[5]);
+    __pyx_v_values = ((PyObject*)values[6]);
+    __pyx_v_policies = ((PyObject*)values[7]);
+  }
+  goto __pyx_L4_argument_unpacking_done;
+  __pyx_L5_argtuple_error:;
+  __Pyx_RaiseArgtupleInvalid("batch_step", 1, 8, 8, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(1, 110, __pyx_L3_error)
+  __pyx_L3_error:;
+  __Pyx_AddTraceback("cytree.batch_step", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __Pyx_RefNannyFinishContext();
+  return NULL;
+  __pyx_L4_argument_unpacking_done:;
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_min_max_stats_lst), __pyx_ptype_6cytree_MinMaxStatsList, 1, "min_max_stats_lst", 0))) __PYX_ERR(1, 110, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_results), __pyx_ptype_6cytree_ResultsWrapper, 1, "results", 0))) __PYX_ERR(1, 110, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_to_step), (&PyList_Type), 1, "to_step", 1))) __PYX_ERR(1, 110, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_value_prefixs), (&PyList_Type), 1, "value_prefixs", 1))) __PYX_ERR(1, 110, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_values), (&PyList_Type), 1, "values", 1))) __PYX_ERR(1, 110, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_policies), (&PyList_Type), 1, "policies", 1))) __PYX_ERR(1, 110, __pyx_L1_error)
+  __pyx_r = __pyx_pf_6cytree_2batch_step(__pyx_self, __pyx_v_min_max_stats_lst, __pyx_v_results, __pyx_v_to_step, __pyx_v_hidden_state_index_x, __pyx_v_discount, __pyx_v_value_prefixs, __pyx_v_values, __pyx_v_policies);
+
+  /* function exit code */
+  goto __pyx_L0;
+  __pyx_L1_error:;
+  __pyx_r = NULL;
+  __pyx_L0:;
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
+static PyObject *__pyx_pf_6cytree_2batch_step(CYTHON_UNUSED PyObject *__pyx_self, struct __pyx_obj_6cytree_MinMaxStatsList *__pyx_v_min_max_stats_lst, struct __pyx_obj_6cytree_ResultsWrapper *__pyx_v_results, PyObject *__pyx_v_to_step, int __pyx_v_hidden_state_index_x, float __pyx_v_discount, PyObject *__pyx_v_value_prefixs, PyObject *__pyx_v_values, PyObject *__pyx_v_policies) {
+  std::vector<int>  __pyx_v_cto_step;
+  std::vector<float>  __pyx_v_cvalue_prefixs;
+  std::vector<float>  __pyx_v_cvalues;
+  std::vector<std::vector<float> >  __pyx_v_cpolicies;
+  PyObject *__pyx_r = NULL;
+  __Pyx_RefNannyDeclarations
+  std::vector<int>  __pyx_t_1;
+  std::vector<float>  __pyx_t_2;
+  std::vector<std::vector<float> >  __pyx_t_3;
+  PyObject *__pyx_t_4 = NULL;
+  PyObject *__pyx_t_5 = NULL;
+  PyObject *__pyx_t_6 = NULL;
+  PyObject *__pyx_t_7 = NULL;
+  int __pyx_lineno = 0;
+  const char *__pyx_filename = NULL;
+  int __pyx_clineno = 0;
+  __Pyx_RefNannySetupContext("batch_step", 0);
+
+  /* "cytree.pyx":112
+ * def batch_step(MinMaxStatsList min_max_stats_lst, ResultsWrapper results, list to_step, int hidden_state_index_x, float discount, list value_prefixs, list values, list policies):
+ *     cdef int i
+ *     cdef vector[int] cto_step = to_step             # <<<<<<<<<<<<<<
+ *     cdef vector[float] cvalue_prefixs = value_prefixs
+ *     cdef vector[float] cvalues = values
+ */
+  __pyx_t_1 = __pyx_convert_vector_from_py_int(__pyx_v_to_step); if (unlikely(PyErr_Occurred())) __PYX_ERR(1, 112, __pyx_L1_error)
+  __pyx_v_cto_step = __pyx_t_1;
+
+  /* "cytree.pyx":113
+ *     cdef int i
+ *     cdef vector[int] cto_step = to_step
+ *     cdef vector[float] cvalue_prefixs = value_prefixs             # <<<<<<<<<<<<<<
+ *     cdef vector[float] cvalues = values
+ *     cdef vector[vector[float]] cpolicies = policies
+ */
+  __pyx_t_2 = __pyx_convert_vector_from_py_float(__pyx_v_value_prefixs); if (unlikely(PyErr_Occurred())) __PYX_ERR(1, 113, __pyx_L1_error)
+  __pyx_v_cvalue_prefixs = __pyx_t_2;
+
+  /* "cytree.pyx":114
+ *     cdef vector[int] cto_step = to_step
+ *     cdef vector[float] cvalue_prefixs = value_prefixs
+ *     cdef vector[float] cvalues = values             # <<<<<<<<<<<<<<
+ *     cdef vector[vector[float]] cpolicies = policies
+ * 
+ */
+  __pyx_t_2 = __pyx_convert_vector_from_py_float(__pyx_v_values); if (unlikely(PyErr_Occurred())) __PYX_ERR(1, 114, __pyx_L1_error)
+  __pyx_v_cvalues = __pyx_t_2;
+
+  /* "cytree.pyx":115
+ *     cdef vector[float] cvalue_prefixs = value_prefixs
+ *     cdef vector[float] cvalues = values
+ *     cdef vector[vector[float]] cpolicies = policies             # <<<<<<<<<<<<<<
+ * 
+ *     cbatch_step(min_max_stats_lst.cmin_max_stats_lst, results.cresults,
+ */
+  __pyx_t_3 = __pyx_convert_vector_from_py_std_3a__3a_vector_3c_float_3e___(__pyx_v_policies); if (unlikely(PyErr_Occurred())) __PYX_ERR(1, 115, __pyx_L1_error)
+  __pyx_v_cpolicies = __pyx_t_3;
+
+  /* "cytree.pyx":117
+ *     cdef vector[vector[float]] cpolicies = policies
+ * 
+ *     cbatch_step(min_max_stats_lst.cmin_max_stats_lst, results.cresults,             # <<<<<<<<<<<<<<
+ *                 cto_step, hidden_state_index_x, discount, cvalue_prefixs,
+ *                 cvalues, cpolicies)
+ */
+  tree::cbatch_step(__pyx_v_min_max_stats_lst->cmin_max_stats_lst, __pyx_v_results->cresults, __pyx_v_cto_step, __pyx_v_hidden_state_index_x, __pyx_v_discount, __pyx_v_cvalue_prefixs, __pyx_v_cvalues, __pyx_v_cpolicies);
+
+  /* "cytree.pyx":121
+ *                 cvalues, cpolicies)
+ * 
+ *     return results.cresults.hidden_state_index_x_lst, results.cresults.hidden_state_index_y_lst, results.cresults.last_actions             # <<<<<<<<<<<<<<
+ * 
+ * def batch_traverse(Roots roots, int num_simulations, int max_num_considered_actions, float discount, MinMaxStatsList min_max_stats_lst, ResultsWrapper results):
+ */
+  __Pyx_XDECREF(__pyx_r);
+  __pyx_t_4 = __pyx_convert_vector_to_py_int(__pyx_v_results->cresults.hidden_state_index_x_lst); if (unlikely(!__pyx_t_4)) __PYX_ERR(1, 121, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_4);
+  __pyx_t_5 = __pyx_convert_vector_to_py_int(__pyx_v_results->cresults.hidden_state_index_y_lst); if (unlikely(!__pyx_t_5)) __PYX_ERR(1, 121, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_5);
+  __pyx_t_6 = __pyx_convert_vector_to_py_int(__pyx_v_results->cresults.last_actions); if (unlikely(!__pyx_t_6)) __PYX_ERR(1, 121, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_6);
+  __pyx_t_7 = PyTuple_New(3); if (unlikely(!__pyx_t_7)) __PYX_ERR(1, 121, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_7);
+  __Pyx_GIVEREF(__pyx_t_4);
+  PyTuple_SET_ITEM(__pyx_t_7, 0, __pyx_t_4);
+  __Pyx_GIVEREF(__pyx_t_5);
+  PyTuple_SET_ITEM(__pyx_t_7, 1, __pyx_t_5);
+  __Pyx_GIVEREF(__pyx_t_6);
+  PyTuple_SET_ITEM(__pyx_t_7, 2, __pyx_t_6);
+  __pyx_t_4 = 0;
+  __pyx_t_5 = 0;
+  __pyx_t_6 = 0;
+  __pyx_r = __pyx_t_7;
+  __pyx_t_7 = 0;
+  goto __pyx_L0;
+
+  /* "cytree.pyx":110
+ *                           min_max_stats_lst.cmin_max_stats_lst, results.cresults, is_reset_lst)
+ * 
+ * def batch_step(MinMaxStatsList min_max_stats_lst, ResultsWrapper results, list to_step, int hidden_state_index_x, float discount, list value_prefixs, list values, list policies):             # <<<<<<<<<<<<<<
+ *     cdef int i
+ *     cdef vector[int] cto_step = to_step
+ */
+
+  /* function exit code */
+  __pyx_L1_error:;
+  __Pyx_XDECREF(__pyx_t_4);
+  __Pyx_XDECREF(__pyx_t_5);
+  __Pyx_XDECREF(__pyx_t_6);
+  __Pyx_XDECREF(__pyx_t_7);
+  __Pyx_AddTraceback("cytree.batch_step", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __pyx_r = NULL;
+  __pyx_L0:;
+  __Pyx_XGIVEREF(__pyx_r);
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
+/* "cytree.pyx":123
+ *     return results.cresults.hidden_state_index_x_lst, results.cresults.hidden_state_index_y_lst, results.cresults.last_actions
  * 
  * def batch_traverse(Roots roots, int num_simulations, int max_num_considered_actions, float discount, MinMaxStatsList min_max_stats_lst, ResultsWrapper results):             # <<<<<<<<<<<<<<
  * 
@@ -4256,9 +4652,9 @@ static PyObject *__pyx_pf_6cytree_batch_back_propagate(CYTHON_UNUSED PyObject *_
  */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_6cytree_3batch_traverse(PyObject *__pyx_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
-static PyMethodDef __pyx_mdef_6cytree_3batch_traverse = {"batch_traverse", (PyCFunction)(void*)(PyCFunctionWithKeywords)__pyx_pw_6cytree_3batch_traverse, METH_VARARGS|METH_KEYWORDS, 0};
-static PyObject *__pyx_pw_6cytree_3batch_traverse(PyObject *__pyx_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
+static PyObject *__pyx_pw_6cytree_5batch_traverse(PyObject *__pyx_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
+static PyMethodDef __pyx_mdef_6cytree_5batch_traverse = {"batch_traverse", (PyCFunction)(void*)(PyCFunctionWithKeywords)__pyx_pw_6cytree_5batch_traverse, METH_VARARGS|METH_KEYWORDS, 0};
+static PyObject *__pyx_pw_6cytree_5batch_traverse(PyObject *__pyx_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
   struct __pyx_obj_6cytree_Roots *__pyx_v_roots = 0;
   int __pyx_v_num_simulations;
   int __pyx_v_max_num_considered_actions;
@@ -4302,35 +4698,35 @@ static PyObject *__pyx_pw_6cytree_3batch_traverse(PyObject *__pyx_self, PyObject
         case  1:
         if (likely((values[1] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_num_simulations)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("batch_traverse", 1, 6, 6, 1); __PYX_ERR(1, 108, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("batch_traverse", 1, 6, 6, 1); __PYX_ERR(1, 123, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  2:
         if (likely((values[2] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_max_num_considered_actions)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("batch_traverse", 1, 6, 6, 2); __PYX_ERR(1, 108, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("batch_traverse", 1, 6, 6, 2); __PYX_ERR(1, 123, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  3:
         if (likely((values[3] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_discount)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("batch_traverse", 1, 6, 6, 3); __PYX_ERR(1, 108, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("batch_traverse", 1, 6, 6, 3); __PYX_ERR(1, 123, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  4:
         if (likely((values[4] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_min_max_stats_lst)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("batch_traverse", 1, 6, 6, 4); __PYX_ERR(1, 108, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("batch_traverse", 1, 6, 6, 4); __PYX_ERR(1, 123, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  5:
         if (likely((values[5] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_results)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("batch_traverse", 1, 6, 6, 5); __PYX_ERR(1, 108, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("batch_traverse", 1, 6, 6, 5); __PYX_ERR(1, 123, __pyx_L3_error)
         }
       }
       if (unlikely(kw_args > 0)) {
-        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "batch_traverse") < 0)) __PYX_ERR(1, 108, __pyx_L3_error)
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "batch_traverse") < 0)) __PYX_ERR(1, 123, __pyx_L3_error)
       }
     } else if (PyTuple_GET_SIZE(__pyx_args) != 6) {
       goto __pyx_L5_argtuple_error;
@@ -4343,24 +4739,24 @@ static PyObject *__pyx_pw_6cytree_3batch_traverse(PyObject *__pyx_self, PyObject
       values[5] = PyTuple_GET_ITEM(__pyx_args, 5);
     }
     __pyx_v_roots = ((struct __pyx_obj_6cytree_Roots *)values[0]);
-    __pyx_v_num_simulations = __Pyx_PyInt_As_int(values[1]); if (unlikely((__pyx_v_num_simulations == (int)-1) && PyErr_Occurred())) __PYX_ERR(1, 108, __pyx_L3_error)
-    __pyx_v_max_num_considered_actions = __Pyx_PyInt_As_int(values[2]); if (unlikely((__pyx_v_max_num_considered_actions == (int)-1) && PyErr_Occurred())) __PYX_ERR(1, 108, __pyx_L3_error)
-    __pyx_v_discount = __pyx_PyFloat_AsFloat(values[3]); if (unlikely((__pyx_v_discount == (float)-1) && PyErr_Occurred())) __PYX_ERR(1, 108, __pyx_L3_error)
+    __pyx_v_num_simulations = __Pyx_PyInt_As_int(values[1]); if (unlikely((__pyx_v_num_simulations == (int)-1) && PyErr_Occurred())) __PYX_ERR(1, 123, __pyx_L3_error)
+    __pyx_v_max_num_considered_actions = __Pyx_PyInt_As_int(values[2]); if (unlikely((__pyx_v_max_num_considered_actions == (int)-1) && PyErr_Occurred())) __PYX_ERR(1, 123, __pyx_L3_error)
+    __pyx_v_discount = __pyx_PyFloat_AsFloat(values[3]); if (unlikely((__pyx_v_discount == (float)-1) && PyErr_Occurred())) __PYX_ERR(1, 123, __pyx_L3_error)
     __pyx_v_min_max_stats_lst = ((struct __pyx_obj_6cytree_MinMaxStatsList *)values[4]);
     __pyx_v_results = ((struct __pyx_obj_6cytree_ResultsWrapper *)values[5]);
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("batch_traverse", 1, 6, 6, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(1, 108, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("batch_traverse", 1, 6, 6, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(1, 123, __pyx_L3_error)
   __pyx_L3_error:;
   __Pyx_AddTraceback("cytree.batch_traverse", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
   return NULL;
   __pyx_L4_argument_unpacking_done:;
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_roots), __pyx_ptype_6cytree_Roots, 1, "roots", 0))) __PYX_ERR(1, 108, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_min_max_stats_lst), __pyx_ptype_6cytree_MinMaxStatsList, 1, "min_max_stats_lst", 0))) __PYX_ERR(1, 108, __pyx_L1_error)
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_results), __pyx_ptype_6cytree_ResultsWrapper, 1, "results", 0))) __PYX_ERR(1, 108, __pyx_L1_error)
-  __pyx_r = __pyx_pf_6cytree_2batch_traverse(__pyx_self, __pyx_v_roots, __pyx_v_num_simulations, __pyx_v_max_num_considered_actions, __pyx_v_discount, __pyx_v_min_max_stats_lst, __pyx_v_results);
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_roots), __pyx_ptype_6cytree_Roots, 1, "roots", 0))) __PYX_ERR(1, 123, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_min_max_stats_lst), __pyx_ptype_6cytree_MinMaxStatsList, 1, "min_max_stats_lst", 0))) __PYX_ERR(1, 123, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_results), __pyx_ptype_6cytree_ResultsWrapper, 1, "results", 0))) __PYX_ERR(1, 123, __pyx_L1_error)
+  __pyx_r = __pyx_pf_6cytree_4batch_traverse(__pyx_self, __pyx_v_roots, __pyx_v_num_simulations, __pyx_v_max_num_considered_actions, __pyx_v_discount, __pyx_v_min_max_stats_lst, __pyx_v_results);
 
   /* function exit code */
   goto __pyx_L0;
@@ -4371,7 +4767,7 @@ static PyObject *__pyx_pw_6cytree_3batch_traverse(PyObject *__pyx_self, PyObject
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_6cytree_2batch_traverse(CYTHON_UNUSED PyObject *__pyx_self, struct __pyx_obj_6cytree_Roots *__pyx_v_roots, int __pyx_v_num_simulations, int __pyx_v_max_num_considered_actions, float __pyx_v_discount, struct __pyx_obj_6cytree_MinMaxStatsList *__pyx_v_min_max_stats_lst, struct __pyx_obj_6cytree_ResultsWrapper *__pyx_v_results) {
+static PyObject *__pyx_pf_6cytree_4batch_traverse(CYTHON_UNUSED PyObject *__pyx_self, struct __pyx_obj_6cytree_Roots *__pyx_v_roots, int __pyx_v_num_simulations, int __pyx_v_max_num_considered_actions, float __pyx_v_discount, struct __pyx_obj_6cytree_MinMaxStatsList *__pyx_v_min_max_stats_lst, struct __pyx_obj_6cytree_ResultsWrapper *__pyx_v_results) {
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
@@ -4385,7 +4781,7 @@ static PyObject *__pyx_pf_6cytree_2batch_traverse(CYTHON_UNUSED PyObject *__pyx_
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("batch_traverse", 0);
 
-  /* "cytree.pyx":110
+  /* "cytree.pyx":125
  * def batch_traverse(Roots roots, int num_simulations, int max_num_considered_actions, float discount, MinMaxStatsList min_max_stats_lst, ResultsWrapper results):
  * 
  *     cbatch_traverse(roots.roots, num_simulations, max_num_considered_actions, discount, min_max_stats_lst.cmin_max_stats_lst, results.cresults)             # <<<<<<<<<<<<<<
@@ -4394,23 +4790,23 @@ static PyObject *__pyx_pf_6cytree_2batch_traverse(CYTHON_UNUSED PyObject *__pyx_
  */
   tree::cbatch_traverse(__pyx_v_roots->roots, __pyx_v_num_simulations, __pyx_v_max_num_considered_actions, __pyx_v_discount, __pyx_v_min_max_stats_lst->cmin_max_stats_lst, __pyx_v_results->cresults);
 
-  /* "cytree.pyx":112
+  /* "cytree.pyx":127
  *     cbatch_traverse(roots.roots, num_simulations, max_num_considered_actions, discount, min_max_stats_lst.cmin_max_stats_lst, results.cresults)
  * 
  *     return results.cresults.hidden_state_index_x_lst, results.cresults.hidden_state_index_y_lst, results.cresults.policy_node_y_lst, results.cresults.chance_node_y_lst, results.cresults.last_actions             # <<<<<<<<<<<<<<
  */
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_1 = __pyx_convert_vector_to_py_int(__pyx_v_results->cresults.hidden_state_index_x_lst); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 112, __pyx_L1_error)
+  __pyx_t_1 = __pyx_convert_vector_to_py_int(__pyx_v_results->cresults.hidden_state_index_x_lst); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 127, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
-  __pyx_t_2 = __pyx_convert_vector_to_py_int(__pyx_v_results->cresults.hidden_state_index_y_lst); if (unlikely(!__pyx_t_2)) __PYX_ERR(1, 112, __pyx_L1_error)
+  __pyx_t_2 = __pyx_convert_vector_to_py_int(__pyx_v_results->cresults.hidden_state_index_y_lst); if (unlikely(!__pyx_t_2)) __PYX_ERR(1, 127, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
-  __pyx_t_3 = __pyx_convert_vector_to_py_int(__pyx_v_results->cresults.policy_node_y_lst); if (unlikely(!__pyx_t_3)) __PYX_ERR(1, 112, __pyx_L1_error)
+  __pyx_t_3 = __pyx_convert_vector_to_py_int(__pyx_v_results->cresults.policy_node_y_lst); if (unlikely(!__pyx_t_3)) __PYX_ERR(1, 127, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_3);
-  __pyx_t_4 = __pyx_convert_vector_to_py_int(__pyx_v_results->cresults.chance_node_y_lst); if (unlikely(!__pyx_t_4)) __PYX_ERR(1, 112, __pyx_L1_error)
+  __pyx_t_4 = __pyx_convert_vector_to_py_int(__pyx_v_results->cresults.chance_node_y_lst); if (unlikely(!__pyx_t_4)) __PYX_ERR(1, 127, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  __pyx_t_5 = __pyx_convert_vector_to_py_int(__pyx_v_results->cresults.last_actions); if (unlikely(!__pyx_t_5)) __PYX_ERR(1, 112, __pyx_L1_error)
+  __pyx_t_5 = __pyx_convert_vector_to_py_int(__pyx_v_results->cresults.last_actions); if (unlikely(!__pyx_t_5)) __PYX_ERR(1, 127, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
-  __pyx_t_6 = PyTuple_New(5); if (unlikely(!__pyx_t_6)) __PYX_ERR(1, 112, __pyx_L1_error)
+  __pyx_t_6 = PyTuple_New(5); if (unlikely(!__pyx_t_6)) __PYX_ERR(1, 127, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_6);
   __Pyx_GIVEREF(__pyx_t_1);
   PyTuple_SET_ITEM(__pyx_t_6, 0, __pyx_t_1);
@@ -4431,8 +4827,8 @@ static PyObject *__pyx_pf_6cytree_2batch_traverse(CYTHON_UNUSED PyObject *__pyx_
   __pyx_t_6 = 0;
   goto __pyx_L0;
 
-  /* "cytree.pyx":108
- * 
+  /* "cytree.pyx":123
+ *     return results.cresults.hidden_state_index_x_lst, results.cresults.hidden_state_index_y_lst, results.cresults.last_actions
  * 
  * def batch_traverse(Roots roots, int num_simulations, int max_num_considered_actions, float discount, MinMaxStatsList min_max_stats_lst, ResultsWrapper results):             # <<<<<<<<<<<<<<
  * 
@@ -6319,8 +6715,9 @@ static void __pyx_tp_dealloc_6cytree_ResultsWrapper(PyObject *o) {
 
 static PyMethodDef __pyx_methods_6cytree_ResultsWrapper[] = {
   {"get_search_len", (PyCFunction)__pyx_pw_6cytree_14ResultsWrapper_3get_search_len, METH_NOARGS, 0},
-  {"__reduce_cython__", (PyCFunction)__pyx_pw_6cytree_14ResultsWrapper_5__reduce_cython__, METH_NOARGS, 0},
-  {"__setstate_cython__", (PyCFunction)__pyx_pw_6cytree_14ResultsWrapper_7__setstate_cython__, METH_O, 0},
+  {"get_searched_node", (PyCFunction)(void*)(PyCFunctionWithKeywords)__pyx_pw_6cytree_14ResultsWrapper_5get_searched_node, METH_VARARGS|METH_KEYWORDS, 0},
+  {"__reduce_cython__", (PyCFunction)__pyx_pw_6cytree_14ResultsWrapper_7__reduce_cython__, METH_NOARGS, 0},
+  {"__setstate_cython__", (PyCFunction)__pyx_pw_6cytree_14ResultsWrapper_9__setstate_cython__, METH_O, 0},
   {0, 0, 0, 0}
 };
 
@@ -6678,9 +7075,11 @@ static __Pyx_StringTabEntry __pyx_string_tab[] = {
   {&__pyx_n_s_action_mappings, __pyx_k_action_mappings, sizeof(__pyx_k_action_mappings), 0, 0, 1, 1},
   {&__pyx_n_s_action_num, __pyx_k_action_num, sizeof(__pyx_k_action_num), 0, 0, 1, 1},
   {&__pyx_n_s_batch_back_propagate, __pyx_k_batch_back_propagate, sizeof(__pyx_k_batch_back_propagate), 0, 0, 1, 1},
+  {&__pyx_n_s_batch_step, __pyx_k_batch_step, sizeof(__pyx_k_batch_step), 0, 0, 1, 1},
   {&__pyx_n_s_batch_traverse, __pyx_k_batch_traverse, sizeof(__pyx_k_batch_traverse), 0, 0, 1, 1},
   {&__pyx_n_s_cline_in_traceback, __pyx_k_cline_in_traceback, sizeof(__pyx_k_cline_in_traceback), 0, 0, 1, 1},
   {&__pyx_n_s_cpolicies, __pyx_k_cpolicies, sizeof(__pyx_k_cpolicies), 0, 0, 1, 1},
+  {&__pyx_n_s_cto_step, __pyx_k_cto_step, sizeof(__pyx_k_cto_step), 0, 0, 1, 1},
   {&__pyx_n_s_ctypes, __pyx_k_ctypes, sizeof(__pyx_k_ctypes), 0, 0, 1, 1},
   {&__pyx_n_s_cvalue_prefixs, __pyx_k_cvalue_prefixs, sizeof(__pyx_k_cvalue_prefixs), 0, 0, 1, 1},
   {&__pyx_n_s_cvalues, __pyx_k_cvalues, sizeof(__pyx_k_cvalues), 0, 0, 1, 1},
@@ -6698,6 +7097,7 @@ static __Pyx_StringTabEntry __pyx_string_tab[] = {
   {&__pyx_n_s_min_max_stats_lst, __pyx_k_min_max_stats_lst, sizeof(__pyx_k_min_max_stats_lst), 0, 0, 1, 1},
   {&__pyx_n_s_name, __pyx_k_name, sizeof(__pyx_k_name), 0, 0, 1, 1},
   {&__pyx_kp_s_no_default___reduce___due_to_non, __pyx_k_no_default___reduce___due_to_non, sizeof(__pyx_k_no_default___reduce___due_to_non), 0, 0, 1, 0},
+  {&__pyx_n_s_node_idx, __pyx_k_node_idx, sizeof(__pyx_k_node_idx), 0, 0, 1, 1},
   {&__pyx_n_s_noises, __pyx_k_noises, sizeof(__pyx_k_noises), 0, 0, 1, 1},
   {&__pyx_n_s_np, __pyx_k_np, sizeof(__pyx_k_np), 0, 0, 1, 1},
   {&__pyx_n_s_num, __pyx_k_num, sizeof(__pyx_k_num), 0, 0, 1, 1},
@@ -6705,6 +7105,7 @@ static __Pyx_StringTabEntry __pyx_string_tab[] = {
   {&__pyx_n_s_numpy, __pyx_k_numpy, sizeof(__pyx_k_numpy), 0, 0, 1, 1},
   {&__pyx_kp_s_numpy_core_multiarray_failed_to, __pyx_k_numpy_core_multiarray_failed_to, sizeof(__pyx_k_numpy_core_multiarray_failed_to), 0, 0, 1, 0},
   {&__pyx_kp_s_numpy_core_umath_failed_to_impor, __pyx_k_numpy_core_umath_failed_to_impor, sizeof(__pyx_k_numpy_core_umath_failed_to_impor), 0, 0, 1, 0},
+  {&__pyx_n_s_path, __pyx_k_path, sizeof(__pyx_k_path), 0, 0, 1, 1},
   {&__pyx_n_s_policies, __pyx_k_policies, sizeof(__pyx_k_policies), 0, 0, 1, 1},
   {&__pyx_n_s_policy_logits, __pyx_k_policy_logits, sizeof(__pyx_k_policy_logits), 0, 0, 1, 1},
   {&__pyx_n_s_policy_logits_pool, __pyx_k_policy_logits_pool, sizeof(__pyx_k_policy_logits_pool), 0, 0, 1, 1},
@@ -6722,6 +7123,7 @@ static __Pyx_StringTabEntry __pyx_string_tab[] = {
   {&__pyx_n_s_setstate_cython, __pyx_k_setstate_cython, sizeof(__pyx_k_setstate_cython), 0, 0, 1, 1},
   {&__pyx_n_s_test, __pyx_k_test, sizeof(__pyx_k_test), 0, 0, 1, 1},
   {&__pyx_n_s_to_play, __pyx_k_to_play, sizeof(__pyx_k_to_play), 0, 0, 1, 1},
+  {&__pyx_n_s_to_step, __pyx_k_to_step, sizeof(__pyx_k_to_step), 0, 0, 1, 1},
   {&__pyx_n_s_value, __pyx_k_value, sizeof(__pyx_k_value), 0, 0, 1, 1},
   {&__pyx_n_s_value_pool, __pyx_k_value_pool, sizeof(__pyx_k_value_pool), 0, 0, 1, 1},
   {&__pyx_n_s_value_prefix, __pyx_k_value_prefix, sizeof(__pyx_k_value_prefix), 0, 0, 1, 1},
@@ -6841,29 +7243,41 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
   __Pyx_GOTREF(__pyx_tuple__10);
   __Pyx_GIVEREF(__pyx_tuple__10);
 
-  /* "cytree.pyx":98
+  /* "cytree.pyx":101
  *     #    del self.cnode
  * 
  * def batch_back_propagate(int hidden_state_index_x, float discount, list value_prefixs, list values, list policies, MinMaxStatsList min_max_stats_lst, ResultsWrapper results, list is_reset_lst):             # <<<<<<<<<<<<<<
  *     cdef int i
  *     cdef vector[float] cvalue_prefixs = value_prefixs
  */
-  __pyx_tuple__11 = PyTuple_Pack(12, __pyx_n_s_hidden_state_index_x, __pyx_n_s_discount, __pyx_n_s_value_prefixs, __pyx_n_s_values, __pyx_n_s_policies, __pyx_n_s_min_max_stats_lst, __pyx_n_s_results, __pyx_n_s_is_reset_lst, __pyx_n_s_i, __pyx_n_s_cvalue_prefixs, __pyx_n_s_cvalues, __pyx_n_s_cpolicies); if (unlikely(!__pyx_tuple__11)) __PYX_ERR(1, 98, __pyx_L1_error)
+  __pyx_tuple__11 = PyTuple_Pack(12, __pyx_n_s_hidden_state_index_x, __pyx_n_s_discount, __pyx_n_s_value_prefixs, __pyx_n_s_values, __pyx_n_s_policies, __pyx_n_s_min_max_stats_lst, __pyx_n_s_results, __pyx_n_s_is_reset_lst, __pyx_n_s_i, __pyx_n_s_cvalue_prefixs, __pyx_n_s_cvalues, __pyx_n_s_cpolicies); if (unlikely(!__pyx_tuple__11)) __PYX_ERR(1, 101, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_tuple__11);
   __Pyx_GIVEREF(__pyx_tuple__11);
-  __pyx_codeobj__12 = (PyObject*)__Pyx_PyCode_New(8, 0, 12, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__11, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_cytree_pyx, __pyx_n_s_batch_back_propagate, 98, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__12)) __PYX_ERR(1, 98, __pyx_L1_error)
+  __pyx_codeobj__12 = (PyObject*)__Pyx_PyCode_New(8, 0, 12, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__11, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_cytree_pyx, __pyx_n_s_batch_back_propagate, 101, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__12)) __PYX_ERR(1, 101, __pyx_L1_error)
 
-  /* "cytree.pyx":108
+  /* "cytree.pyx":110
+ *                           min_max_stats_lst.cmin_max_stats_lst, results.cresults, is_reset_lst)
  * 
+ * def batch_step(MinMaxStatsList min_max_stats_lst, ResultsWrapper results, list to_step, int hidden_state_index_x, float discount, list value_prefixs, list values, list policies):             # <<<<<<<<<<<<<<
+ *     cdef int i
+ *     cdef vector[int] cto_step = to_step
+ */
+  __pyx_tuple__13 = PyTuple_Pack(13, __pyx_n_s_min_max_stats_lst, __pyx_n_s_results, __pyx_n_s_to_step, __pyx_n_s_hidden_state_index_x, __pyx_n_s_discount, __pyx_n_s_value_prefixs, __pyx_n_s_values, __pyx_n_s_policies, __pyx_n_s_i, __pyx_n_s_cto_step, __pyx_n_s_cvalue_prefixs, __pyx_n_s_cvalues, __pyx_n_s_cpolicies); if (unlikely(!__pyx_tuple__13)) __PYX_ERR(1, 110, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_tuple__13);
+  __Pyx_GIVEREF(__pyx_tuple__13);
+  __pyx_codeobj__14 = (PyObject*)__Pyx_PyCode_New(8, 0, 13, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__13, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_cytree_pyx, __pyx_n_s_batch_step, 110, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__14)) __PYX_ERR(1, 110, __pyx_L1_error)
+
+  /* "cytree.pyx":123
+ *     return results.cresults.hidden_state_index_x_lst, results.cresults.hidden_state_index_y_lst, results.cresults.last_actions
  * 
  * def batch_traverse(Roots roots, int num_simulations, int max_num_considered_actions, float discount, MinMaxStatsList min_max_stats_lst, ResultsWrapper results):             # <<<<<<<<<<<<<<
  * 
  *     cbatch_traverse(roots.roots, num_simulations, max_num_considered_actions, discount, min_max_stats_lst.cmin_max_stats_lst, results.cresults)
  */
-  __pyx_tuple__13 = PyTuple_Pack(6, __pyx_n_s_roots, __pyx_n_s_num_simulations, __pyx_n_s_max_num_considered_actions, __pyx_n_s_discount, __pyx_n_s_min_max_stats_lst, __pyx_n_s_results); if (unlikely(!__pyx_tuple__13)) __PYX_ERR(1, 108, __pyx_L1_error)
-  __Pyx_GOTREF(__pyx_tuple__13);
-  __Pyx_GIVEREF(__pyx_tuple__13);
-  __pyx_codeobj__14 = (PyObject*)__Pyx_PyCode_New(6, 0, 6, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__13, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_cytree_pyx, __pyx_n_s_batch_traverse, 108, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__14)) __PYX_ERR(1, 108, __pyx_L1_error)
+  __pyx_tuple__15 = PyTuple_Pack(6, __pyx_n_s_roots, __pyx_n_s_num_simulations, __pyx_n_s_max_num_considered_actions, __pyx_n_s_discount, __pyx_n_s_min_max_stats_lst, __pyx_n_s_results); if (unlikely(!__pyx_tuple__15)) __PYX_ERR(1, 123, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_tuple__15);
+  __Pyx_GIVEREF(__pyx_tuple__15);
+  __pyx_codeobj__16 = (PyObject*)__Pyx_PyCode_New(6, 0, 6, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__15, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_cytree_pyx, __pyx_n_s_batch_traverse, 123, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__16)) __PYX_ERR(1, 123, __pyx_L1_error)
   __Pyx_RefNannyFinishContext();
   return 0;
   __pyx_L1_error:;
@@ -6937,25 +7351,25 @@ static int __Pyx_modinit_type_init_code(void) {
   if (PyObject_SetAttr(__pyx_m, __pyx_n_s_ResultsWrapper, (PyObject *)&__pyx_type_6cytree_ResultsWrapper) < 0) __PYX_ERR(1, 29, __pyx_L1_error)
   if (__Pyx_setup_reduce((PyObject*)&__pyx_type_6cytree_ResultsWrapper) < 0) __PYX_ERR(1, 29, __pyx_L1_error)
   __pyx_ptype_6cytree_ResultsWrapper = &__pyx_type_6cytree_ResultsWrapper;
-  if (PyType_Ready(&__pyx_type_6cytree_Roots) < 0) __PYX_ERR(1, 39, __pyx_L1_error)
+  if (PyType_Ready(&__pyx_type_6cytree_Roots) < 0) __PYX_ERR(1, 42, __pyx_L1_error)
   #if PY_VERSION_HEX < 0x030800B1
   __pyx_type_6cytree_Roots.tp_print = 0;
   #endif
   if ((CYTHON_USE_TYPE_SLOTS && CYTHON_USE_PYTYPE_LOOKUP) && likely(!__pyx_type_6cytree_Roots.tp_dictoffset && __pyx_type_6cytree_Roots.tp_getattro == PyObject_GenericGetAttr)) {
     __pyx_type_6cytree_Roots.tp_getattro = __Pyx_PyObject_GenericGetAttr;
   }
-  if (PyObject_SetAttr(__pyx_m, __pyx_n_s_Roots, (PyObject *)&__pyx_type_6cytree_Roots) < 0) __PYX_ERR(1, 39, __pyx_L1_error)
-  if (__Pyx_setup_reduce((PyObject*)&__pyx_type_6cytree_Roots) < 0) __PYX_ERR(1, 39, __pyx_L1_error)
+  if (PyObject_SetAttr(__pyx_m, __pyx_n_s_Roots, (PyObject *)&__pyx_type_6cytree_Roots) < 0) __PYX_ERR(1, 42, __pyx_L1_error)
+  if (__Pyx_setup_reduce((PyObject*)&__pyx_type_6cytree_Roots) < 0) __PYX_ERR(1, 42, __pyx_L1_error)
   __pyx_ptype_6cytree_Roots = &__pyx_type_6cytree_Roots;
-  if (PyType_Ready(&__pyx_type_6cytree_Node) < 0) __PYX_ERR(1, 81, __pyx_L1_error)
+  if (PyType_Ready(&__pyx_type_6cytree_Node) < 0) __PYX_ERR(1, 84, __pyx_L1_error)
   #if PY_VERSION_HEX < 0x030800B1
   __pyx_type_6cytree_Node.tp_print = 0;
   #endif
   if ((CYTHON_USE_TYPE_SLOTS && CYTHON_USE_PYTYPE_LOOKUP) && likely(!__pyx_type_6cytree_Node.tp_dictoffset && __pyx_type_6cytree_Node.tp_getattro == PyObject_GenericGetAttr)) {
     __pyx_type_6cytree_Node.tp_getattro = __Pyx_PyObject_GenericGetAttr;
   }
-  if (PyObject_SetAttr(__pyx_m, __pyx_n_s_Node, (PyObject *)&__pyx_type_6cytree_Node) < 0) __PYX_ERR(1, 81, __pyx_L1_error)
-  if (__Pyx_setup_reduce((PyObject*)&__pyx_type_6cytree_Node) < 0) __PYX_ERR(1, 81, __pyx_L1_error)
+  if (PyObject_SetAttr(__pyx_m, __pyx_n_s_Node, (PyObject *)&__pyx_type_6cytree_Node) < 0) __PYX_ERR(1, 84, __pyx_L1_error)
+  if (__Pyx_setup_reduce((PyObject*)&__pyx_type_6cytree_Node) < 0) __PYX_ERR(1, 84, __pyx_L1_error)
   __pyx_ptype_6cytree_Node = &__pyx_type_6cytree_Node;
   __Pyx_RefNannyFinishContext();
   return 0;
@@ -7246,7 +7660,7 @@ if (!__Pyx_RefNanny) {
  * # distutils: language=c++
  * import ctypes             # <<<<<<<<<<<<<<
  * cimport cython
- * from ctree cimport CMinMaxStatsList, CNode, CRoots, CSearchResults, cbatch_back_propagate, cbatch_traverse
+ * from ctree cimport CMinMaxStatsList, CNode, CRoots, CSearchResults, cbatch_back_propagate, cbatch_traverse, cbatch_step
  */
   __pyx_t_1 = __Pyx_Import(__pyx_n_s_ctypes, 0, -1); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 2, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
@@ -7265,28 +7679,40 @@ if (!__Pyx_RefNanny) {
   if (PyDict_SetItem(__pyx_d, __pyx_n_s_np, __pyx_t_1) < 0) __PYX_ERR(1, 9, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-  /* "cytree.pyx":98
+  /* "cytree.pyx":101
  *     #    del self.cnode
  * 
  * def batch_back_propagate(int hidden_state_index_x, float discount, list value_prefixs, list values, list policies, MinMaxStatsList min_max_stats_lst, ResultsWrapper results, list is_reset_lst):             # <<<<<<<<<<<<<<
  *     cdef int i
  *     cdef vector[float] cvalue_prefixs = value_prefixs
  */
-  __pyx_t_1 = PyCFunction_NewEx(&__pyx_mdef_6cytree_1batch_back_propagate, NULL, __pyx_n_s_cytree); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 98, __pyx_L1_error)
+  __pyx_t_1 = PyCFunction_NewEx(&__pyx_mdef_6cytree_1batch_back_propagate, NULL, __pyx_n_s_cytree); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 101, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
-  if (PyDict_SetItem(__pyx_d, __pyx_n_s_batch_back_propagate, __pyx_t_1) < 0) __PYX_ERR(1, 98, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_d, __pyx_n_s_batch_back_propagate, __pyx_t_1) < 0) __PYX_ERR(1, 101, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-  /* "cytree.pyx":108
+  /* "cytree.pyx":110
+ *                           min_max_stats_lst.cmin_max_stats_lst, results.cresults, is_reset_lst)
  * 
+ * def batch_step(MinMaxStatsList min_max_stats_lst, ResultsWrapper results, list to_step, int hidden_state_index_x, float discount, list value_prefixs, list values, list policies):             # <<<<<<<<<<<<<<
+ *     cdef int i
+ *     cdef vector[int] cto_step = to_step
+ */
+  __pyx_t_1 = PyCFunction_NewEx(&__pyx_mdef_6cytree_3batch_step, NULL, __pyx_n_s_cytree); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 110, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_1);
+  if (PyDict_SetItem(__pyx_d, __pyx_n_s_batch_step, __pyx_t_1) < 0) __PYX_ERR(1, 110, __pyx_L1_error)
+  __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
+
+  /* "cytree.pyx":123
+ *     return results.cresults.hidden_state_index_x_lst, results.cresults.hidden_state_index_y_lst, results.cresults.last_actions
  * 
  * def batch_traverse(Roots roots, int num_simulations, int max_num_considered_actions, float discount, MinMaxStatsList min_max_stats_lst, ResultsWrapper results):             # <<<<<<<<<<<<<<
  * 
  *     cbatch_traverse(roots.roots, num_simulations, max_num_considered_actions, discount, min_max_stats_lst.cmin_max_stats_lst, results.cresults)
  */
-  __pyx_t_1 = PyCFunction_NewEx(&__pyx_mdef_6cytree_3batch_traverse, NULL, __pyx_n_s_cytree); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 108, __pyx_L1_error)
+  __pyx_t_1 = PyCFunction_NewEx(&__pyx_mdef_6cytree_5batch_traverse, NULL, __pyx_n_s_cytree); if (unlikely(!__pyx_t_1)) __PYX_ERR(1, 123, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
-  if (PyDict_SetItem(__pyx_d, __pyx_n_s_batch_traverse, __pyx_t_1) < 0) __PYX_ERR(1, 108, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_d, __pyx_n_s_batch_traverse, __pyx_t_1) < 0) __PYX_ERR(1, 123, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
   /* "cytree.pyx":1

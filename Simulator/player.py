@@ -435,19 +435,22 @@ class Player:
         for y in range(4):
             for x in range(7):
                 if self.board[x][y]:
-                    # all movements and selling actions legal
-                    mask[x, y, :-1] = 1
+                    # all movements are legal
+                    mask[x, y, :28] = 1
+                    # can sell unless champ is a target dummy
+                    if not self.board[x][y].target_dummy:
+                        mask[x, y, 29] = 1
                     # movement to same position is illegal
                     mask[x, y, x*4 + y] = 0
-                    # cannot move to bench if the bench is full
-                    if bench_full:
-                        mask[x, y, 28] = 0
+                    # cannot move to bench if the bench is full or the champ is a target dummy
+                    if not bench_full and not self.board[x][y].target_dummy:
+                        mask[x, y, 28] = 1
         # find legal "from" positions on the bench
         for x_bench in range(len(self.bench)):
             if self.bench[x_bench]:
                 x, y = x_bench // 4 + 7, x_bench % 4
                 # selling is legal
-                mask[x, y, 29] = 0
+                mask[x, y, 29] = 1
                 # any board "to" position is legal if the board is not full
                 if self.num_units_in_play < self.max_units:
                     mask[x, y, :28] = 1     
@@ -455,17 +458,17 @@ class Player:
                 else:                 
                     for board_y in range(4):
                         for board_x in range(7):
-                            if self.board[board_x][board_y]:
+                            if self.board[board_x][board_y] and not self.board[board_x][board_y].target_dummy:
                                 mask[x, y, board_x*4 + board_y] = 1
         # find legal "from" positions on the item bench
         for x_itembench, item in enumerate(self.item_bench):
             if item:
                 x, y = (x_itembench + 2) // 4 + 10, (x_itembench + 2) % 4 
                 # occupied board "to" positions are legal if the champion 
-                # does not have a full inventory
+                # does not have a full inventory and is not a target dummy
                 for board_y in range(4):
                     for board_x in range(7):
-                        if self.board[board_x][board_y] and len(self.board[board_x][board_y].items) < 3:
+                        if self.board[board_x][board_y] and not self.board[board_x][board_y].target_dummy and len(self.board[board_x][board_y].items) < 3:
                             mask[x, y, board_x*4 + board_y] = 1
         # find legal "from" positions in the shop
         for x_shop in range(5):

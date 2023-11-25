@@ -44,7 +44,7 @@ class TFTConfig(BaseConfig):
             lr_decay_steps=1000000,
             auto_td_steps_ratio=0.3,
             # replay window
-            start_transitions=1e5,
+            start_transitions=5e4,
             total_transitions=100 * 1000,
             transition_num=1.5e5,
             # frame skip & stack observation
@@ -95,14 +95,14 @@ class TFTConfig(BaseConfig):
 
     def visit_softmax_temperature_fn(self, num_moves, trained_steps):
         if self.change_temperature:
-            if trained_steps < 40000: #0.25 * (self.training_steps):
+            if trained_steps < 90000: #0.25 * (self.training_steps):
                 return 0.5
-            elif trained_steps < 80000: #0.5 * (self.training_steps):
+            elif trained_steps < 180000: #0.5 * (self.training_steps):
                 return 0.25
-            elif trained_steps < 160000 * (self.training_steps):
-               return 0.125
+            elif trained_steps < 360000 * (self.training_steps):
+               return 0.13
             else:
-                return 0.0625
+                return 0.08
         else:
             return 1.0
     

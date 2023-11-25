@@ -46,6 +46,20 @@ namespace tree{
     }
 
     CSearchResults::~CSearchResults(){}
+    
+    int CSearchResults::get_searched_node(int path, int node_idx){
+        std::vector<CNode*> s_path = this->search_paths[path];
+        int path_len = static_cast<int>(s_path.size());
+        if(node_idx >= path_len){
+        node_idx = path_len - 1;
+        }
+        if(node_idx < 0){
+        node_idx = (::std::max)(0, path_len + node_idx);
+        }
+        CNode* node = s_path[node_idx];
+        return node->action;
+        }
+
 
     //*********************************************************
 
@@ -841,6 +855,30 @@ namespace tree{
             results.nodes.push_back(node);
         }
     }
+
+    void cbatch_step(tools::CMinMaxStatsList *min_max_stats_lst, CSearchResults &results, const std::vector<int> &to_step, int hidden_state_index_x, float discount, const std::vector<float> &value_prefixs, const std::vector<float> &values, const std::vector<std::vector<float>> &policies){
+        // set seed
+        timeval t1;
+        gettimeofdayy(&t1, NULL);
+        srand(t1.tv_usec);        
+        for (int i=0;i<to_step.size();i++){
+            results.nodes[to_step[i]]->expand(0, hidden_state_index_x, i, value_prefixs[i], values[i], policies[i]);
+            int action;
+            int child_idx;
+            action = cselect_interior_child(results.nodes[to_step[i]], discount);
+            child_idx = action;
+            results.nodes[to_step[i]]->best_action = child_idx;
+            CNode* node = results.nodes[to_step[i]]->get_child(child_idx);
+            results.search_paths[to_step[i]].push_back(node);
+            CNode* parent = results.search_paths[to_step[i]][results.search_paths[to_step[i]].size() - 2];
+            results.hidden_state_index_x_lst[to_step[i]] = parent->hidden_state_index_x;
+            results.hidden_state_index_y_lst[to_step[i]] = parent->hidden_state_index_y;
+            results.last_actions[to_step[i]] = action;
+            results.search_lens[to_step[i]] += 1;
+            results.nodes[to_step[i]] = node;
+        }
+    }
+
     
     std::vector<float> generate_gumbel(float gumbel_scale, float gumbel_rng, int shape){
         /*

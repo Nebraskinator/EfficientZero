@@ -76,6 +76,8 @@ namespace tree {
             CSearchResults();
             CSearchResults(int num);
             ~CSearchResults();
+            
+            int CSearchResults::get_searched_node(int path, int node_idx);
 
     };
 
@@ -87,6 +89,7 @@ namespace tree {
     int cselect_child(CNode* root, tools::CMinMaxStats &min_max_stats, int pb_c_base, float pb_c_init, float discount, float mean_q);
     float cucb_score(CNode *child, tools::CMinMaxStats &min_max_stats, float parent_mean_q, int is_reset, float total_children_visit_counts, float parent_value_prefix, float pb_c_base, float pb_c_init, float discount);
     void cbatch_traverse(CRoots *roots, int num_simulations, int max_num_considered_actions, float discount, tools::CMinMaxStatsList *min_max_stats_lst, CSearchResults &results);
+    void cbatch_step(tools::CMinMaxStatsList *min_max_stats_lst, CSearchResults &results, const std::vector<int> &to_step, int hidden_state_index_x, float discount, const std::vector<float> &value_prefixs, const std::vector<float> &values, const std::vector<std::vector<float>> &policies);
     void csoftmax(std::vector<float> &input, int input_len);
     float compute_mixed_value(float raw_value, std::vector<float> q_values, std::vector<int> &child_visit, std::vector<float> &child_prior);
     void rescale_qvalues(std::vector<float> &value, float epsilon);

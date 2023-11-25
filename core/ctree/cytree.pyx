@@ -1,7 +1,7 @@
 # distutils: language=c++
 import ctypes
 cimport cython
-from ctree cimport CMinMaxStatsList, CNode, CRoots, CSearchResults, cbatch_back_propagate, cbatch_traverse
+from ctree cimport CMinMaxStatsList, CNode, CRoots, CSearchResults, cbatch_back_propagate, cbatch_traverse, cbatch_step
 from libcpp.vector cimport vector
 from libc.stdlib cimport malloc, free
 from libcpp.list cimport list as cpplist
@@ -34,6 +34,9 @@ cdef class ResultsWrapper:
 
     def get_search_len(self):
         return self.cresults.search_lens
+    
+    def get_searched_node(self, int path, int node_idx):
+        return self.cresults.get_searched_node(path, node_idx)
 
 
 cdef class Roots:
@@ -104,6 +107,18 @@ def batch_back_propagate(int hidden_state_index_x, float discount, list value_pr
     cbatch_back_propagate(hidden_state_index_x, discount, cvalue_prefixs, cvalues, cpolicies,
                           min_max_stats_lst.cmin_max_stats_lst, results.cresults, is_reset_lst)
 
+def batch_step(MinMaxStatsList min_max_stats_lst, ResultsWrapper results, list to_step, int hidden_state_index_x, float discount, list value_prefixs, list values, list policies):
+    cdef int i
+    cdef vector[int] cto_step = to_step
+    cdef vector[float] cvalue_prefixs = value_prefixs
+    cdef vector[float] cvalues = values
+    cdef vector[vector[float]] cpolicies = policies
+
+    cbatch_step(min_max_stats_lst.cmin_max_stats_lst, results.cresults, 
+                cto_step, hidden_state_index_x, discount, cvalue_prefixs, 
+                cvalues, cpolicies)
+    
+    return results.cresults.hidden_state_index_x_lst, results.cresults.hidden_state_index_y_lst, results.cresults.last_actions
 
 def batch_traverse(Roots roots, int num_simulations, int max_num_considered_actions, float discount, MinMaxStatsList min_max_stats_lst, ResultsWrapper results):
 

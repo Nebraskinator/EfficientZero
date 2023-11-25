@@ -410,7 +410,7 @@ def _train(models, target_models, replay_buffers, shared_storage, mcts_storage, 
     #optimizers = [optim.SGD(model.parameters(), lr=config.lr_init, momentum=config.momentum,
     #                      weight_decay=config.weight_decay) for model in models]
     optimizers = [optim.AdamW(model.parameters(), lr=config.lr_init,
-                          weight_decay=config.weight_decay) for model in models]
+                          weight_decay=config.weight_decay, betas=(0.95, 0.95), eps=1e-02) for model in models]
     
     scaler = GradScaler()
 
