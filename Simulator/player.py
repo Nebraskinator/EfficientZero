@@ -316,7 +316,7 @@ class Player:
     """
     def get_empty_bench_slot(self):
         for i in range(len(self.bench)):
-            if self.bench[i]:
+            if not self.bench[i]:
                 return i
         return -1
 
