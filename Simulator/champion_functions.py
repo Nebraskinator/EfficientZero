@@ -12,7 +12,7 @@ def MILLIS(cv):
 
 
 def MILLISECONDS_INCREASE(cv):
-    cv.MILLISECONDS += 10
+    cv.MILLISECONDS += 100
 
 
 

@@ -57,7 +57,7 @@ class DataWorkerSpawner(object):
             del worker
 
 
-@ray.remote(num_gpus=0.125, max_restarts=-1, max_task_retries=-1)
+@ray.remote(num_gpus=0.375, max_restarts=-1, max_task_retries=-1)
 class DataWorker(object):
     def __init__(self, rank, replay_buffers, storage, config, log=True):
         """Data Worker for collecting data through self-play
@@ -167,7 +167,7 @@ class DataWorker(object):
         model.eval()
 
         start_training = False
-        envs = [self.config.new_game(seed=self.config.seed, log=False) for i in range(env_nums)] 
+        envs = [self.config.new_game(seed=self.config.seed, log=False) for _ in range(env_nums)] 
         epsilon = 1 / self.config.action_space_size
         def _get_max_entropy(action_space):
             p = 1.0 / action_space
@@ -206,30 +206,31 @@ class DataWorker(object):
                             save_idx = max(prev) + 1
                         save_idx = str(save_idx).zfill(6)
                         log = subdir + "/{}.txt".format(save_idx)
-                    init_obses, acting, action_mask = env.reset(log=log)
+                    handle = env.reset.remote(log=log)
+                    init_obses, acting, action_mask = ray.get(handle)
                     taking_actions[idx] = acting
                     action_masks[idx] = action_mask
-
-                    game_histories[idx] = {p: GameHistory(env.action_space_size(), env.obs_shape, max_length=self.config.history_length,
-                                                  config=self.config) for p in env.live_agents}
-                    last_game_histories[idx] = {p: None for p in env.live_agents}
-                    last_game_priorities[idx] = {p: None for p in env.live_agents}
+                    env_live_agents = ray.get(env.live_agents.remote())
+                    game_histories[idx] = {p: GameHistory(ray.get(env.action_space_size.remote()), ray.get(env.obs_shape.remote()), max_length=self.config.history_length,
+                                                  config=self.config) for p in env_live_agents}
+                    last_game_histories[idx] = {p: None for p in env_live_agents}
+                    last_game_priorities[idx] = {p: None for p in env_live_agents}
 
                     sw = {}
 
-                    for p in env.live_agents:
+                    for p in env_live_agents:
                         sw[p] = [init_obses[p] for _ in range(self.config.stacked_observations)]
                         game_histories[i][p].init(sw[p])
                     stack_obs_windows[idx] = sw
                     
                     # for priorities in self-play
-                    search_values_lst[idx] = {p: [] for p in env.live_agents}
-                    pred_values_lst[idx] = {p: [] for p in env.live_agents}
+                    search_values_lst[idx] = {p: [] for p in env_live_agents}
+                    pred_values_lst[idx] = {p: [] for p in env_live_agents}
                 
                 for i, env in enumerate(envs):
                     reset_env(i, env)
 
-                num_agents = [len(env.live_agents) for env in envs]
+                num_agents = [len(ray.get(env.live_agents.remote())) for env in envs]
                 step_counter = 0
                 env_done_cnt = [0 for _ in range(env_nums)]
                 #dones = [False for _ in range(env_nums)]
@@ -261,7 +262,8 @@ class DataWorker(object):
                     
                     step_acting_agents = []
                     for i, env in enumerate(envs):
-                        step_acting_agents.append([p for p in env.live_agents if taking_actions[i][p]])
+                        env_live_agents = ray.get(env.live_agents.remote())
+                        step_acting_agents.append([p for p in env_live_agents if taking_actions[i][p]])
                         
                     tokens, temperatures = [{} for _ in range(env_nums)], []
                     # stack obs for model inference
@@ -317,7 +319,10 @@ class DataWorker(object):
                         roots_improved_policy_probs = roots.get_policies(self.config.discount) # new policy constructed with completed Q in gumbel muzero
                     #print({a: (round(v, 2), round(p, 2)) for a, v, p in zip(action_mappings[0], roots_completed_values[0], roots_improved_policy_probs[0])})
                     idx = 0
-
+                    handles = []
+                    actions = []
+                    dists_list = []
+                    vals_list = []
                     for i, env in enumerate(envs):                          
                         action, dists, vals = {}, {}, {}
                         for p in step_acting_agents[i]:    
@@ -342,14 +347,22 @@ class DataWorker(object):
                             vals[p] = value
                             idx += 1
                         
-
-                        for p in env.live_agents:
+                        env_live_agents = ray.get(env.live_agents.remote())
+                        for p in env_live_agents:
                             if p not in step_acting_agents[i]:
                                 action[p] = 2090
 
-                        self.config.record_tokens(tokens[i], env)
-                        self.config.record_best_actions(action, dists, env)                                       
-                        obs, ori_reward, taking_action, done, action_mask = env.step(action)
+                        env.record_tokens.remote(tokens[i])
+                        env.record_best_actions.remote(action, dists)                                       
+                        handles.append(env.step.remote(action))
+                        actions.append(action)
+                        dists_list.append(dists)
+                        vals_list.append(vals)
+                    for i, env in enumerate(envs):
+                        obs, ori_reward, taking_action, done, action_mask = ray.get(handles[i])
+                        action = actions[i]
+                        dists = dists_list[i]
+                        vals = vals_list[i]
                         taking_actions[i] = taking_action
                         action_masks[i] = action_mask
                         for p in step_acting_agents[i]:
@@ -360,7 +373,7 @@ class DataWorker(object):
                                 clip_reward = ori_reward[p]
                             game_histories[i][p].store_search_stats(dists[p].copy(), float(vals[p]))
                             if p not in obs:
-                                obs[p] = np.zeros(env.obs_shape).astype(int)
+                                obs[p] = np.zeros(ray.get(env.obs_shape.remote())).astype(int)
                             game_histories[i][p].append(int(action[p]), obs[p].copy(), float(clip_reward))
         
                             # fresh stack windows
@@ -382,7 +395,7 @@ class DataWorker(object):
                                 last_game_priorities[i][p] = priorities
     
                                 # new block trajectory
-                                game_histories[i][p] = GameHistory(env.action_space_size(), max_length=self.config.history_length,
+                                game_histories[i][p] = GameHistory(ray.get(env.action_space_size.remote()), max_length=self.config.history_length,
                                                                 config=self.config)
                                 game_histories[i][p].init(stack_obs_windows[i][p])
                         for p in done.keys():

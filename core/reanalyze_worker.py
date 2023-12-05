@@ -260,13 +260,13 @@ class BatchWorker_CPU(object):
                     target_weights = ray.get(self.storage.get_target_weights.remote(self.current_model))
                 else:
                     target_weights = None
-                if self.mcts_storage.qsize() < self.max_len:
-                    # Observation will be deleted if replay buffer is full. (They are stored in the ray object store)
-                    try:
-                        self.make_batch(batch_context, self.config.revisit_policy_search_rate, weights=target_weights)
-                    except:
-                        print('Data is deleted...')
-                        time.sleep(0.1)
+                while self.mcts_storage.qsize() >= self.max_len:
+                    time.sleep(0.3)
+                try:
+                    self.make_batch(batch_context, self.config.revisit_policy_search_rate, weights=target_weights)
+                except:
+                    print('Data is deleted...')
+                    time.sleep(1)
             except:
                 print("error in batchworker cpu")
 

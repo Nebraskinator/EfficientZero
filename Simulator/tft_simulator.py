@@ -3,6 +3,7 @@ import functools
 import time
 import gym
 import numpy as np
+import ray
 from gym.spaces import MultiDiscrete, Box, Dict, Tuple
 from Simulator import pool
 from Simulator.player import Player as player_class
@@ -30,8 +31,8 @@ def env():
 
 #parallel_env = parallel_wrapper_fn(env)
 
-
-class TFT_Simulator(AECEnv):
+@ray.remote
+class TFT_Simulator(object):
     metadata = {"is_parallelizable": True, "name": "tft-set4-v0"}
 
     def __init__(self, env_config, log=False):
@@ -108,14 +109,36 @@ class TFT_Simulator(AECEnv):
         # For PPO
         self.action_spaces = {agent: MultiDiscrete(np.ones(config.ACTION_DIM))
                               for agent in self.agents}
-        super().__init__()
+        #super().__init__()
 
-    @functools.lru_cache(maxsize=None)
     def observation_space(self, agent):
         return self.observation_spaces[agent]
+    def obs_shape(self):
+        return self.obs_shape
+    def live_agents(self):
+        return self.live_agents
+    def num_players(self):
+        return self.num_players
+    def image_channel(self):
+        return self.image_channel
 
-    @functools.lru_cache(maxsize=None)
-    def action_space(self, agent: str) -> gym.spaces.Space:
+    def record_best_actions(self, actions, dists):
+        if self.log:
+            for player, dist in dists.items():
+                action = actions[player]
+                best_action = np.argmax(dist)
+                s = np.sum(dist)
+                val = dist[best_action] / s
+                a_val = dist[action] / s
+                self.PLAYERS[player].print("chosen action: {} / {}, best action: {} / {}".format(action, round(a_val, 2), best_action, round(val, 2)))
+
+    def record_tokens(self, tokens):
+        if self.log:
+            for player, token in tokens.items():
+                best_action = np.argmax(token)
+                self.PLAYERS[player].print("chance token assigned: {}".format(best_action))
+
+    def action_space(self, agent: str):
         return 14*4*31
     def action_space_size(self):
         return 14*4*31
