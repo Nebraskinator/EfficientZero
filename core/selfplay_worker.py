@@ -57,7 +57,7 @@ class DataWorkerSpawner(object):
             del worker
 
 
-@ray.remote(num_gpus=0.375, max_restarts=-1, max_task_retries=-1)
+#@ray.remote(num_gpus=0.375, max_restarts=-1, max_task_retries=-1)
 class DataWorker(object):
     def __init__(self, rank, replay_buffers, storage, config, log=True):
         """Data Worker for collecting data through self-play
