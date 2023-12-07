@@ -77,7 +77,7 @@ namespace tree {
             CSearchResults(int num);
             ~CSearchResults();
             
-            int CSearchResults::get_searched_node(int path, int node_idx);
+            int get_searched_node(int path, int node_idx);
 
     };
 
