@@ -1,6 +1,7 @@
 #include <iostream>
 #include <numeric>
 #include <random>
+#include <algorithm>
 #include "cnode.h"
 
 namespace tree{
@@ -533,7 +534,7 @@ namespace tree{
             - the score of nodes to be considered.
         */
         float low_logit = -1e9;
-        float max_logit = *max_element(logits.begin(), logits.end());
+        float max_logit = *std::max_element(logits.begin(), logits.end());
         for (unsigned int i=0;i < logits.size();i++){
             logits[i] -= max_logit;
         }
