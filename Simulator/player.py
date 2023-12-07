@@ -44,7 +44,7 @@ class Player:
         #self.ai = PlayerAI(self)
         self.similarity_scorer = SimilarityScorer(self)
         self.similarity_score = 0
-        self.similarity_coeff = 1.0
+        self.similarity_coeff = 0.0
         self.max_similarity_reward = 300
         
 
@@ -141,7 +141,7 @@ class Player:
         self.item_reward = 0
         self.won_game_reward = 10
         self.prev_rewards = 0
-        self.damage_reward = 1
+        self.damage_reward = 0
         self.excess_gold_reward = 0
 
         # Everyone shares the pool object.
