@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+import ray
 
 from core.config import BaseConfig
 from core.dataset import Transforms
@@ -38,8 +39,8 @@ class TFTConfig(BaseConfig):
             cvt_string=False,
             image_based=True,
             # lr scheduler
-            lr_warm_up=25000,
-            lr_init=0.00003,
+            lr_warm_up=1000,
+            lr_init=0.0003,
             lr_decay_rate=0.1,
             lr_decay_steps=1000000,
             auto_td_steps_ratio=0.3,
@@ -109,11 +110,12 @@ class TFTConfig(BaseConfig):
     def set_game(self, env_name, save_video=False, save_path=None, video_callable=None):
         self.env_name = env_name
         game = self.new_game()
-        self.num_players = game.num_players
-        self.image_channel = game.image_channel
-        obs_shape = (self.num_players, self.image_channel, game.obs_shape[1],game.obs_shape[2])
+        self.num_players = ray.get(game.num_players.remote())
+        self.image_channel = ray.get(game.image_channel.remote())
+        obs_shape = ray.get(game.obs_shape.remote())
+        obs_shape = (self.num_players, self.image_channel, obs_shape[1],obs_shape[2])
         self.obs_shape = (self.num_players * self.stacked_observations, self.image_channel, obs_shape[-2], obs_shape[-1])        
-        self.action_space_size = game.action_space_size()
+        self.action_space_size = ray.get(game.action_space_size.remote())
 
     def record_best_actions(self, actions, dists, env):
         if env.log:
@@ -168,9 +170,9 @@ class TFTConfig(BaseConfig):
                 max_moves = 108000 // self.frame_skip
             else:
                 max_moves = self.test_max_moves
-            env = TFT_Simulator(env_config=self, log=log)
+            env = TFT_Simulator.remote(env_config=self, log=log)
         else:
-            env = TFT_Simulator(env_config=self, log=log)
+            env = TFT_Simulator.remote(env_config=self, log=log)
 
         return env
 
