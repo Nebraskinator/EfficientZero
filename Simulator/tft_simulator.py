@@ -10,9 +10,7 @@ from Simulator.player import Player as player_class
 from Simulator.step_function import Step_Function
 from Simulator.game_round import Game_Round
 #from Simulator.observation import Observation
-from pettingzoo.utils.env import AECEnv
-from pettingzoo.utils import wrappers, agent_selector
-from pettingzoo.utils.conversions import parallel_wrapper_fn
+
 
 '''
 def env():
@@ -64,7 +62,7 @@ class TFT_Simulator(object):
         self.kill_list = []
         self.agent_name_mapping = dict(
             zip(self.possible_agents, list(range(len(self.possible_agents)))))
-        self._agent_selector = agent_selector(self.possible_agents)
+        #self._agent_selector = agent_selector(self.possible_agents)
         self.agent_selection = self.possible_agents[0]
 
         self.rewards = {agent: 0 for agent in self.agents}
@@ -406,8 +404,8 @@ class TFT_Simulator(object):
         #self.step_function.generate_shop_vectors(self.PLAYERS)
 
         self.agents = self.possible_agents.copy()
-        self._agent_selector = agent_selector(self.agents)
-        self.agent_selection = self._agent_selector.next()
+        #self._agent_selector = agent_selector(self.agents)
+        #self.agent_selection = self._agent_selector.next()
 
         self.terminations = {agent: False for agent in self.agents}
         self.truncations = {agent: False for agent in self.agents}
@@ -420,8 +418,8 @@ class TFT_Simulator(object):
 
         self.observations = {agent: {} for agent in self.agents}
 
-        self._agent_selector.reinit(self.agents)
-        self.agent_selection = self._agent_selector.next()
+        #self._agent_selector.reinit(self.agents)
+        #self.agent_selection = self._agent_selector.next()
 
         super().__init__()
         [p.update_opponent_observations() for p in list(self.PLAYERS.values())]
