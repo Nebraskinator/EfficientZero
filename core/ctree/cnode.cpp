@@ -2,8 +2,36 @@
 #include <numeric>
 #include <random>
 #include "cnode.h"
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
+#include <stdint.h> // portable: uint64_t   MSVC: __int64 
 
+// MSVC defines this in winsock2.h!?
+typedef struct timeval {
+    long tv_sec;
+    long tv_usec;
+} timeval;
 
+int gettimeofdayy(struct timeval* tp, struct timezone* tzp)
+{
+    // Note: some broken versions only have 8 trailing zero's, the correct epoch has 9 trailing zero's
+    // This magic number is the number of 100 nanosecond intervals since January 1, 1601 (UTC)
+    // until 00:00:00 January 1, 1970 
+    static const uint64_t EPOCH = ((uint64_t)116444736000000000ULL);
+
+    SYSTEMTIME  system_time;
+    FILETIME    file_time;
+    uint64_t    time;
+
+    GetSystemTime(&system_time);
+    SystemTimeToFileTime(&system_time, &file_time);
+    time = ((uint64_t)file_time.dwLowDateTime);
+    time += ((uint64_t)file_time.dwHighDateTime) << 32;
+
+    tp->tv_sec = (long)((time - EPOCH) / 10000000L);
+    tp->tv_usec = (long)(system_time.wMilliseconds * 1000);
+    return 0;
+}
 namespace tree{
 
     CSearchResults::CSearchResults(){
@@ -766,7 +794,7 @@ namespace tree{
     void cbatch_traverse(CRoots *roots, int num_simulations, int max_num_considered_actions, float discount, tools::CMinMaxStatsList *min_max_stats_lst, CSearchResults &results){
         // set seed
         timeval t1;
-        gettimeofday(&t1, NULL);
+        gettimeofdayy(&t1, NULL);
         srand(t1.tv_usec);
 
         int last_action = -1;
@@ -831,7 +859,7 @@ namespace tree{
     void cbatch_step(tools::CMinMaxStatsList *min_max_stats_lst, CSearchResults &results, const std::vector<int> &to_step, int hidden_state_index_x, float discount, const std::vector<float> &value_prefixs, const std::vector<float> &values, const std::vector<std::vector<float>> &policies){
         // set seed
         timeval t1;
-        gettimeofday(&t1, NULL);
+        gettimeofdayy(&t1, NULL);
         srand(t1.tv_usec);        
         for (int i=0;i<to_step.size();i++){
             results.nodes[to_step[i]]->expand(0, hidden_state_index_x, i, value_prefixs[i], values[i], policies[i]);
@@ -917,8 +945,8 @@ namespace tree{
             - value: the value vector to be rescaled.
             - epsilon: the lower limit of gap.
         */
-        float max_value = *max_element(value.begin(), value.end());
-        float min_value = *min_element(value.begin(), value.end());
+        float max_value = *std::max_element(std::begin(value), std::end(value));
+        float min_value = *std::min_element(std::begin(value), std::end(value));
         float gap = max_value - min_value;
         gap = (::std::max)(gap, epsilon);
         for (unsigned int i = 0;i < value.size();i++){
@@ -969,7 +997,7 @@ namespace tree{
                 rescale_qvalues(completed_qvalue, epsilon);
             }
     
-            float max_visit = *max_element(child_visit.begin(), child_visit.end());
+            float max_visit = *std::max_element(std::begin(child_visit), std::end(child_visit));
             float visit_scale = maxvisit_init + max_visit;
     
             for (unsigned int i=0;i < completed_qvalue.size();i++){
