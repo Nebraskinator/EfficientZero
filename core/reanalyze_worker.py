@@ -1,7 +1,8 @@
 import ray
 import time
 import torch
-
+import torch_xla
+import torch_xla.core.xla_model as xm
 import numpy as np
 import core.ctree.cytree as cytree
 
