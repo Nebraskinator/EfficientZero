@@ -12,7 +12,7 @@ from torch.utils.tensorboard import SummaryWriter
 from core.test import test
 from core.train import train
 from core.utils import init_logger, make_results_dir, set_seed
-print("cuda available: {}".format(torch.cuda.is_available()))
+os.environ['GPU_NUM_DEVICES'] = 1
 
 if __name__ == '__main__':
     # Lets gather arguments
