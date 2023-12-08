@@ -407,7 +407,7 @@ class RepresentationNetwork(nn.Module):
         # self attention resnet applied to the board, benches, and shop after
         # merging with the state vector
         postmerge_sa_blocks = []
-        for i in range(1):
+        for i in range(3):
             postmerge_sa_blocks.append(AttentionResBlock(embedding_size=unit_embed_channels,
                                                      num_heads=2,
                                                      length=self.state_length))         
@@ -415,7 +415,7 @@ class RepresentationNetwork(nn.Module):
 
         # apply cross attention to compare player boards
         opponent_cross_blocks = []
-        for i in range(1):
+        for i in range(2):
             opponent_cross_blocks.append(AttentionResBlock(embedding_size=unit_embed_channels,
                                                      num_heads=2,
                                                      length=self.state_length))         
@@ -431,14 +431,14 @@ class RepresentationNetwork(nn.Module):
         
         # self attention resnet applied after cross attention
         postcross_sa_blocks = []
-        for i in range(1):
+        for i in range(3):
             postcross_sa_blocks.append(AttentionResBlock(embedding_size=unit_embed_channels,
                                                      num_heads=2,
                                                      length=l))         
         self.postcross_sa_blocks = nn.ModuleList(postcross_sa_blocks)
         
         frame_cross_blocks = []
-        for i in range(1):
+        for i in range(3):
             frame_cross_blocks.append(AttentionResBlock(embedding_size=unit_embed_channels,
                                                      num_heads=2,
                                                      length=l))         
@@ -451,7 +451,7 @@ class RepresentationNetwork(nn.Module):
                                                  )        
         l += num_history_registers
         final_sa_blocks = []
-        for i in range(1):
+        for i in range(10):
             final_sa_blocks.append(AttentionResBlock(embedding_size=unit_embed_channels,
                                                      num_heads=2,
                                                      length=l))         
@@ -680,7 +680,7 @@ class StateDynamicsNetwork(nn.Module):
         self.act_conv = LinearResidualBlock(channels+outcome_space_layers, channels, (length, channels+outcome_space_layers))
                 
         dynamics_sa_blocks = []
-        for i in range(1):
+        for i in range(8):
             dynamics_sa_blocks.append(AttentionResBlock(embedding_size=channels,
                                                      num_heads=2,
                                                      length=length))         
@@ -771,7 +771,7 @@ class AfterstateDynamicsNetwork(nn.Module):
         self.act_conv = LinearResidualBlock(channels+action_space_layers, channels, (length, channels+action_space_layers))
         
         dynamics_sa_blocks = []
-        for i in range(1):
+        for i in range(8):
             dynamics_sa_blocks.append(AttentionResBlock(embedding_size=channels,
                                                      num_heads=2,
                                                      length=length))         
@@ -929,7 +929,7 @@ class StatePredictionNetwork(nn.Module):
         self.position_length = position_length
 
         sa_blocks = []
-        for i in range(1):
+        for i in range(3):
             sa_blocks.append(AttentionResBlock(embedding_size=num_channels,
                                                      num_heads=2,
                                                      length=length))         
