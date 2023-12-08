@@ -12,8 +12,8 @@ from torch.utils.tensorboard import SummaryWriter
 from core.test import test
 from core.train import train
 from core.utils import init_logger, make_results_dir, set_seed
-os.environ['XRT_TPU_CONFIG'] = 'None'
 os.environ['GPU_NUM_DEVICES'] = '1'
+os.environ['PJRT_DEVICE'] = 'GPU'
 
 if __name__ == '__main__':
     # Lets gather arguments
