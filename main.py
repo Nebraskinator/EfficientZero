@@ -12,7 +12,7 @@ from torch.utils.tensorboard import SummaryWriter
 from core.test import test
 from core.train import train
 from core.utils import init_logger, make_results_dir, set_seed
-
+os.environ['PJRT_DEVICE'] = 'GPU'
 
 if __name__ == '__main__':
     # Lets gather arguments
