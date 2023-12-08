@@ -288,8 +288,8 @@ class BaseConfig(object):
         self.pred_hid = pred_hid
         self.pred_out = pred_out
         
-        self.mcts_queue_size = 8
-        self.batch_queue_size = 8
+        self.mcts_queue_size = 2
+        self.batch_queue_size = 2
 
     def visit_softmax_temperature_fn(self, num_moves, trained_steps):
         raise NotImplementedError
