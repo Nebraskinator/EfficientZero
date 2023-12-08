@@ -6,6 +6,7 @@ import numpy as np
 import ray
 import torch
 import torch_xla
+import torch_xla.core.xla_model as xm
 from torch.utils.tensorboard import SummaryWriter
 
 from core.test import test
@@ -64,8 +65,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
     args.device = 'cuda' if (not args.no_cuda) and torch.cuda.is_available() else 'cpu'
     if args.xla_enabled:
-        import torch_xla
-        import torch_xla.core.xla_model as xm
         args.device = xm.xla_device()
     assert args.revisit_policy_search_rate is None or 0 <= args.revisit_policy_search_rate <= 1, \
         ' Revisit policy search rate should be in [0,1]'

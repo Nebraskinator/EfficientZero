@@ -2,7 +2,8 @@ import os
 import ray
 import time
 import torch
-
+import torch_xla
+import torch_xla.core.xla_model as xm
 import numpy as np
 import torch.optim as optim
 import torch.nn.functional as F
@@ -544,8 +545,6 @@ def train(config, summary_writer, model_path=None):
         model path for resuming
         default: train from scratch
     """
-    if config.xla_enabled:
-        import torch_xla.core.xla_model as xm
     models = [config.get_uniform_network() for _ in range(config.num_models)]
     target_models = [config.get_uniform_network() for _ in range(config.num_models)]
     counter_init = 0
