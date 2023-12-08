@@ -5,6 +5,7 @@ import os
 import numpy as np
 import ray
 import torch
+import torch_xla
 from torch.utils.tensorboard import SummaryWriter
 
 from core.test import test
