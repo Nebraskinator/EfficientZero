@@ -24,6 +24,7 @@ if __name__ == '__main__':
     parser.add_argument('--amp_type', required=True, choices=['torch_amp', 'none'],
                         help='choose automated mixed precision type')
     parser.add_argument('--no_cuda', action='store_true', default=False, help='no cuda usage (default: %(default)s)')
+    parser.add_argument('--xla_enabled', action='store_false', default=True, help='enable xla (default: %(default)s)')
     parser.add_argument('--debug', action='store_true', default=False,
                         help='If enabled, logs additional values  '
                              '(gradients, target value, reward distribution, etc.) (default: %(default)s)')
@@ -61,6 +62,10 @@ if __name__ == '__main__':
     # Process arguments
     args = parser.parse_args()
     args.device = 'cuda' if (not args.no_cuda) and torch.cuda.is_available() else 'cpu'
+    if args.xla_enabled:
+        import torch_xla
+        import torch_xla.core.xla_model as xm
+        args.device = xm.xla_device()
     assert args.revisit_policy_search_rate is None or 0 <= args.revisit_policy_search_rate <= 1, \
         ' Revisit policy search rate should be in [0,1]'
     os.environ["RAY_DEDUP_LOGS"] = "0"

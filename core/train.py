@@ -358,6 +358,8 @@ def update_weights(model, batch, optimizer, replay_buffer, config, scaler, vis_r
         scaler.update()
     else:
         optimizer.step()
+    if config.xla_enabled:
+        xm.mark_step()
     # ----------------------------------------------------------------------------------
     # update priority
     new_priority = ray.put(value_priority)
@@ -542,6 +544,8 @@ def train(config, summary_writer, model_path=None):
         model path for resuming
         default: train from scratch
     """
+    if config.xla_enabled:
+        import torch_xla.core.xla_model as xm
     models = [config.get_uniform_network() for _ in range(config.num_models)]
     target_models = [config.get_uniform_network() for _ in range(config.num_models)]
     counter_init = 0
