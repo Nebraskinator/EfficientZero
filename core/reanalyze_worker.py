@@ -272,7 +272,7 @@ class BatchWorker_CPU(object):
                 print("error in batchworker cpu")
 
 
-@ray.remote(max_restarts=-1, max_task_retries=-1, num_gpus=0.125)
+@ray.remote#(max_restarts=-1, max_task_retries=-1, num_gpus=0.125)
 class BatchWorker_GPU(object):
     def __init__(self, worker_id, replay_buffers, storage, batch_storage, mcts_storage, config):
         """GPU Batch Worker for reanalyzing targets, see Appendix.
