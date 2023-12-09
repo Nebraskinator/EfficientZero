@@ -28,7 +28,7 @@ if __name__ == '__main__':
     parser.add_argument('--amp_type', required=True, choices=['torch_amp', 'none'],
                         help='choose automated mixed precision type')
     parser.add_argument('--no_cuda', action='store_true', default=False, help='no cuda usage (default: %(default)s)')
-    parser.add_argument('--xla_enabled', action='store_false', default=True, help='enable xla (default: %(default)s)')
+    parser.add_argument('--xla_enabled', action='store_true', default=False, help='enable xla (default: %(default)s)')
     parser.add_argument('--debug', action='store_true', default=False,
                         help='If enabled, logs additional values  '
                              '(gradients, target value, reward distribution, etc.) (default: %(default)s)')
